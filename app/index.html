@@ -1778,6 +1778,7 @@ body.entry-active{ overflow:hidden; }
         <button id="setupTrackerBtn" class="menuBtn secondary" type="button" style="grid-column:1/-1">&#128202; Playtest Tracker — view / export / import</button>
         <button class="menuBtn secondary" type="button" style="grid-column:1/-1" onclick="backToTitle()">Back to Menu</button>
       </div>
+      <div class="buildStamp" style="margin-top:12px;text-align:center;opacity:.6;font-size:11px;color:#d9caab;"></div>
     </div>
   </section>
 
@@ -1794,6 +1795,7 @@ body.entry-active{ overflow:hidden; }
         <h4>Game info</h4><div id="menuGameInfo" class="notice"></div>
         <h4>Selected card</h4><div id="selectedInfo" class="notice">Select a card.</div>
         <h4>Log</h4><div id="log" class="log"></div>
+        <div class="buildStamp" style="margin-top:8px;opacity:.6;font-size:11px;"></div>
       </details>
     </div>
   </section>
@@ -1865,6 +1867,10 @@ if (gameMusic) gameMusic.volume = 0.28;     // gameplay bed stays under the game
 let musicWanted = false;          // has the player turned music on?
 let musicContext = 'menu';        // 'menu' -> titleMusic, 'game' -> gameMusic
 function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic; }
+
+// Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
+// Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
+const APP_BUILD = 'v26 · build 9 · 2026-07-20';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -2958,6 +2964,7 @@ const statsBtnEl = document.getElementById('statsBtn');
 if (statsBtnEl) statsBtnEl.onclick = showTelemetry;
 const setupTrackerBtnEl = document.getElementById('setupTrackerBtn');
 if (setupTrackerBtnEl) setupTrackerBtnEl.onclick = showTelemetry;
+document.querySelectorAll('.buildStamp').forEach(el => { el.textContent = 'Build: ' + APP_BUILD; });
 if (musicToggle) musicToggle.onclick = toggleBackgroundMusic;
 if (entryMusicToggle) entryMusicToggle.onclick = toggleBackgroundMusic;
 document.getElementById('clearSelection').onclick = () => { selected=null; render(); };
