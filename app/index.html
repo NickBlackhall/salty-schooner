@@ -1728,7 +1728,7 @@ body.entry-active{ overflow:hidden; }
       <li>Play as many legal cards as you can. Emptying your Hand refills it to five cards.</li>
       <li>End your turn by discarding one Hand card to a Port. Port top cards can be played on later turns.</li>
       <li>Completed Runs send their Kings to the Brig. A qualifying Key King springs every imprisoned King for a Jailbreak.</li>
-      <li>During a Jailbreak, play every released King before discarding—or the remaining Kings sink to Davy Jones’s Locker and add penalties to your Hold.</li>
+      <li>During a Jailbreak, play every released King before discarding—or the remaining Kings are reshuffled into the draw deck and add penalties to your Hold.</li>
     </ol>
     <div class="entryActions"><button class="menuBtn secondary" type="button" onclick="hideEntryScreen('rulesScreen')">Back to Menu</button></div>
   </div>
@@ -1886,7 +1886,7 @@ function createMatchState(names, requestedConfig={}) {
     matchConfig,
     round: 1,
     currentPlayer: 0,
-    deck: [], runs: [], brig: [], locker: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, log: [], version: 'v26-configurable-match'
+    deck: [], runs: [], brig: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, log: [], version: 'v26-configurable-match'
   };
 }
 
@@ -2067,7 +2067,6 @@ function startRound() {
   uid = uid + 1000;
   state.deck = makeDeck(state.players.length);
   state.brig = [];
-  state.locker = [];
   state.recycle = [];
   state.jailbreak = { active:false, kings:[], initialCount:0 };
   state.pendingWinner = null;
@@ -2254,7 +2253,6 @@ function trackNoDrawStall(reason) {
     runCounts: state.runs.map(run => run.cards.length),
     brig: state.brig.length,
     activeJailbreakKings: state.jailbreak && state.jailbreak.active ? state.jailbreak.kings.length : 0,
-    locker: (state.locker || []).length,
     deck: state.deck.length,
     recycle: (state.recycle || []).length
   };
@@ -2463,7 +2461,7 @@ function showJailbreakResolution(kind, details, callback) {
     document.getElementById('jailbreakResolutionBody').textContent = `All ${details.count} released King${details.count===1?'':'s'} played. The cage is closed.`;
   } else {
     const penaltyText = details.penalties ? ` ${details.penalties} penalty card${details.penalties===1?' was':'s were'} added to HOLD.` : '';
-    document.getElementById('jailbreakResolutionBody').textContent = `${details.count} unplayed King${details.count===1?' was':'s were'} sent to Davy Jones’s Locker.${penaltyText}`;
+    document.getElementById('jailbreakResolutionBody').textContent = `${details.count} unplayed King${details.count===1?' was':'s were'} reshuffled into the draw deck.${penaltyText}`;
   }
   overlay.classList.remove('departing');
   overlay.classList.add('show');
@@ -2505,19 +2503,24 @@ function failActiveJailbreak() {
   const p = currentPlayer();
   const failedKings = [...state.jailbreak.kings];
   state.jailbreak.kings = [];
-  if (!Array.isArray(state.locker)) state.locker = [];
   let penalties = 0;
   failedKings.forEach(king => {
     king.effectiveValue = null;
     king.playedDirection = null;
-    state.locker.push(king);
+    // Curse of the Crown penalty: one card per unplaced King, to the goal-pile bottom.
+    // Draw the penalty card BEFORE returning any King to the deck, so a just-returned
+    // King cannot be dealt straight back out as a penalty card.
     const replacement = drawCard();
     if (replacement) {
       p.goal.unshift(replacement);
       penalties++;
     }
   });
-  log(`Jailbreak failed. ${failedKings.length} unplayed King${failedKings.length===1?' was':'s were'} sent to Davy Jones's Locker${penalties ? ` and ${penalties} card${penalties===1?' was':'s were'} added to the bottom of ${p.name}'s goal pile` : ''}.`);
+  // Failed Jailbreak Kings are reshuffled back into the draw deck so the King supply
+  // keeps circulating instead of draining permanently out of the round.
+  failedKings.forEach(king => state.deck.push(king));
+  state.deck = shuffle(state.deck);
+  log(`Jailbreak failed. ${failedKings.length} unplayed King${failedKings.length===1?' was':'s were'} reshuffled into the draw deck${penalties ? ` and ${penalties} card${penalties===1?' was':'s were'} added to the bottom of ${p.name}'s goal pile` : ''}.`);
   return {count:failedKings.length, penalties};
 }
 function discardSelectedTo(index) {

@@ -94,15 +94,15 @@
 
 ## Failed Jailbreak and Curse of the Crown
 
-- A Jailbreak fails if every King from The Brig cannot be legally placed.
-- On failure, remove the Key King from the run and place it into The Brig.
-- Restore the affected run exactly to its state before the Key King was played.
-- Deal 2 cards from the draw deck face-down to the bottom of that player's goal pile.
-- The player's turn continues after the penalty if legal plays remain.
+- A Jailbreak fails if the player cannot legally place every released Brig King before ending the turn.
+- The Key King and any Brig Kings the player did manage to place remain on their runs. There is no run rollback. (This is the v26 model; it supersedes the earlier "remove the Key King and restore the run" wording.)
+- Curse of the Crown penalty: deal 1 card from the draw deck face-down to the bottom of that player's goal (HOLD) pile for each unplaced King. The penalty is variable, not a flat 2.
+- The unplaced Kings are reshuffled back into the draw deck (NOT permanently removed and NOT returned to The Brig), so the King supply keeps circulating. Ratified by Nick 2026-07-20. Penalty cards are drawn before the Kings are returned, so a just-returned King cannot be dealt back out as a penalty.
+- Note: after a failed Jailbreak The Brig is often empty for a while, because the released Kings went to the deck rather than back to The Brig. This is intended and breaks the failure-snowball.
 
 ## Card Supply, Shuffle, and Deck Exhaustion (v26 audit, 2026-07-20)
 
-Where every card can live during a round: the draw deck, the recycle pile, The Brig, Davy Jones's Locker, the four shared runs, and each player's goal pile, hand, and four discard piles. Total cards in play = 52 x number of players.
+Where every card can live during a round: the draw deck, the recycle pile, The Brig, the four shared runs, and each player's goal pile, hand, and four discard piles. Total cards in play = 52 x number of players. (Davy Jones's Locker was removed on 2026-07-20 — see below.)
 
 Verified correct (tested against the real v26 code):
 
@@ -113,7 +113,7 @@ Verified correct (tested against the real v26 code):
 
 Issues found:
 
-- Davy Jones's Locker is a one-way card sink. When a Jailbreak fails, the unplayed released Brig Kings are pushed to `state.locker`, which is only ever added to and is never returned to play until the round resets. Those Kings are permanently out of circulation for the rest of the round. This is a rule change from the written Failed Jailbreak rule (which says the Key King goes back to The Brig). It does not corrupt card counts, but it does permanently shrink the King supply mid-round and diverges from the brief. Needs Nick's decision on whether the Locker is intended.
+- RESOLVED (2026-07-20): Davy Jones's Locker was a one-way card sink that permanently removed failed-Jailbreak Kings from the round. It has been removed. Unplaced Kings are now reshuffled into the draw deck instead (see Failed Jailbreak and Curse of the Crown above), keeping the King supply in circulation. Card conservation verified in simulation, including that a just-returned King is never dealt back out as a penalty card.
 - Residual stall is still possible. The recycle pile prevents the most common exhaustion, but the game can still reach a hard stall: if the active player has an empty hand, the deck is empty, and the recycle pile is empty (all remaining cards locked in goal piles, discard piles, incomplete runs, The Brig, and the Locker). The player then cannot draw and cannot discard to end their turn. v26 detects and logs this (`trackNoDrawStall`) but does not resolve it. No automatic recovery exists. Worth deciding on a rule (e.g. recycle discard piles, or a forced end-of-turn) before it bites in a real game.
 
 ## Confirmed Playtest Behavior
