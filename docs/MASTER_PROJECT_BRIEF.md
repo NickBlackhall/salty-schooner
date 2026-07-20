@@ -27,6 +27,13 @@
 - Discard piles do not count toward scoring.
 - Lowest cumulative score after 4 rounds wins.
 
+### Decided-game (clinch) notice
+
+- Added 2026-07-20 (approved by Nick). At the end of a round, if a player has mathematically clinched the game — cannot be caught over the remaining rounds even in a best-case finish — the Round Over screen shows a passive notice and offers the host a choice: end the game now, or keep playing.
+- In hot-seat it is a simple yes/no on the shared screen. This does not change scoring; it only offers an early, host-approved stop.
+- The test is conservative (never a false positive): each remaining round, a player can add at most HOLD+5 points (no goal progress plus a full hand) and at least 0 (cleared goal plus empty hand). Player L has clinched when `L.total + remainingRounds*(HOLD+5) < every opponent's total`.
+- The tracker records a `game-clinched` event (with rounds remaining) and flags games that were `endedEarly`, so we can measure how often games are decided before the final round (relevant to the runaway-loss design question).
+
 ## Deck and Round Setup
 
 - Use one standard 52-card deck per player, with no jokers. All decks are shuffled together.

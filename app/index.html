@@ -1890,17 +1890,18 @@ const Telemetry = {
     this.mark('game-started', (names?names.length:0) + ' players, ' + (rounds||'?') + ' rounds', true);
     this.save();
   },
-  endGame(players) {
+  endGame(players, meta) {
     if (!this.data) this.load();
     if (!this.data.current) return;
     const g = this.data.current;
     g.ended = new Date().toISOString(); g.completed = true;
+    g.endedEarly = !!(meta && meta.endedEarly);
     if (players && players.length) {
       g.winner = [...players].sort((a,b)=>a.total-b.total)[0].name;
       g.scores = players.map(p => ({ name:p.name, total:p.total }));
     }
     this.data.games.push(g); this.data.current = null;
-    this.mark('game-completed', g.winner ? ('winner ' + g.winner) : '', true);
+    this.mark('game-completed', (g.winner ? ('winner ' + g.winner) : '') + (g.endedEarly ? ' (ended early)' : ''), true);
     this.save();
   },
   bump(key, n=1) { if (!this.data) this.load(); if (this.data.current && this.data.current.stats[key] !== undefined) this.data.current.stats[key] += n; this.save(); },
@@ -2250,6 +2251,21 @@ function startGame(names, requestedConfig={}) {
   startRound();
   startBackgroundMusic();
 }
+// Returns the player who has mathematically clinched the game (cannot be caught over
+// the remaining rounds), or null. Conservative — never a false positive.
+// Per remaining round a player can gain at most HOLD+5 (no goal progress + full hand)
+// and at least 0 (cleared goal + empty hand). A player L has clinched when, even in
+// L's worst case and every opponent's best case, L still finishes strictly lowest.
+function clinchedPlayer(remainingRounds) {
+  if (remainingRounds < 1) return null;
+  const maxPerRound = activeMatchConfig().holdCards + 5;
+  for (const L of state.players) {
+    const lWorst = L.total + remainingRounds * maxPerRound;
+    const clinched = state.players.every(O => O === L || lWorst < O.total /* O best case adds 0 */);
+    if (clinched) return L;
+  }
+  return null;
+}
 function endRound(winner) {
   Telemetry.bump('roundsCompleted');
   state.players.forEach(p => {
@@ -2258,17 +2274,36 @@ function endRound(winner) {
   });
   render();
   const rounds = activeMatchConfig().rounds;
-  showModal('Round Over', `<p><b>${winner.name}</b> cleared their goal pile.</p><p>${state.players.map(p => `${p.name}: +${p.roundScore} (${p.total} total)`).join('<br>')}</p>`, [
-    {label: state.round >= rounds ? 'Show Final Scores' : 'Start Next Round', action: () => {
-      hideModal();
-      if (state.round >= rounds) endGame(); else { state.round++; startRound(); }
-    }}
+  const scoresHtml = `<p><b>${winner.name}</b> cleared their goal pile.</p><p>${state.players.map(p => `${p.name}: +${p.roundScore} (${p.total} total)`).join('<br>')}</p>`;
+  if (state.round >= rounds) {
+    showModal('Round Over', scoresHtml, [
+      {label:'Show Final Scores', action:()=>{ hideModal(); endGame(); }}
+    ]);
+    return;
+  }
+  const remaining = rounds - state.round;
+  const clinch = clinchedPlayer(remaining);
+  if (clinch) {
+    Telemetry.mark('game-clinched', `${clinch.name}, ${remaining} round${remaining===1?'':'s'} left`);
+    const body = scoresHtml
+      + `<div class="notice" style="margin-top:10px;"><b>${clinch.name} has clinched the game.</b><br>`
+      + `With ${remaining} round${remaining===1?'':'s'} left, no one can catch them even in a best-case finish. `
+      + `The host can end the game now, or keep playing for fun.</div>`;
+    showModal('Round Over — Game Decided', body, [
+      {label:`End game now — ${clinch.name} wins`, action:()=>{ hideModal(); state.endedEarly = true; endGame(); }},
+      {label:'Keep playing', action:()=>{ hideModal(); state.round++; startRound(); }}
+    ]);
+    return;
+  }
+  showModal('Round Over', scoresHtml, [
+    {label:'Start Next Round', action:()=>{ hideModal(); state.round++; startRound(); }}
   ]);
 }
 function endGame() {
-  Telemetry.endGame(state.players);
+  Telemetry.endGame(state.players, { endedEarly: !!state.endedEarly });
   const sorted = [...state.players].sort((a,b)=>a.total-b.total);
-  showModal('Game Over', `<p><b>${sorted[0].name}</b> wins!</p><p>${sorted.map(p => `${p.name}: ${p.total}`).join('<br>')}</p>`, [
+  const earlyNote = state.endedEarly ? `<p class="meta">Ended early — game was already decided.</p>` : '';
+  showModal('Game Over', `<p><b>${sorted[0].name}</b> wins!</p><p>${sorted.map(p => `${p.name}: ${p.total}`).join('<br>')}</p>${earlyNote}`, [
     {label:'New Game', action:()=>location.reload()}
   ]);
 }
