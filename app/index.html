@@ -1251,23 +1251,46 @@ h3, .run .runHeader b{
   transform:scale(1.08);
 }
 .jailbreakSplash img{ position:relative; z-index:1; display:block; width:100%; height:100%; object-fit:contain; object-position:center; }
-.jailbreakSplashHint{
+.jailbreakSplashPanel{
   position:absolute;
   left:50%;
-  bottom:max(18px,env(safe-area-inset-bottom));
+  bottom:max(20px,env(safe-area-inset-bottom));
   transform:translateX(-50%);
-  width:max-content;
+  z-index:2;
+  width:min(560px,92vw);
+  padding:16px 20px 18px;
+  text-align:center;
+  border:1px solid rgba(255,222,105,.72);
+  border-radius:16px;
+  background:rgba(7,20,26,.88);
+  box-shadow:0 12px 36px rgba(0,0,0,.7);
+}
+.jailbreakSplashTitle{
+  margin-bottom:8px;
+  font:900 clamp(26px,7vw,40px)/1 var(--serif);
+  letter-spacing:.03em;
+  color:#ffd75e;
+  text-shadow:0 3px 0 #331340,0 0 16px rgba(255,60,156,.5);
+}
+.jailbreakSplashText{
+  margin:0 0 12px;
+  color:#f6e6c5;
+  font:600 14px/1.5 system-ui,sans-serif;
+}
+.jailbreakSplashText b{ color:#ffe08a; }
+.jailbreakSplashHint{
+  display:inline-block;
   padding:8px 15px;
   border:1px solid rgba(255,222,105,.84);
   border-radius:999px;
-  background:rgba(7,22,28,.82);
+  background:rgba(255,222,105,.14);
   color:#fff0a8;
   font:800 12px/1 system-ui,sans-serif;
   letter-spacing:.08em;
   text-transform:uppercase;
-  box-shadow:0 5px 18px rgba(0,0,0,.65);
-  z-index:2;
+  animation:jbHintPulse 1.3s ease-in-out infinite;
 }
+@keyframes jbHintPulse{ 50%{ opacity:.5; } }
 @keyframes jailbreakSplashHit{ from{ transform:scale(1.12); filter:brightness(2) saturate(1.45); } }
 
 .jailbreakResolution{
@@ -1329,6 +1352,7 @@ h3, .run .runHeader b{
   .landscapeBoard.jailbreak-live,.card.released-king,.jailbreakResolution.failure .resolutionCrowns{ animation:none; }
   .brigDoor{ transition:none; }
   .jailbreakSplash.show{ animation:none; }
+  .jailbreakSplashHint{ animation:none; }
 }
 
 /* ============================================================
@@ -1826,7 +1850,11 @@ body.entry-active{ overflow:hidden; }
 <div id="jailbreakSplash" class="jailbreakSplash" aria-hidden="true">
   <button class="jailbreakSplashDismiss" type="button" onclick="finishJailbreakSplash()" aria-label="Continue the Jailbreak">
     <img src="assets/jailbreak-tropical-kings.webp" alt="The pirate captain smashes open the Brig as four Kings fly free" />
-    <span id="jailbreakSplashHint" class="jailbreakSplashHint">Tap to continue</span>
+    <div class="jailbreakSplashPanel">
+      <div class="jailbreakSplashTitle">JAILBREAK!</div>
+      <p id="jailbreakSplashText" class="jailbreakSplashText"></p>
+      <span id="jailbreakSplashHint" class="jailbreakSplashHint">Tap to continue</span>
+    </div>
   </button>
 </div>
 
@@ -1870,7 +1898,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 11 · 2026-07-20';
+const APP_BUILD = 'v26 · build 12 · 2026-07-20';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -2543,7 +2571,13 @@ function beginJailbreak(keyKing) {
   Telemetry.bump('jailbreaksTriggered');
   Telemetry.mark('jailbreak-triggered', released.length + ' Kings released');
   log(`${currentPlayer().name} triggered a Jailbreak with ${cardLabel(keyKing)}. ${released.length} Brig King${released.length===1?' was':'s were'} released for this turn.`);
-  render();
+  // Suppress the card view-transition for this render: its animating snapshots
+  // paint in the browser's top layer, above the splash overlay, which briefly
+  // showed the Jailbreak art *behind* the cards. Instant render → the fullscreen
+  // splash covers the board cleanly. (Same guard the turn-handoff uses.)
+  window.suppressCardTransitions = true;
+  try { render(); }
+  finally { window.suppressCardTransitions = false; }
   showJailbreakSplash(released.length);
 }
 function emitSoundCue(name, detail={}) {
@@ -2665,16 +2699,23 @@ function saltyTauntCheck(value) {
 }
 function showJailbreakSplash(releasedCount) {
   const overlay = document.getElementById('jailbreakSplash');
-  const hint = document.getElementById('jailbreakSplashHint');
   if (!overlay) return afterPlay();
+  const text = document.getElementById('jailbreakSplashText');
+  const kings = `${releasedCount} King${releasedCount === 1 ? '' : 's'}`;
+  if (text) {
+    text.innerHTML = `The Brig bursts open and <b>${kings}</b> ${releasedCount === 1 ? 'is' : 'are'} loose. `
+      + `Play <b>every</b> released King onto the Runs before you discard — any King left unplayed is `
+      + `reshuffled into the deck and adds a penalty card to your Hold.`;
+  }
   clearTimeout(jailbreakSplashTimer);
+  jailbreakSplashTimer = null;
   jailbreakSplashPending = true;
-  hint.textContent = `${releasedCount} King${releasedCount===1?'':'s'} freed · Tap to continue`;
   overlay.classList.remove('departing');
   overlay.classList.add('show');
-  overlay.setAttribute('aria-hidden','false');
-  emitSoundCue('jailbreak-trigger', {releasedCount});
-  jailbreakSplashTimer = setTimeout(finishJailbreakSplash, 2100);
+  overlay.setAttribute('aria-hidden', 'false');
+  emitSoundCue('jailbreak-trigger', { releasedCount });
+  // No auto-dismiss: this is a modal now. The player reads it, then taps
+  // anywhere on the overlay to continue and play the freed Kings.
 }
 function finishJailbreakSplash() {
   if (!jailbreakSplashPending) return;
