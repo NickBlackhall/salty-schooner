@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Start here
+
+Before working, read `docs/WORKLOG.md` for current status, the canonical build location, deploy workflow, ratified rule decisions, and open items. Append your changes to its Change history when you finish.
+
 ## Project mission
 
 Build Salty Schooner into a stable, mobile-first card game prototype for phones and iPads while preserving the established rules exactly.
