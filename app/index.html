@@ -1775,6 +1775,7 @@ body.entry-active{ overflow:hidden; }
         <button id="addPlayer" class="menuBtn secondary" type="button">Add Player</button>
         <button id="removePlayer" class="menuBtn secondary" type="button">Remove Player</button>
         <button id="startGame" class="menuBtn" type="button">Set Sail</button>
+        <button id="setupTrackerBtn" class="menuBtn secondary" type="button" style="grid-column:1/-1">&#128202; Playtest Tracker — view / export / import</button>
         <button class="menuBtn secondary" type="button" style="grid-column:1/-1" onclick="backToTitle()">Back to Menu</button>
       </div>
     </div>
@@ -2955,6 +2956,8 @@ document.getElementById('startGame').onclick = () => {
 document.getElementById('newGameBtn').onclick = () => location.reload();
 const statsBtnEl = document.getElementById('statsBtn');
 if (statsBtnEl) statsBtnEl.onclick = showTelemetry;
+const setupTrackerBtnEl = document.getElementById('setupTrackerBtn');
+if (setupTrackerBtnEl) setupTrackerBtnEl.onclick = showTelemetry;
 if (musicToggle) musicToggle.onclick = toggleBackgroundMusic;
 if (entryMusicToggle) entryMusicToggle.onclick = toggleBackgroundMusic;
 document.getElementById('clearSelection').onclick = () => { selected=null; render(); };
