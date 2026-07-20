@@ -141,6 +141,8 @@ Issues found:
 - Does first-player position create a meaningful advantage?
 - Do players intentionally manage discard piles, or do turns still feel mostly driven by luck?
 - Does completing a run with several Kings create satisfying tension or excessive Brig buildup?
+- Deliberate stalling / lock-out (raised by Nick, 2026-07-20): a player can intentionally hoard a needed number card (never discarding it) to purposely jam the game — a real tactic Nick used as a kid. This is the *intentional* cousin of the residual hard stall already tracked (see "Card Supply, Shuffle, and Deck Exhaustion" and `trackNoDrawStall`). Candidate rules to consider once Tracker data is in: a forced-discard/forced-progress rule, a turn limit on holding a playable card, or the last-resort recycle. Not urgent — watch first.
+- Discard-pile visibility (raised by Nick, 2026-07-20): in a physical game each player's discard (Port) piles are visible to opponents; the current build shows only the active player's ports. Possible future feature: let a player peek at an opponent's discard piles (e.g. tap that opponent's goal-pile tile to reveal their ports). Affects the multiplayer secret-vs-shared split — see `docs/RULES_VS_LOOKS_MAP.md`: hands and goal-pile contents are secret; ports are *currently* not shown to others but are the natural first candidate to make shared/peekable.
 
 ## Current Skill-versus-Chance Assessment
 
