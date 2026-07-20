@@ -2008,21 +2008,9 @@ function kingRequiredValue(run) {
   const required = run.direction === 'up' ? last + 1 : last - 1;
   return required >= 2 && required <= 11 ? required : null;
 }
-function isOpeningKingAnchor(run) {
-  if (!run || run.direction || run.cards.length !== 1) return false;
-  const first = run.cards[0];
-  return first && first.rank === 'K' && !first.effectiveValue;
-}
-function openingKingChoices(card, run) {
-  if (!card || card.rank === 'K' || !isOpeningKingAnchor(run)) return [];
-  const choices = [];
-  const lower = card.value - 1;
-  const higher = card.value + 1;
-  // The opening King may represent only 2 through Jack. The natural card establishes direction.
-  if (lower >= 2 && lower <= 11) choices.push({kingValue:lower, dir:'up'});
-  if (higher >= 2 && higher <= 11) choices.push({kingValue:higher, dir:'down'});
-  return choices;
-}
+// Opening-King anchor handling was removed when the opener rule changed to "re-deal":
+// a King can never be the opening card, so isOpeningKingAnchor / openingKingChoices /
+// handleOpeningKingAnchorPlay / commitOpeningKingAnchor are no longer needed.
 function unsetNaturalKingChoices(run) {
   if (!run || run.direction || run.cards.length !== 1) return [];
   const natural = run.cards[0];
@@ -2048,7 +2036,6 @@ function canPlayCardOnRun(card, run) {
     // Kings substitute only for the next required numbered card: 2 through Jack.
     return kingRequiredValue(run) !== null;
   }
-  if (isOpeningKingAnchor(run)) return openingKingChoices(card, run).length > 0;
   if (run.cards.length === 0) return card.value === 1 || card.value === 12;
   return nextValuesForRun(run).some(n => n.value === card.value);
 }
@@ -2239,10 +2226,6 @@ function playSelectedToRun(runIndex) {
     handleKingPlay(runIndex, card);
     return;
   }
-  if (isOpeningKingAnchor(run)) {
-    handleOpeningKingAnchorPlay(runIndex, card);
-    return;
-  }
   const nexts = nextValuesForRun(run).filter(n => n.value === card.value);
   const c = removeSelectedCard();
   if (!run.direction && run.cards.length > 0) run.direction = nexts[0].dir;
@@ -2254,42 +2237,6 @@ function playSelectedToRun(runIndex) {
   emitSoundCue('place');
   saltyTauntCheck(c.value);
   log(`${currentPlayer().name} played ${cardLabel(c)} to Run ${runIndex+1}.`);
-  selected = null;
-  checkComplete(runIndex);
-  afterPlay();
-}
-function handleOpeningKingAnchorPlay(runIndex, card) {
-  const run = state.runs[runIndex];
-  const choices = openingKingChoices(card, run);
-  if (!choices.length) return flashIllegalRun(runIndex, 'Illegal play');
-  if (choices.length === 1) {
-    commitOpeningKingAnchor(runIndex, choices[0].kingValue, choices[0].dir);
-    return;
-  }
-  showModal(
-    'Set the Course',
-    `<p>The opening King can anchor ${cardLabel(card)} in either direction.</p><p>What value does the King represent?</p>`,
-    choices.map(choice => ({
-      label:`King as ${VALUE_NAMES[choice.kingValue]} — run ${choice.dir.toUpperCase()}`,
-      action:()=>commitOpeningKingAnchor(runIndex, choice.kingValue, choice.dir)
-    }))
-  );
-}
-function commitOpeningKingAnchor(runIndex, kingValue, dir) {
-  hideModal();
-  const run = state.runs[runIndex];
-  if (!isOpeningKingAnchor(run)) return;
-  const card = getSelectedCard();
-  if (!card || card.rank === 'K') return;
-  const natural = removeSelectedCard();
-  const openingKing = run.cards[0];
-  openingKing.effectiveValue = kingValue;
-  openingKing.playedDirection = dir;
-  run.direction = dir;
-  run.cards.push(natural);
-  emitSoundCue('place');
-  saltyTauntCheck(natural.value);
-  log(`${currentPlayer().name} played ${cardLabel(natural)} on the opening King. The King represents ${VALUE_NAMES[kingValue]} and the run is now ${dir.toUpperCase()}.`);
   selected = null;
   checkComplete(runIndex);
   afterPlay();

@@ -76,9 +76,9 @@
 - The Brig is a shared holding area for Kings.
 - The Brig begins every round with one face-up King.
 - When a run completes, all Kings in that run are moved to The Brig.
-- All non-King cards from a completed run are discarded out of play.
+- All non-King cards from a completed run are moved to a face-down recycle pile (they are NOT discarded out of play).
+- When the draw deck is exhausted during play, the recycle pile is shuffled to form a new draw deck. This prevents the game from starving when players still need to draw. (Ratified by Nick 2026-07-20; supersedes the earlier "discarded out of play" wording, which caused a real deck-exhaustion edge case.)
 - The cleared run becomes available for a new run.
-- DISCREPANCY (needs Nick's decision): the v26 build does NOT discard completed-run non-King cards out of play. Instead it moves them to a "recycle pile" (`state.recycle`). This rule change was introduced in a ChatGPT session and is not yet ratified here. Decide whether the recycle pile is official; if so, document how/when the recycle pile re-enters play.
 
 ## Forced Jailbreak
 
@@ -99,6 +99,22 @@
 - Restore the affected run exactly to its state before the Key King was played.
 - Deal 2 cards from the draw deck face-down to the bottom of that player's goal pile.
 - The player's turn continues after the penalty if legal plays remain.
+
+## Card Supply, Shuffle, and Deck Exhaustion (v26 audit, 2026-07-20)
+
+Where every card can live during a round: the draw deck, the recycle pile, The Brig, Davy Jones's Locker, the four shared runs, and each player's goal pile, hand, and four discard piles. Total cards in play = 52 x number of players.
+
+Verified correct (tested against the real v26 code):
+
+- Deck composition: `makeDeck(n)` produces exactly 52 x n cards, all with unique ids, with the right count of every rank (including 4 x n Kings). Verified for 1-4 players.
+- Shuffle: standard Fisher-Yates; confirmed to be a true permutation that never loses or duplicates a card, even over 1000 repeated shuffles.
+- Recycle refill: when the draw deck empties, `drawCard` shuffles the recycle pile into a fresh draw deck. Verified that draining a fully recycled deck returns every card exactly once, loses nothing, and only returns null when BOTH the deck and recycle pile are truly empty.
+- Opening card: a King can never be the opener (re-deal rule). Verified over 50,000 deals, including from a King-stacked deck.
+
+Issues found:
+
+- Davy Jones's Locker is a one-way card sink. When a Jailbreak fails, the unplayed released Brig Kings are pushed to `state.locker`, which is only ever added to and is never returned to play until the round resets. Those Kings are permanently out of circulation for the rest of the round. This is a rule change from the written Failed Jailbreak rule (which says the Key King goes back to The Brig). It does not corrupt card counts, but it does permanently shrink the King supply mid-round and diverges from the brief. Needs Nick's decision on whether the Locker is intended.
+- Residual stall is still possible. The recycle pile prevents the most common exhaustion, but the game can still reach a hard stall: if the active player has an empty hand, the deck is empty, and the recycle pile is empty (all remaining cards locked in goal piles, discard piles, incomplete runs, The Brig, and the Locker). The player then cannot draw and cannot discard to end their turn. v26 detects and logs this (`trackNoDrawStall`) but does not resolve it. No automatic recovery exists. Worth deciding on a rule (e.g. recycle discard piles, or a forced end-of-turn) before it bites in a real game.
 
 ## Confirmed Playtest Behavior
 
