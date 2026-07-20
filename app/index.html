@@ -1870,7 +1870,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 9 · 2026-07-20';
+const APP_BUILD = 'v26 · build 10 · 2026-07-20';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -2552,38 +2552,92 @@ function emitSoundCue(name, detail={}) {
 }
 
 // ---- Sound-effect manager (v28) -------------------------------------------
-// Game logic announces moments via emitSoundCue(); this plays a matching clip.
-// Ships SILENT: until the files below exist in assets/, play() just rejects and
-// we swallow it — no sound, no crash. Drop the clips in and it comes alive.
-// Wire a Settings toggle to sfxEnabled later; big-event cues (jailbreak-*,
-// round-win, game-win) get their files added here when that pass happens.
+// Game logic announces moments via emitSoundCue(); this plays a matching sound.
+// Two kinds of cue:
+//   • FILE cues  — real recorded clips in assets/ (see SFX_FILE_CUES).
+//   • SYNTH cues — generated live with the Web Audio API, no files needed.
+// If a cue name matches neither it stays silent (no crash).
 let sfxEnabled = true;
 const SFX_VOLUME = 0.55;
-const SFX_FILES = {
-  select:   'assets/sfx-select.mp3',
-  deselect: 'assets/sfx-deselect.mp3',
-  place:    'assets/sfx-place.mp3',
-  discard:  'assets/sfx-discard.mp3',
-  illegal:  'assets/sfx-illegal.mp3',
-  ui:       'assets/sfx-ui.mp3',
-  taunt:    'assets/sfx-taunt.mp3'
+
+// Recorded clips. 'place' cycles through three "ethnic power-up" flourishes so
+// repeated card plays don't feel like the same hit. Because those clips run
+// ~2.6s and a card lands on a run often, a new place-sound cuts off the previous
+// one (see playFileCue) instead of stacking into a wall of overlapping sound.
+const SFX_FILE_CUES = {
+  place:               ['assets/sfx-place-1.mp3', 'assets/sfx-place-2.mp3', 'assets/sfx-place-3.mp3'],
+  discard:             ['assets/sfx-discard.mp3'],      // captain's boat bell — a discard ends the turn
+  'jailbreak-trigger': ['assets/sfx-jailbreak.mp3'],   // ethnic-drums achievement
+  taunt:               ['assets/sfx-taunt.mp3']         // the spiteful laugh
 };
+
 if (typeof Audio !== 'undefined') {
-  const sfxBase = {};
-  Object.keys(SFX_FILES).forEach(name => {
-    const a = new Audio(SFX_FILES[name]);
-    a.preload = 'auto';
-    a.volume = SFX_VOLUME;
-    sfxBase[name] = a;
+  // Preload each recorded clip once.
+  const fileClips = {};
+  Object.entries(SFX_FILE_CUES).forEach(([cue, paths]) => {
+    fileClips[cue] = paths.map(p => { const a = new Audio(p); a.preload = 'auto'; a.volume = SFX_VOLUME; return a; });
   });
-  const playSfx = name => {
-    if (!sfxEnabled) return;
-    const base = sfxBase[name];
-    if (!base) return;                        // unknown cue (e.g. big events, not wired yet)
+  const cueCursor = {};   // per-cue index for cycling
+  let lastPlaceClip = null;
+  const playFileCue = cue => {
+    const clips = fileClips[cue];
+    if (!clips || !clips.length) return;
+    cueCursor[cue] = (cueCursor[cue] == null) ? 0 : (cueCursor[cue] + 1) % clips.length;
+    if (cue === 'place') {
+      // Long flourish: stop the one still playing so quick plays stay clean.
+      if (lastPlaceClip) { try { lastPlaceClip.pause(); lastPlaceClip.currentTime = 0; } catch (e) {} }
+      const clip = clips[cueCursor[cue]];
+      lastPlaceClip = clip;
+      try { clip.currentTime = 0; } catch (e) {}
+      clip.volume = SFX_VOLUME;
+      const attempt = clip.play();
+      if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
+      return;
+    }
+    // Rare one-shots (jailbreak, taunt): clone so overlaps are fine.
+    const base = clips[cueCursor[cue]];
     const clip = base.cloneNode ? base.cloneNode(true) : new Audio(base.src);
-    clip.volume = SFX_VOLUME;                 // clone so rapid taps overlap instead of cutting off
+    clip.volume = SFX_VOLUME;
     const attempt = clip.play();
-    if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {}); // missing file: stay silent
+    if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
+  };
+
+  // --- Synth cues (no files). Small UI blips + the two jailbreak stings. ---
+  let audioCtx = null;
+  const getCtx = () => {
+    if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+  };
+  // A single tone with a fast attack and exponential decay.
+  const tone = (ctx, { freq = 440, type = 'sine', start = 0, dur = 0.1, vol = 0.3, glideTo = null }) => {
+    const t0 = ctx.currentTime + start;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol * SFX_VOLUME, t0 + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  };
+  const SYNTH = {
+    select:   ctx => tone(ctx, { freq: 880, type: 'triangle', dur: 0.06, vol: 0.4, glideTo: 1200 }),
+    deselect: ctx => tone(ctx, { freq: 520, type: 'triangle', dur: 0.07, vol: 0.36, glideTo: 360 }),
+    illegal:  ctx => { tone(ctx, { freq: 150, type: 'square', dur: 0.14, vol: 0.32 }); tone(ctx, { freq: 118, type: 'square', start: 0.09, dur: 0.15, vol: 0.3 }); },
+    ui:       ctx => tone(ctx, { freq: 660, type: 'sine', dur: 0.04, vol: 0.28 }),
+    'jailbreak-success': ctx => [523, 659, 784, 1047].forEach((f, i) => tone(ctx, { freq: f, type: 'triangle', start: i * 0.09, dur: 0.24, vol: 0.4 })),
+    'jailbreak-failure': ctx => { [440, 349, 262].forEach((f, i) => tone(ctx, { freq: f, type: 'sawtooth', start: i * 0.13, dur: 0.3, vol: 0.34 })); tone(ctx, { freq: 88, type: 'sine', dur: 0.55, vol: 0.3 }); }
+  };
+  const playSynth = name => { const ctx = getCtx(); if (!ctx) return; const fn = SYNTH[name]; if (fn) { try { fn(ctx); } catch (e) {} } };
+
+  const playSfx = name => {
+    if (!sfxEnabled || !name) return;
+    if (fileClips[name]) return playFileCue(name);
+    if (SYNTH[name]) return playSynth(name);
+    // unknown cue -> stay silent
   };
   document.addEventListener('salty-sound-cue', e => {
     const name = e && e.detail && e.detail.name;
