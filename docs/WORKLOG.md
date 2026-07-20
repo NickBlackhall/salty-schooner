@@ -41,12 +41,13 @@ edited **outside git** and pushed straight to Netlify. To prevent recurrence:
 
 See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle audit section.
 
-## Playtest Tracker (added 2026-07-20)
+## Playtest Tracker (added 2026-07-20, upgraded to per-game records same day)
 
-- In-game **MENU (☰) → 📊 Tracker**. Client-side only, persisted in `localStorage`, accumulates across games/reloads on the device.
-- Counts: games/rounds started & completed, King-opener re-deals, runs completed, deck recycles (and cards recycled), jailbreaks triggered/succeeded/failed, failed-jailbreak Kings, curse penalty cards, hard stalls. Plus a recent-events log.
-- Buttons: **Copy data** (JSON to clipboard — Nick can paste it back for review) and **Reset tracker**.
-- `Telemetry` object lives near the top of the main `<script>` in `app/index.html`; hooks are `Telemetry.bump(...)` / `Telemetry.mark(...)` at each event site.
+- In-game **MENU (☰) → 📊 Tracker**. Client-side only, persisted in `localStorage` (key `saltySchoonerTrackerV2`).
+- **Per-game records:** each game stores start/end time, players, rounds config, winner, final scores, and its own stat counts (King-opener re-deals, runs completed, deck recycles, jailbreaks triggered/succeeded/failed, failed-jailbreak Kings, curse penalty cards, hard stalls). The panel shows lifetime totals (summed across games) plus a recent-games list.
+- **Buttons:** Copy all (JSON), Copy games (CSV), Download CSV, Import/restore (paste a prior export — merges, deduped by game id; also absorbs the old V1 aggregate blob as a "legacy" record), Reset.
+- **Persistence reality:** survives closing the tab/browser on the same device+URL. Does NOT survive: a new Netlify Drop URL (new build = new origin = empty), a different device/browser, clearing Safari data, or iOS ~7-day storage eviction (mitigated by Add to Home Screen). **Durable workflow:** Copy/Export before re-dropping a build; Import after, to carry the record across.
+- Implementation: `Telemetry` object near the top of the main `<script>` in `app/index.html`. Hooks: `Telemetry.startGame(names, rounds)` / `Telemetry.endGame(players)` at game start/end; `Telemetry.bump(key)` / `Telemetry.mark(type, detail)` at each event site (bumps accumulate into the current game record).
 
 ## Known open items
 
@@ -71,7 +72,8 @@ See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle
 2. `Remove dead opening-King anchor code; audit card-supply rules` — deleted unreachable anchor code; added the King-supply/shuffle audit to the brief; ratified the recycle pile.
 3. `Failed Jailbreak: reshuffle unplaced Kings into the draw deck` — removed the permanent Locker; kept 1-per-King penalty; updated player-facing text and the brief.
 4. `Add offline playtest tracker for edge-case frequencies` — Telemetry module + hooks + MENU viewer.
-5. (this entry) Added `build-drop-zip.sh`, `.gitignore` (zip artifact), and this `WORKLOG.md`.
+5. Added `build-drop-zip.sh`, `.gitignore` (zip artifact), and this `WORKLOG.md`.
+6. Upgraded the tracker to per-game records with Export (Copy JSON / Copy CSV / Download CSV) and Import/restore (merge, deduped; absorbs old V1 aggregate). Storage key bumped to `saltySchoonerTrackerV2`.
 
 Note on process: earlier, a King-opener issue in the v11 file was fixed but then superseded when v26 became canonical — a reminder to always confirm which build is authoritative before editing.
 

@@ -1865,79 +1865,135 @@ let musicWanted = false;          // has the player turned music on?
 let musicContext = 'menu';        // 'menu' -> titleMusic, 'game' -> gameMusic
 function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic; }
 
-// ---- Playtest tracker: client-side edge-case telemetry, persisted in localStorage ----
-// Fully offline. Accumulates across games/reloads on this device. View/copy/reset from MENU > Tracker.
+// ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
+// Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
+// starts fresh, so Export (Copy/CSV) before re-dropping and Import to restore. MENU > Tracker.
 const Telemetry = {
-  KEY: 'saltySchoonerTrackerV1',
+  KEY: 'saltySchoonerTrackerV2',
+  STAT_KEYS: ['roundsStarted','roundsCompleted','kingOpenerRedeals','runsCompleted','deckRecycles','recycledCardsTotal','jailbreaksTriggered','jailbreaksSucceeded','jailbreaksFailed','failedJailbreakKings','cursePenaltyCards','hardStalls'],
   data: null,
-  fresh() {
-    return {
-      since: new Date().toISOString(),
-      counts: {
-        gamesStarted:0, gamesCompleted:0, roundsStarted:0, roundsCompleted:0,
-        kingOpenerRedeals:0, runsCompleted:0, deckRecycles:0, recycledCardsTotal:0,
-        jailbreaksTriggered:0, jailbreaksSucceeded:0, jailbreaksFailed:0,
-        failedJailbreakKings:0, cursePenaltyCards:0, hardStalls:0
-      },
-      recent: []
-    };
-  },
+  freshStats() { const s = {}; this.STAT_KEYS.forEach(k => s[k] = 0); return s; },
+  fresh() { return { schema:2, since:new Date().toISOString(), games:[], current:null, recent:[] }; },
   load() {
     try { this.data = JSON.parse(localStorage.getItem(this.KEY)); } catch (e) { this.data = null; }
-    if (!this.data || !this.data.counts) this.data = this.fresh();
+    if (!this.data || this.data.schema !== 2) this.data = this.fresh();
+    if (!Array.isArray(this.data.games)) this.data.games = [];
+    if (!Array.isArray(this.data.recent)) this.data.recent = [];
     return this.data;
   },
   save() { try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); } catch (e) {} },
-  bump(key, n=1) { if (!this.data) this.load(); this.data.counts[key] = (this.data.counts[key] || 0) + n; this.save(); },
-  mark(type, detail) {
+  newId() { return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); },
+  startGame(names, rounds) {
     if (!this.data) this.load();
-    this.data.recent.unshift({ at: new Date().toISOString(), type, detail: detail || '' });
-    if (this.data.recent.length > 100) this.data.recent.length = 100;
+    if (this.data.current) { this.data.current.abandoned = true; this.data.games.push(this.data.current); } // finalize an abandoned game
+    this.data.current = { id:this.newId(), started:new Date().toISOString(), ended:null, players:(names||[]).slice(), rounds:rounds||null, completed:false, winner:null, scores:null, stats:this.freshStats() };
+    this.mark('game-started', (names?names.length:0) + ' players, ' + (rounds||'?') + ' rounds', true);
     this.save();
   },
+  endGame(players) {
+    if (!this.data) this.load();
+    if (!this.data.current) return;
+    const g = this.data.current;
+    g.ended = new Date().toISOString(); g.completed = true;
+    if (players && players.length) {
+      g.winner = [...players].sort((a,b)=>a.total-b.total)[0].name;
+      g.scores = players.map(p => ({ name:p.name, total:p.total }));
+    }
+    this.data.games.push(g); this.data.current = null;
+    this.mark('game-completed', g.winner ? ('winner ' + g.winner) : '', true);
+    this.save();
+  },
+  bump(key, n=1) { if (!this.data) this.load(); if (this.data.current && this.data.current.stats[key] !== undefined) this.data.current.stats[key] += n; this.save(); },
+  mark(type, detail, skipSave) {
+    if (!this.data) this.load();
+    this.data.recent.unshift({ at:new Date().toISOString(), type, detail:detail || '' });
+    if (this.data.recent.length > 200) this.data.recent.length = 200;
+    if (!skipSave) this.save();
+  },
   reset() { this.data = this.fresh(); this.save(); },
+  allGames() { const g = [...this.data.games]; if (this.data.current) g.push(this.data.current); return g; },
+  totals() { const t = this.freshStats(); this.allGames().forEach(g => this.STAT_KEYS.forEach(k => t[k] += (g.stats && g.stats[k]) || 0)); return t; },
   summaryHtml() {
     if (!this.data) this.load();
-    const c = this.data.counts;
-    const rounds = c.roundsStarted || 0;
+    const games = this.allGames();
+    const completed = games.filter(g => g.completed).length;
+    const t = this.totals();
+    const rounds = t.roundsStarted || 0;
     const per = (n) => rounds ? (n / rounds).toFixed(2) + '/round' : '';
     const row = (label, val, extra='') => `<tr><td style="padding:3px 12px 3px 0;">${label}</td><td style="text-align:right;font-weight:700;padding:3px 0;">${val}</td><td style="text-align:right;color:#9a8a6a;padding:3px 0 3px 12px;font-size:11px;">${extra}</td></tr>`;
     const rows = [
-      row('Games started / completed', `${c.gamesStarted||0} / ${c.gamesCompleted||0}`),
-      row('Rounds started / completed', `${c.roundsStarted||0} / ${c.roundsCompleted||0}`),
-      row('King openers re-dealt', c.kingOpenerRedeals||0, per(c.kingOpenerRedeals||0)),
-      row('Runs completed', c.runsCompleted||0, per(c.runsCompleted||0)),
-      row('Deck ran out (recycled)', c.deckRecycles||0, per(c.deckRecycles||0)),
-      row('Cards recycled (total)', c.recycledCardsTotal||0),
-      row('Jailbreaks triggered', c.jailbreaksTriggered||0, per(c.jailbreaksTriggered||0)),
-      row('&nbsp;&nbsp;· succeeded', c.jailbreaksSucceeded||0),
-      row('&nbsp;&nbsp;· FAILED', c.jailbreaksFailed||0),
-      row('Failed-jailbreak Kings', c.failedJailbreakKings||0),
-      row('Curse penalty cards dealt', c.cursePenaltyCards||0),
-      row('HARD STALLS (out of cards)', `<span style="color:${(c.hardStalls||0)>0?'#c0392b':'inherit'}">${c.hardStalls||0}</span>`)
+      row('Rounds started / completed', `${t.roundsStarted} / ${t.roundsCompleted}`),
+      row('King openers re-dealt', t.kingOpenerRedeals, per(t.kingOpenerRedeals)),
+      row('Runs completed', t.runsCompleted, per(t.runsCompleted)),
+      row('Deck ran out (recycled)', t.deckRecycles, per(t.deckRecycles)),
+      row('Jailbreaks triggered', t.jailbreaksTriggered, per(t.jailbreaksTriggered)),
+      row('&nbsp;&nbsp;· succeeded', t.jailbreaksSucceeded),
+      row('&nbsp;&nbsp;· FAILED', t.jailbreaksFailed),
+      row('Failed-jailbreak Kings', t.failedJailbreakKings),
+      row('Curse penalty cards dealt', t.cursePenaltyCards),
+      row('HARD STALLS (out of cards)', `<span style="color:${t.hardStalls>0?'#c0392b':'inherit'}">${t.hardStalls}</span>`)
     ].join('');
-    const recent = (this.data.recent||[]).slice(0,12).map(e =>
-      `<div style="font-size:11px;padding:1px 0;">${e.at.slice(5,16).replace('T',' ')} — <b>${e.type}</b>${e.detail?' — '+e.detail:''}</div>`
-    ).join('') || '<div style="font-size:12px;color:#9a8a6a;">No notable events yet.</div>';
-    return `<p style="margin:0 0 8px;font-size:11px;color:#9a8a6a;">Since ${this.data.since.slice(0,16).replace('T',' ')} · saved on this device only</p>`
+    const gameList = games.slice(-8).reverse().map(g => {
+      const st = g.stats || {};
+      const tag = g.completed ? (g.winner ? 'won by ' + g.winner : 'done') : (g.abandoned ? 'abandoned' : g.legacy ? 'legacy' : 'in progress');
+      return `<div style="font-size:11px;padding:2px 0;border-top:1px solid rgba(154,138,106,.25);">${(g.started||'').slice(5,16).replace('T',' ')} · ${(g.players||[]).join(' v ')||'—'} · ${g.rounds||'?'}r · <b>${tag}</b> · JB ${st.jailbreaksTriggered||0}/${st.jailbreaksFailed||0}f · stalls ${st.hardStalls||0}</div>`;
+    }).join('') || '<div style="font-size:12px;color:#9a8a6a;">No games recorded yet.</div>';
+    return `<p style="margin:0 0 8px;font-size:11px;color:#9a8a6a;">${completed} completed game${completed===1?'':'s'} recorded (${games.length} total). Saved on this device+URL only — Export before re-dropping a new build.</p>`
       + `<table style="border-collapse:collapse;width:100%;font-size:13px;">${rows}</table>`
-      + `<h4 style="margin:12px 0 4px;">Recent notable events</h4>${recent}`;
+      + `<h4 style="margin:12px 0 4px;">Recent games</h4>${gameList}`;
   },
-  copyText() { if (!this.data) this.load(); return JSON.stringify(this.data, null, 2); }
+  toJSON() { if (!this.data) this.load(); return JSON.stringify(this.data, null, 2); },
+  toCSV() {
+    if (!this.data) this.load();
+    const cols = ['id','started','ended','players','rounds','completed','winner', ...this.STAT_KEYS];
+    const esc = (v) => { const s = String(v==null?'':v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+    const rows = [cols.join(',')];
+    this.allGames().forEach(g => {
+      const st = g.stats || {};
+      rows.push([g.id, g.started||'', g.ended||'', (g.players||[]).join(' | '), g.rounds||'', g.completed?'yes':'no', g.winner||'', ...this.STAT_KEYS.map(k => st[k]||0)].map(esc).join(','));
+    });
+    return rows.join('\n');
+  },
+  importText(text) {
+    let obj; try { obj = JSON.parse(text); } catch (e) { return { ok:false, msg:'That was not valid tracker data (JSON).' }; }
+    if (!this.data) this.load();
+    let added = 0;
+    if (obj.schema === 2 && Array.isArray(obj.games)) {
+      const have = new Set(this.data.games.map(g => g.id));
+      obj.games.forEach(g => { if (g && g.id && !have.has(g.id)) { this.data.games.push(g); have.add(g.id); added++; } });
+    } else if (obj.counts) { // legacy V1 aggregate -> keep as one legacy record so no data is lost
+      const stats = this.freshStats();
+      this.STAT_KEYS.forEach(k => { if (obj.counts[k] !== undefined) stats[k] = obj.counts[k]; });
+      this.data.games.push({ id:'legacy-' + (obj.since || Date.now()), started:obj.since || null, ended:null, players:[], rounds:null, completed:false, legacy:true, note:'Imported V1 aggregate: ' + (obj.counts.gamesStarted||'?') + ' started / ' + (obj.counts.gamesCompleted||'?') + ' completed', stats });
+      added = 1;
+    } else { return { ok:false, msg:'Unrecognized tracker data.' }; }
+    this.save();
+    return { ok:true, msg:'Imported ' + added + ' record' + (added===1?'':'s') + '. Total now ' + this.data.games.length + '.' };
+  }
 };
 Telemetry.load();
+function trackerCopy(text, label) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => alert((label||'Data') + ' copied to clipboard.'), () => window.prompt('Copy ' + (label||'data') + ':', text));
+  } else { window.prompt('Copy ' + (label||'data') + ':', text); }
+}
+function trackerDownload(filename, text, mime) {
+  try {
+    const blob = new Blob([text], { type: mime || 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { window.prompt('Copy this data:', text); }
+}
 function showTelemetry() {
   showModal('Playtest Tracker', Telemetry.summaryHtml(), [
     { label: 'Close', action: hideModal },
-    { label: 'Copy data', action: () => {
-        const t = Telemetry.copyText();
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(t).then(() => alert('Tracker data copied to clipboard.'), () => window.prompt('Copy the tracker data:', t));
-        } else { window.prompt('Copy the tracker data:', t); }
-      } },
-    { label: 'Reset tracker', action: () => {
-        if (confirm('Reset all tracked stats on this device? This cannot be undone.')) { Telemetry.reset(); showTelemetry(); }
-      } }
+    { label: 'Copy all (JSON)', action: () => trackerCopy(Telemetry.toJSON(), 'Tracker data') },
+    { label: 'Copy games (CSV)', action: () => trackerCopy(Telemetry.toCSV(), 'CSV') },
+    { label: 'Download CSV', action: () => trackerDownload('salty-schooner-games.csv', Telemetry.toCSV(), 'text/csv') },
+    { label: 'Import / restore', action: () => { const t = window.prompt('Paste previously saved tracker JSON to merge it in:'); if (t && t.trim()) { const r = Telemetry.importText(t.trim()); alert(r.msg); showTelemetry(); } } },
+    { label: 'Reset tracker', action: () => { if (confirm('Erase all tracked games on this device? Export first if you want to keep them.')) { Telemetry.reset(); showTelemetry(); } } }
   ]);
 }
 
@@ -2187,8 +2243,7 @@ function startRound() {
 }
 function startGame(names, requestedConfig={}) {
   state = createMatchState(names, requestedConfig);
-  Telemetry.bump('gamesStarted');
-  Telemetry.mark('game-started', names.length + ' players');
+  Telemetry.startGame(names, activeMatchConfig().rounds);
   document.getElementById('setup').classList.add('hidden');
   document.getElementById('game').classList.remove('hidden');
   if (document.body) document.body.classList.remove('entry-active');
@@ -2211,7 +2266,7 @@ function endRound(winner) {
   ]);
 }
 function endGame() {
-  Telemetry.bump('gamesCompleted');
+  Telemetry.endGame(state.players);
   const sorted = [...state.players].sort((a,b)=>a.total-b.total);
   showModal('Game Over', `<p><b>${sorted[0].name}</b> wins!</p><p>${sorted.map(p => `${p.name}: ${p.total}`).join('<br>')}</p>`, [
     {label:'New Game', action:()=>location.reload()}
