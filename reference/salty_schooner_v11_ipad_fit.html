@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Salty Schooner v11 iPad Fit</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffaf0;
+      --ink: #1f2933;
+      --muted: #6b7280;
+      --line: #d9cbb8;
+      --accent: #0f766e;
+      --danger: #b91c1c;
+      --good: #15803d;
+      --shadow: rgba(0,0,0,.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: var(--muted); font-size: 14px; }
+    main { padding: 16px; max-width: 1280px; margin: 0 auto; }
+    .grid { display: grid; gap: 16px; }
+    .setup { max-width: 600px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 3px 12px var(--shadow);
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select, button {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      background: #fff;
+    }
+    button {
+      cursor: pointer;
+      background: #fff;
+      transition: transform .05s ease, background .15s ease;
+    }
+    button:hover { background: #f3f4f6; }
+    button:active { transform: translateY(1px); }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    button.primary:hover { background: #115e59; }
+    button.danger { background: var(--danger); color: white; border-color: var(--danger); }
+    button.small { padding: 5px 8px; font-size: 13px; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+    .scoreboard { display: flex; flex-wrap: wrap; gap: 8px; }
+    .score {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      min-width: 120px;
+    }
+    .score.active { outline: 3px solid #99f6e4; }
+    .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .value { font-weight: 700; }
+    .table {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 16px;
+      align-items: start;
+    }
+    .runs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+    .run {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      min-height: 150px;
+    }
+    .runHeader { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .cards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .card {
+      width: 48px;
+      height: 68px;
+      border-radius: 8px;
+      border: 1px solid #9ca3af;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      box-shadow: 0 1px 3px var(--shadow);
+      user-select: none;
+      position: relative;
+      text-align: center;
+      line-height: 1;
+    }
+    .card.red { color: #b91c1c; }
+    .card.black { color: #111827; }
+    .card.back { background: repeating-linear-gradient(45deg,#0f766e,#0f766e 6px,#115e59 6px,#115e59 12px); color: white; }
+    .card.selected { outline: 4px solid #facc15; }
+    .card.playable { outline: 3px solid #86efac; }
+    .card.king::after {
+      content: attr(data-as);
+      position: absolute;
+      bottom: 3px;
+      left: 3px;
+      right: 3px;
+      font-size: 10px;
+      color: #4b5563;
+      font-weight: 600;
+    }
+    .meta { color: var(--muted); font-size: 13px; }
+    .dir {
+      display: inline-flex; align-items:center; gap: 5px;
+      padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); background: #fff;
+      font-size: 13px; font-weight: 700;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display:inline-block; }
+    .dot.up { background: var(--good); }
+    .dot.down { background: var(--danger); }
+    .playerArea { display: grid; gap: 12px; }
+    .hand, .discards, .goal { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+    .discards { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+    .discardPile {
+      border: 1px dashed #b9a58f;
+      border-radius: 12px;
+      min-height: 92px;
+      padding: 7px;
+      display: grid;
+      place-items: center;
+      background: #fffaf0;
+    }
+    .side { display: grid; gap: 12px; }
+    .log {
+      max-height: 240px;
+      overflow: auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .log p { margin: 0 0 7px; }
+    .modalBackdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 50;
+      padding: 16px;
+    }
+    .modalBackdrop.show { display: flex; }
+    .modal {
+      width: min(560px,100%);
+      background: #fff;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    .modal h2 { margin-top: 0; }
+    .choices { display: grid; gap: 10px; margin-top: 12px; }
+    .choice { display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--line); border-radius:12px; padding:10px; }
+    .hidden { display:none !important; }
+    .notice { padding: 10px 12px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; }
+
+    /* v7 tabletop preview */
+    .tableMode {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .tableSide {
+      display: grid;
+      gap: 10px;
+    }
+    .rotated180 {
+      transform: rotate(180deg);
+    }
+    .tableRuns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+    }
+    .tableCenter {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .compactPanel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 3px 12px var(--shadow);
+    }
+    .playerPanel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .playerPanel.active { outline: 3px solid #99f6e4; }
+    .playerPanel .miniGrid {
+      display: grid;
+      grid-template-columns: 135px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .playerPanel .miniDiscards { display:grid; grid-template-columns: repeat(4,1fr); gap:6px; }
+    .playerPanel .discardPile { min-height: 78px; }
+    .centerTitle { text-align:center; font-weight:800; margin:0 0 8px; }
+    .miniLog { max-height: 88px; overflow:auto; font-size:12px; }
+    details.debugDrawer > summary, details.logDrawer > summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 800;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      display: inline-block;
+    }
+    details.debugDrawer > summary::-webkit-details-marker, details.logDrawer > summary::-webkit-details-marker { display:none; }
+    .debugDrawer .debugTools { margin-top: 10px; }
+    .debugTools textarea { min-height: 110px; }
+    @media (max-width: 900px) {
+      .tableCenter { grid-template-columns: 1fr; }
+      .tableRuns { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* v8 cleanup: keep the play surface mostly cards */
+    header.compactHeader { padding: 10px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    header.compactHeader h1 { font-size: 20px; margin: 0; }
+    header.compactHeader .sub { font-size: 13px; margin: 0; }
+    .tableCenter.cleanCenter { display:flex; justify-content:center; align-items:center; }
+    .brigPanelOnly { width:min(520px, 100%); min-height:118px; }
+    .utilityDrawer { margin-top: 12px; }
+    details.utilityDrawer > summary {
+      cursor: pointer; list-style: none; font-weight: 900; padding: 10px 14px; border:1px solid var(--line);
+      border-radius: 999px; background:#fff; display:inline-flex; gap:8px; align-items:center; box-shadow:0 3px 10px var(--shadow);
+    }
+    details.utilityDrawer > summary::-webkit-details-marker { display:none; }
+    .utilityGrid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-top:10px; }
+    .utilityGrid .compactPanel { box-shadow:none; }
+    .miniHeaderControls { display:flex; justify-content:flex-end; gap:8px; align-items:center; }
+    @media (max-width: 900px) {
+      header.compactHeader { align-items:flex-start; flex-direction:column; }
+      .utilityGrid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .playerPanel .miniGrid { grid-template-columns: 1fr; }
+      .playerPanel .miniDiscards { grid-template-columns: repeat(2,1fr); }
+      .tableRuns { grid-template-columns: 1fr; }
+    }
+
+
+    .debugTools textarea { width: 100%; min-height: 90px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+    .debugPanel { max-height: 320px; overflow: auto; background: #111827; color: #e5e7eb; border-radius: 12px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; white-space: pre-wrap; }
+    .debugTools select, .debugTools input { max-width: 100%; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#fff; font-size:12px; }
+    @media (max-width: 640px) {
+      main { padding: 10px; }
+      header { padding: 12px; }
+      h1 { font-size: 20px; }
+      .panel { padding: 10px; border-radius: 12px; }
+      .card { width: 42px; height: 58px; font-size: 14px; }
+      .discards { grid-template-columns: repeat(2,1fr); }
+      button, input, select { padding: 8px 9px; }
+      .score { min-width: 100px; }
+    }
+    @media (max-width: 900px) {
+      .table { grid-template-columns: 1fr; }
+      .runs { grid-template-columns: 1fr; }
+      .topbar { grid-template-columns: 1fr; }
+    }
+
+
+    /* v9 table-surface pass: remove header/status bulk and widen the board */
+    body.tableStarted header.compactHeader {
+      position: static;
+      padding: 4px 10px;
+      min-height: 0;
+      border-bottom: 1px solid rgba(217,203,184,.7);
+      background: rgba(255,255,255,.88);
+    }
+    body.tableStarted header.compactHeader h1 { font-size: 14px; line-height: 1; opacity: .72; }
+    body.tableStarted header.compactHeader .sub { display:none; }
+    body.tableStarted main { padding: 8px 10px 14px; max-width: none; }
+    body.tableStarted #game { gap: 6px; }
+    body.tableStarted #game > .topbar,
+    body.tableStarted #scoreboard { display: none !important; }
+    body.tableStarted .tableMode {
+      width: min(100%, 1260px);
+      max-width: none;
+      gap: 8px;
+      margin: 0 auto;
+    }
+    body.tableStarted .tableSide,
+    body.tableStarted .tableRuns { width: 100%; }
+    body.tableStarted .tableRuns { gap: 8px; }
+    body.tableStarted .run {
+      min-height: 126px;
+      padding: 10px;
+    }
+    body.tableStarted .compactPanel,
+    body.tableStarted .playerPanel {
+      padding: 10px;
+    }
+    body.tableStarted .playerPanel .miniGrid {
+      grid-template-columns: 118px 1fr;
+      gap: 8px;
+    }
+    body.tableStarted .playerPanel .miniDiscards { gap: 6px; }
+    body.tableStarted .playerPanel .discardPile { min-height: 70px; }
+    body.tableStarted .goal,
+    body.tableStarted .hand { padding: 7px !important; }
+    body.tableStarted .card { width: 46px; height: 64px; }
+    body.tableStarted .brigPanelOnly {
+      width: min(420px, 100%);
+      min-height: 96px;
+      padding: 8px;
+    }
+    body.tableStarted .centerTitle { margin-bottom: 4px; }
+    body.tableStarted .utilityDrawer {
+      position: fixed;
+      left: 12px;
+      bottom: 10px;
+      z-index: 30;
+      margin: 0;
+    }
+    body.tableStarted details.utilityDrawer[open] {
+      width: min(920px, calc(100vw - 24px));
+      max-height: 72vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 8px;
+      box-shadow: 0 12px 36px var(--shadow);
+    }
+    body.tableStarted details.utilityDrawer[open] > summary { margin-bottom: 8px; }
+    body.tableStarted .utilityGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gameMiniHud {
+      position: fixed;
+      right: 12px;
+      bottom: 10px;
+      z-index: 29;
+      display: none;
+      gap: 7px;
+      align-items: center;
+      background: rgba(255,250,240,.94);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 8px;
+      box-shadow: 0 6px 18px var(--shadow);
+      font-size: 12px;
+    }
+    body.tableStarted .gameMiniHud { display:flex; }
+    .hudPill { padding: 4px 8px; border-radius: 999px; background:#fff; border:1px solid var(--line); font-weight:700; }
+    @media (orientation: landscape) and (max-height: 820px) {
+      body.tableStarted .run { min-height: 112px; }
+      body.tableStarted .card { width: 42px; height: 58px; }
+      body.tableStarted .playerPanel .discardPile { min-height: 60px; }
+      body.tableStarted .playerPanel h3 { font-size: 15px; }
+      body.tableStarted .label, body.tableStarted .meta { font-size: 11px; }
+    }
+    @media (max-width: 900px) {
+      body.tableStarted .tableMode { width: 100%; }
+      body.tableStarted .utilityGrid { grid-template-columns: 1fr; }
+    }
+
+
+    /* v11 iPad fit pass: preserve the same rules, compress the table. */
+    body.tableStarted header.compactHeader { display: none !important; }
+    body.tableStarted main { padding: 3px 6px 8px !important; }
+    body.tableStarted #game { gap: 3px !important; }
+    body.tableStarted .tableMode {
+      width: min(100%, 1180px);
+      gap: 4px !important;
+      transform-origin: top center;
+    }
+    body.tableStarted .tableSide { gap: 4px !important; }
+    body.tableStarted .tableRuns { gap: 6px !important; }
+    body.tableStarted .run {
+      min-height: 82px !important;
+      padding: 8px !important;
+      border-radius: 12px !important;
+    }
+    body.tableStarted .run h3,
+    body.tableStarted .playerPanel h2,
+    body.tableStarted .centerTitle { font-size: 16px !important; line-height: 1.05 !important; }
+    body.tableStarted .run .meta,
+    body.tableStarted .playerPanel .meta,
+    body.tableStarted .label { font-size: 11px !important; line-height: 1.05 !important; }
+    body.tableStarted .card {
+      width: 38px !important;
+      height: 52px !important;
+      border-radius: 7px !important;
+      font-size: 15px !important;
+    }
+    body.tableStarted .cards { gap: 5px !important; }
+    body.tableStarted .playerPanel {
+      padding: 9px !important;
+      border-radius: 12px !important;
+    }
+    body.tableStarted .playerPanel .miniGrid {
+      grid-template-columns: 108px 1fr !important;
+      gap: 6px !important;
+    }
+    body.tableStarted .goal,
+    body.tableStarted .hand {
+      min-height: 72px !important;
+      padding: 6px !important;
+      border-radius: 10px !important;
+    }
+    body.tableStarted .miniDiscards {
+      gap: 5px !important;
+      margin-top: 5px !important;
+    }
+    body.tableStarted .discardPile {
+      min-height: 54px !important;
+      padding: 5px !important;
+      border-radius: 9px !important;
+    }
+    body.tableStarted .discardControls button { padding: 4px 6px !important; font-size: 12px !important; }
+    body.tableStarted .compactPanel,
+    body.tableStarted .brigPanelOnly {
+      padding: 8px !important;
+      border-radius: 12px !important;
+    }
+    body.tableStarted .brigPanelOnly {
+      width: min(100%, 520px) !important;
+      min-height: 94px !important;
+    }
+    body.tableStarted .brigPanelOnly .card { width: 36px !important; height: 50px !important; }
+    body.tableStarted .brigPanelOnly p { margin: 4px 0 !important; }
+    body.tableStarted .tableCenter.cleanCenter { min-height: 100px !important; }
+    body.tableStarted .gameMiniHud,
+    body.tableStarted .utilityDrawer {
+      bottom: calc(4px + env(safe-area-inset-bottom)) !important;
+    }
+    body.tableStarted .utilityDrawer { left: calc(6px + env(safe-area-inset-left)) !important; }
+    body.tableStarted .gameMiniHud { right: calc(6px + env(safe-area-inset-right)) !important; }
+    body.tableStarted .hudPill,
+    body.tableStarted details.utilityDrawer > summary {
+      padding: 5px 8px !important;
+      font-size: 12px !important;
+    }
+    @media (orientation: landscape) and (max-height: 760px) {
+      body.tableStarted .run { min-height: 74px !important; }
+      body.tableStarted .playerPanel .miniGrid { grid-template-columns: 96px 1fr !important; }
+      body.tableStarted .card { width: 34px !important; height: 48px !important; font-size: 14px !important; }
+      body.tableStarted .goal,
+      body.tableStarted .hand { min-height: 64px !important; }
+      body.tableStarted .discardPile { min-height: 46px !important; }
+      body.tableStarted .brigPanelOnly { min-height: 82px !important; }
+      body.tableStarted .tableCenter.cleanCenter { min-height: 86px !important; }
+    }
+
+  </style>
+</head>
+<body>
+<header class="compactHeader">
+  <div>
+    <h1>Salty Schooner v9</h1>
+    <div class="sub">Table mode</div>
+  </div>
+</header>
+<main>
+  <section id="setup" class="panel setup">
+    <h2>Start Game</h2>
+    <p class="meta">Enter 2 players for the tabletop preview. The rules still support more, but this layout is designed for two people across an iPad.</p>
+    <div id="jsStatus" class="notice"><b>Status:</b> JavaScript has not started yet. If the buttons do not work, download this file and open it directly in Chrome/Safari instead of the preview.</div>
+    <div id="playerInputs" class="grid"><input class="playerName" value="Player 1" /><input class="playerName" value="Player 2" /></div>
+    <div class="row" style="margin-top:12px;">
+      <button id="addPlayer">Add Player</button>
+      <button id="removePlayer">Remove Player</button>
+      <button id="startGame" class="primary">Start</button>
+    </div>
+  </section>
+
+  <section id="game" class="hidden grid">
+    <div class="topbar">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <div>
+            <div class="label">Current Turn</div>
+            <div class="value" id="turnLabel"></div>
+          </div>
+          <div>
+            <div class="label">Round</div>
+            <div class="value" id="roundLabel"></div>
+          </div>
+          <div>
+            <div class="label">Draw Deck</div>
+            <div class="value" id="deckLabel"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button id="newGameBtn">New Game</button>
+      </div>
+    </div>
+
+    <div class="scoreboard" id="scoreboard"></div>
+
+    <div class="tableMode">
+      <div class="tableSide rotated180">
+        <div class="tableRuns" id="runsTop"></div>
+        <div id="playerTop"></div>
+      </div>
+
+      <div class="tableCenter cleanCenter">
+        <div class="compactPanel brigPanelOnly">
+          <p class="centerTitle">The Brig</p>
+          <div id="brigCards" class="cards" style="justify-content:center;"></div>
+          <p class="meta" id="brigText" style="text-align:center;"></p>
+        </div>
+      </div>
+
+      <div class="tableSide">
+        <div class="tableRuns" id="runsBottom"></div>
+        <div id="playerBottom"></div>
+      </div>
+
+      <div id="runs" class="hidden"></div>
+      <div id="playerArea" class="hidden"></div>
+
+      <details class="utilityDrawer">
+        <summary>Tools / Log</summary>
+        <div class="utilityGrid">
+          <div class="compactPanel">
+            <h3 style="margin-top:0;">Selected Card</h3>
+            <div id="selectedInfo" class="notice">Select a card from goal, hand, or discard.</div>
+            <div class="row" style="margin-top:10px;">
+              <button id="clearSelection">Clear selection</button>
+              <button id="forceEnd" class="danger small">Force End Turn</button>
+            </div>
+          </div>
+
+          <div class="compactPanel">
+            <h3 style="margin-top:0;">Log</h3>
+            <div id="log" class="log miniLog" style="margin-top:10px;"></div>
+          </div>
+
+          <div class="compactPanel debugTools">
+            <h3 style="margin-top:0;">Debug / Test Tools</h3>
+            <label class="pill"><input type="checkbox" id="debugToggle" /> Show full game state</label>
+            <div class="row" style="margin-top:10px;">
+              <button id="saveStateBtn" class="small">Save State</button>
+              <button id="loadStateBtn" class="small">Load State</button>
+              <button id="exportStateBtn" class="small">Export</button>
+            </div>
+            <div class="grid" style="gap:8px; margin-top:10px;">
+              <div class="label">Force a card for testing</div>
+              <div class="row">
+                <select id="forceRank">
+                  <option>A</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>J</option><option>Q</option><option>K</option>
+                </select>
+                <select id="forceSuit"><option>♠</option><option>♥</option><option>♦</option><option>♣</option></select>
+                <select id="forceTarget">
+                  <option value="hand">Current hand</option>
+                  <option value="goalTop">Goal top</option>
+                  <option value="goalBottom">Goal bottom</option>
+                  <option value="brig">The Brig</option>
+                  <option value="deckTop">Draw deck top</option>
+                  <option value="run0">Run 1 raw add</option>
+                  <option value="run1">Run 2 raw add</option>
+                  <option value="run2">Run 3 raw add</option>
+                  <option value="run3">Run 4 raw add</option>
+                </select>
+                <button id="forceCardBtn" class="small primary">Add</button>
+              </div>
+              <textarea id="stateText" placeholder="Exported/imported game state appears here."></textarea>
+              <div class="row">
+                <button id="importStateBtn" class="small">Import from box</button>
+                <button id="validateStateBtn" class="small">Validate</button>
+              </div>
+              <div id="debugPanel" class="debugPanel hidden"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <div class="gameMiniHud" id="gameMiniHud">
+        <span class="hudPill" id="miniRoundLabel">R 1/4</span>
+        <span class="hudPill" id="miniDeckLabel">Deck 0</span>
+        <button id="miniNewGameBtn" class="small">New</button>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<div id="modalBackdrop" class="modalBackdrop">
+  <div class="modal">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div id="modalChoices" class="choices"></div>
+  </div>
+</div>
+
+<script>
+const VALUES = { A:1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, J:11, Q:12, K:13 };
+const VALUE_NAMES = {1:'A',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K'};
+const SUITS = ['♠','♥','♦','♣'];
+const RED = new Set(['♥','♦']);
+let uid = 1;
+let state = null;
+let selected = null;
+let debugEnabled = false;
+
+function makeDeck(playerCount) {
+  const deck = [];
+  for (let d=0; d<playerCount; d++) {
+    for (const suit of SUITS) {
+      for (const rank of Object.keys(VALUES)) {
+        deck.push({ id: 'c' + (uid++), rank, suit, value: VALUES[rank] });
+      }
+    }
+  }
+  return shuffle(deck);
+}
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function cardLabel(card) { return card ? card.rank + card.suit : ''; }
+function cardColor(card) { return RED.has(card.suit) ? 'red' : 'black'; }
+function makeCard(rank, suit) { return { id: 'debug' + (uid++), rank, suit, value: VALUES[rank] }; }
+function safeClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+function topCard(arr) { return arr[arr.length-1]; }
+function log(msg) {
+  state.log.unshift(msg);
+  renderLog();
+}
+function drawCard() {
+  if (state.deck.length === 0) return null;
+  return state.deck.pop();
+}
+function drawTo(player, n) {
+  while (player.hand.length < n && state.deck.length) player.hand.push(drawCard());
+}
+function currentPlayer() { return state.players[state.currentPlayer]; }
+function hasKing(run) { return run.cards.some(c => c.rank === 'K'); }
+function runLastValue(run) {
+  const c = topCard(run.cards);
+  if (!c) return null;
+  return c.effectiveValue || c.value;
+}
+function nextValuesForRun(run) {
+  if (run.cards.length === 0) return [{value:1, dir:'up'}, {value:12, dir:'down'}];
+  const last = runLastValue(run);
+  const vals = [];
+  if (!run.direction) {
+    if (last < 12) vals.push({value:last+1, dir:'up'});
+    if (last > 1) vals.push({value:last-1, dir:'down'});
+  } else if (run.direction === 'up') {
+    if (last < 12) vals.push({value:last+1, dir:'up'});
+  } else if (run.direction === 'down') {
+    if (last > 1) vals.push({value:last-1, dir:'down'});
+  }
+  return vals;
+}
+function canPlayCardOnRun(card, run) {
+  if (!card) return false;
+  if (card.rank === 'K') {
+    if (run.cards.length === 0) return false;
+    const last = topCard(run.cards);
+    // Normal play rule: Kings cannot be played directly on top of Kings.
+    // The only back-to-back King exception is handled inside Forced Jailbreak placement.
+    if (last && last.rank === 'K') return false;
+    return nextValuesForRun(run).some(n => n.value >= 2 && n.value <= 11);
+  }
+  if (run.cards.length === 0) return card.value === 1 || card.value === 12;
+  return nextValuesForRun(run).some(n => n.value === card.value);
+}
+function naturalCompletesRun(card, run) {
+  if (!card || card.rank === 'K') return false;
+  const value = card.value;
+  if (value === 12) return true;
+  if (value === 1) return true;
+  return false;
+}
+function checkComplete(runIndex) {
+  const run = state.runs[runIndex];
+  const last = topCard(run.cards);
+  if (!last || last.rank === 'K') return;
+  if (!((run.direction === 'up' && last.value === 12) || (run.direction === 'down' && last.value === 1))) return;
+  const kings = run.cards.filter(c => c.rank === 'K');
+  if (kings.length) {
+    state.brig.push(...kings.map(c => ({...c, effectiveValue:null, playedDirection:null})));
+    log(`Run ${runIndex+1} reached safe harbor. ${kings.length} King${kings.length>1?'s':''} sent to The Brig.`);
+  } else {
+    log(`Run ${runIndex+1} reached safe harbor.`);
+  }
+  state.runs[runIndex] = { cards: [], direction: null };
+}
+function startRound() {
+  uid = uid + 1000;
+  state.deck = makeDeck(state.players.length);
+  state.brig = [];
+  // remove one random king for the brig
+  const kIndex = state.deck.findIndex(c => c.rank === 'K');
+  if (kIndex >= 0) state.brig.push(state.deck.splice(kIndex,1)[0]);
+  state.deck = shuffle(state.deck);
+  state.runs = Array.from({length:4}, () => ({cards:[], direction:null}));
+  state.players.forEach(p => {
+    p.goal = [];
+    p.hand = [];
+    p.discards = [[],[],[],[]];
+    for (let i=0;i<10;i++) p.goal.push(drawCard());
+    for (let i=0;i<5;i++) p.hand.push(drawCard());
+  });
+  // The opening card may not be a King. If one is drawn, return it to the deck,
+  // reshuffle, and draw again — mirrors putting the King back and dealing another.
+  let opener = drawCard();
+  while (opener && opener.rank === 'K') {
+    state.deck.push(opener);
+    state.deck = shuffle(state.deck);
+    opener = drawCard();
+  }
+  if (opener) {
+    state.runs[0].cards.push(opener);
+    if (opener.value === 1) state.runs[0].direction = 'up';
+    if (opener.value === 12) state.runs[0].direction = 'down';
+  }
+  state.currentPlayer = 0;
+  selected = null;
+  log(`Round ${state.round} started. The Brig begins with 1 King.`);
+  render();
+}
+function startGame(names) {
+  state = {
+    players: names.map(name => ({ name, total:0, roundScore:0, goal:[], hand:[], discards:[[],[],[],[]] })),
+    round: 1,
+    maxRounds: 4,
+    currentPlayer: 0,
+    deck: [], runs: [], brig: [], log: [], version: 'v11-ipad-fit'
+  };
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('game').classList.remove('hidden');
+  startRound();
+}
+function endRound(winner) {
+  state.players.forEach(p => {
+    p.roundScore = p.goal.length + p.hand.length;
+    p.total += p.roundScore;
+  });
+  render();
+  showModal('Round Over', `<p><b>${winner.name}</b> cleared their goal pile.</p><p>${state.players.map(p => `${p.name}: +${p.roundScore} (${p.total} total)`).join('<br>')}</p>`, [
+    {label: state.round >= state.maxRounds ? 'Show Final Scores' : 'Start Next Round', action: () => {
+      hideModal();
+      if (state.round >= state.maxRounds) endGame(); else { state.round++; startRound(); }
+    }}
+  ]);
+}
+function endGame() {
+  const sorted = [...state.players].sort((a,b)=>a.total-b.total);
+  showModal('Game Over', `<p><b>${sorted[0].name}</b> wins!</p><p>${sorted.map(p => `${p.name}: ${p.total}`).join('<br>')}</p>`, [
+    {label:'New Game', action:()=>location.reload()}
+  ]);
+}
+function nextTurn() {
+  selected = null;
+  state.currentPlayer = (state.currentPlayer + 1) % state.players.length;
+  render();
+}
+function getSelectedCard() {
+  if (!selected) return null;
+  const p = currentPlayer();
+  if (selected.zone === 'goal') return topCard(p.goal);
+  if (selected.zone === 'hand') return p.hand[selected.index];
+  if (selected.zone === 'discard') return topCard(p.discards[selected.index]);
+  return null;
+}
+function removeSelectedCard() {
+  const p = currentPlayer();
+  if (selected.zone === 'goal') return p.goal.pop();
+  if (selected.zone === 'hand') return p.hand.splice(selected.index,1)[0];
+  if (selected.zone === 'discard') return p.discards[selected.index].pop();
+}
+function undoAddSelected(card) {
+  const p = currentPlayer();
+  if (selected.zone === 'goal') p.goal.push(card);
+  if (selected.zone === 'hand') p.hand.splice(selected.index,0,card);
+  if (selected.zone === 'discard') p.discards[selected.index].push(card);
+}
+function playSelectedToRun(runIndex) {
+  const card = getSelectedCard();
+  const run = state.runs[runIndex];
+  if (!card || !canPlayCardOnRun(card, run)) return;
+  if (card.rank === 'K') {
+    handleKingPlay(runIndex, card);
+    return;
+  }
+  const nexts = nextValuesForRun(run).filter(n => n.value === card.value);
+  const play = () => {
+    const c = removeSelectedCard();
+    if (!run.direction && run.cards.length > 0) run.direction = nexts[0].dir;
+    if (run.cards.length === 0) {
+      if (c.value === 1) run.direction = 'up';
+      if (c.value === 12) run.direction = 'down';
+    }
+    run.cards.push(c);
+    log(`${currentPlayer().name} played ${cardLabel(c)} to Run ${runIndex+1}.`);
+    selected = null;
+    checkComplete(runIndex);
+    afterPlay();
+  };
+  play();
+}
+function afterPlay() {
+  const p = currentPlayer();
+  if (p.goal.length === 0) return endRound(p);
+  if (p.hand.length === 0) {
+    for (let i=0;i<5;i++) if (state.deck.length) p.hand.push(drawCard());
+    log(`${p.name} played through their hand and drew 5.`);
+  }
+  render();
+}
+function handleKingPlay(runIndex, card) {
+  const run = state.runs[runIndex];
+  const opts = nextValuesForRun(run).filter(n => n.value >= 2 && n.value <= 11);
+  if (!opts.length) return;
+  const choices = [];
+  for (const opt of opts) {
+    choices.push({ label: `King as ${VALUE_NAMES[opt.value]}, direction UP`, action: () => commitKing(runIndex, opt.value, 'up') });
+    choices.push({ label: `King as ${VALUE_NAMES[opt.value]}, direction DOWN`, action: () => commitKing(runIndex, opt.value, 'down') });
+  }
+  showModal('Captain’s Orders', `<p>Choose the value and direction for ${cardLabel(card)}.</p><p class="meta">If this is the first King in this run and The Brig has Kings, Jailbreak will trigger automatically.</p>`, choices);
+}
+function commitKing(runIndex, value, dir) {
+  hideModal();
+  const p = currentPlayer();
+  const run = state.runs[runIndex];
+  const keyKing = removeSelectedCard();
+  const previousRun = { cards: [...run.cards], direction: run.direction };
+  keyKing.effectiveValue = value;
+  keyKing.playedDirection = dir;
+  run.cards.push(keyKing);
+  run.direction = dir;
+  const triggersJailbreak = state.brig.length > 0 && !previousRun.cards.some(c => c.rank === 'K');
+  if (triggersJailbreak) {
+    log(`${p.name} played the Key King as ${VALUE_NAMES[value]} ${dir.toUpperCase()} on Run ${runIndex+1}. Jailbreak triggered because this is the first King in the run and The Brig is occupied.`);
+    resolveJailbreak(runIndex, previousRun, keyKing);
+  } else {
+    log(`${p.name} played King as ${VALUE_NAMES[value]} ${dir.toUpperCase()} on Run ${runIndex+1}.`);
+    selected = null;
+    afterPlay();
+  }
+}
+function legalKingPlacementsForRun(runIndex, incomingKing, allowBackToBackWithKey=false) {
+  const run = state.runs[runIndex];
+  const last = topCard(run.cards);
+  if (run.cards.length === 0) return [];
+  if (last && last.rank === 'K' && !allowBackToBackWithKey) return [];
+  const opts = nextValuesForRun(run).filter(n => n.value >= 2 && n.value <= 11);
+  const choices = [];
+  for (const opt of opts) {
+    choices.push({runIndex, value: opt.value, dir:'up'});
+    choices.push({runIndex, value: opt.value, dir:'down'});
+  }
+  return choices;
+}
+function resolveJailbreak(keyRunIndex, previousRun, keyKing) {
+  const originalBrig = [...state.brig];
+  // Important: snapshot the table as it was BEFORE the Key King was played.
+  // v4 accidentally snapshotted after the Key King was added, so a failed
+  // Jailbreak left a ghost King on the run with broken direction state.
+  const runsSnapshot = state.runs.map((r, idx) => (
+    idx === keyRunIndex
+      ? { cards: [...previousRun.cards], direction: previousRun.direction }
+      : { cards: [...r.cards], direction: r.direction }
+  ));
+  const brigKings = [...state.brig];
+  state.brig = [];
+  const placements = [];
+  function step(i) {
+    if (i >= brigKings.length) {
+      log(`Jailbreak succeeded. ${brigKings.length} King${brigKings.length>1?'s':''} broke out of The Brig.`);
+      selected = null;
+      render();
+      afterPlay();
+      return;
+    }
+    const king = brigKings[i];
+    const allChoices = [];
+    state.runs.forEach((r, idx) => {
+      const allowBack = idx === keyRunIndex && topCard(r.cards) === keyKing;
+      allChoices.push(...legalKingPlacementsForRun(idx, king, allowBack));
+    });
+    if (!allChoices.length) return failJailbreak(runsSnapshot, keyKing, originalBrig, `No legal placement for Brig King ${i+1}.`);
+    const choiceButtons = allChoices.map(ch => ({
+      label: `Run ${ch.runIndex+1}: King as ${VALUE_NAMES[ch.value]}, direction ${ch.dir.toUpperCase()}`,
+      action: () => {
+        const run = state.runs[ch.runIndex];
+        const k = king;
+        k.effectiveValue = ch.value;
+        k.playedDirection = ch.dir;
+        run.cards.push(k);
+        run.direction = ch.dir;
+        placements.push(ch);
+        hideModal();
+        step(i+1);
+      }
+    }));
+    choiceButtons.push({label:'Declare Jailbreak Failed', action:()=>failJailbreak(runsSnapshot, keyKing, originalBrig, 'Player could not complete the Jailbreak.')});
+    showModal('Forced Jailbreak', `<p><b>You must play every King from The Brig.</b></p><p>Placing Brig King ${i+1} of ${brigKings.length}.</p><p class="meta">If no legal sequence is available, declare failure. The Key King goes to The Brig and Curse of the Crown adds 2 cards to the current player's goal pile.</p>`, choiceButtons);
+  }
+  step(0);
+}
+function failJailbreak(runsSnapshot, keyKing, originalBrig, reason) {
+  hideModal();
+  const p = currentPlayer();
+  state.runs = runsSnapshot.map(r => ({ cards: [...r.cards], direction: r.direction }));
+  keyKing.effectiveValue = null;
+  keyKing.playedDirection = null;
+  state.brig = [...originalBrig, keyKing];
+  for (let i=0;i<2;i++) if (state.deck.length) p.goal.unshift(drawCard()); // bottom of goal pile, top is end
+  log(`${p.name}'s Jailbreak failed. ${reason} Curse of the Crown: 2 cards added to goal pile.`);
+  selected = null;
+  render();
+}
+function discardSelectedTo(index) {
+  const p = currentPlayer();
+  if (!selected || selected.zone !== 'hand') return alert('Select a card from your hand to discard.');
+  const c = p.hand.splice(selected.index,1)[0];
+  p.discards[index].push(c);
+  log(`${p.name} discarded ${cardLabel(c)} to Port ${index+1}.`);
+  drawTo(p,5);
+  nextTurn();
+}
+function renderCard(card, opts={}) {
+  if (!card) return `<div class="card back">${opts.backText || ''}</div>`;
+  const cls = ['card', cardColor(card)];
+  if (card.rank === 'K') cls.push('king');
+  if (opts.selected) cls.push('selected');
+  if (opts.playable) cls.push('playable');
+  const as = card.rank === 'K' && card.effectiveValue ? `as ${VALUE_NAMES[card.effectiveValue]} ${card.playedDirection || ''}` : '';
+  return `<div class="${cls.join(' ')}" data-as="${as}">${cardLabel(card)}</div>`;
+}
+function render() {
+  if (!state) return;
+  document.body.classList.add('tableStarted');
+  const p = currentPlayer();
+  document.getElementById('turnLabel').textContent = p.name;
+  document.getElementById('roundLabel').textContent = `${state.round} / ${state.maxRounds}`;
+  document.getElementById('deckLabel').textContent = state.deck.length;
+  const mr = document.getElementById('miniRoundLabel');
+  const md = document.getElementById('miniDeckLabel');
+  if (mr) mr.textContent = `R ${state.round}/${state.maxRounds}`;
+  if (md) md.textContent = `Deck ${state.deck.length}`;
+  renderScoreboard();
+  renderRuns();
+  renderPlayerArea();
+  renderBrig();
+  renderSelected();
+  renderLog();
+  renderDebug();
+}
+function renderScoreboard() {
+  const el = document.getElementById('scoreboard');
+  el.innerHTML = state.players.map((p,i)=>`<div class="score ${i===state.currentPlayer?'active':''}"><div class="label">${p.name}</div><div class="value">Total ${p.total}</div><div class="meta">Goal ${p.goal.length} | Hand ${p.hand.length}</div></div>`).join('');
+}
+function renderRunCard(r, i) {
+  const selectedCard = getSelectedCard();
+  const playable = selectedCard && canPlayCardOnRun(selectedCard,r);
+  const dir = r.direction ? `<span class="dir"><span class="dot ${r.direction}"></span>${r.direction.toUpperCase()}</span>` : `<span class="dir">UNSET</span>`;
+  return `<div class="run"><div class="runHeader"><b>Run ${i+1}</b>${dir}</div><div class="cards">${r.cards.map(c=>renderCard(c)).join('') || '<span class="meta">Empty: A or Q only</span>'}</div><div style="margin-top:10px;"><button class="small ${playable?'primary':''}" ${playable?'':'disabled'} onclick="playSelectedToRun(${i})">Play here</button></div></div>`;
+}
+function renderRuns() {
+  const top = document.getElementById('runsTop');
+  const bottom = document.getElementById('runsBottom');
+  const old = document.getElementById('runs');
+  if (top && bottom) {
+    top.innerHTML = [0,1].map(i => renderRunCard(state.runs[i], i)).join('');
+    bottom.innerHTML = [2,3].map(i => renderRunCard(state.runs[i], i)).join('');
+    return;
+  }
+  if (old) old.innerHTML = state.runs.map((r,i)=>renderRunCard(r,i)).join('');
+}
+function renderPlayerPanel(playerIndex) {
+  const p = state.players[playerIndex];
+  const active = playerIndex === state.currentPlayer;
+  const goalTop = topCard(p.goal);
+  const goalSel = active && selected && selected.zone === 'goal';
+  const handHtml = p.hand.map((c,i)=>{
+    const sel = active && selected && selected.zone==='hand' && selected.index===i;
+    const click = active ? `onclick="selectCard('hand',${i})"` : 'disabled';
+    return `<button class="small" ${click}>${renderCard(c,{selected:sel})}</button>`;
+  }).join('');
+  const discards = p.discards.map((pile,i)=>{
+    const c = topCard(pile);
+    const sel = active && selected && selected.zone === 'discard' && selected.index === i;
+    const pileClick = active ? (c ? `onclick="selectCard('discard',${i})"` : `onclick="discardSelectedTo(${i})"`) : '';
+    const discardDisabled = active ? '' : 'disabled';
+    return `<div><div class="discardPile" ${pileClick}>${c ? renderCard(c,{selected:sel}) : '<span class="meta">Empty</span>'}</div><button class="small" style="width:100%;margin-top:5px;" ${discardDisabled} onclick="discardSelectedTo(${i})">Discard here</button><div class="meta">${pile.length} card${pile.length!==1?'s':''}</div></div>`;
+  }).join('');
+  return `
+    <div class="playerPanel ${active?'active':''}">
+      <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+        <h3 style="margin:0;">${p.name}${active?' — Current Turn':''}</h3>
+        <span class="meta">Goal ${p.goal.length} | Hand ${p.hand.length}</span>
+      </div>
+      <div class="miniGrid">
+        <div class="goal" style="padding:8px;">
+          <div class="label">Goal Pile</div>
+          <button class="small" ${goalTop && active ? '' : 'disabled'} onclick="selectCard('goal',0)">${goalTop?renderCard(goalTop,{selected:goalSel}):'Cleared'}</button>
+        </div>
+        <div class="hand" style="padding:8px;">
+          <div class="label">Hand</div>
+          <div class="cards">${handHtml || '<span class="meta">Empty</span>'}</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;">
+        <div class="label">Ports / Discard Piles</div>
+        <div class="miniDiscards">${discards}</div>
+      </div>
+    </div>`;
+}
+function renderPlayerArea() {
+  const top = document.getElementById('playerTop');
+  const bottom = document.getElementById('playerBottom');
+  if (top && bottom && state.players.length === 2) {
+    top.innerHTML = renderPlayerPanel(1);
+    bottom.innerHTML = renderPlayerPanel(0);
+    return;
+  }
+  const el = document.getElementById('playerArea');
+  if (el) el.innerHTML = renderPlayerPanel(state.currentPlayer);
+}
+function renderBrig() {
+  const el = document.getElementById('brigCards');
+  el.innerHTML = state.brig.map(c => renderCard(c)).join('') || '<span class="meta">Empty</span>';
+  document.getElementById('brigText').textContent = `${state.brig.length} King${state.brig.length!==1?'s':''} in The Brig.`;
+}
+function renderSelected() {
+  const el = document.getElementById('selectedInfo');
+  const c = getSelectedCard();
+  if (!c) { el.textContent = 'Select a card from goal, hand, or discard.'; return; }
+  el.innerHTML = `<b>${cardLabel(c)}</b> selected from ${selected.zone}${selected.zone==='discard' ? ' pile ' + (selected.index+1) : ''}.`;
+}
+function renderLog() {
+  if (!state) return;
+  document.getElementById('log').innerHTML = state.log.slice(0,80).map(m=>`<p>${m}</p>`).join('');
+}
+function getPublicDebugState() {
+  if (!state) return null;
+  return { uid, selected, state };
+}
+function renderDebug() {
+  const panel = document.getElementById('debugPanel');
+  if (!panel) return;
+  if (!debugEnabled || !state) { panel.classList.add('hidden'); panel.textContent=''; return; }
+  panel.classList.remove('hidden');
+  panel.textContent = JSON.stringify(getPublicDebugState(), null, 2);
+}
+function validateState() {
+  if (!state) return ['No game started.'];
+  const problems = [];
+  state.runs.forEach((r,idx)=>{
+    if (r.cards.length === 0 && r.direction) problems.push(`Run ${idx+1} empty but direction is ${r.direction}.`);
+    if (r.cards.length > 0 && r.direction && !['up','down'].includes(r.direction)) problems.push(`Run ${idx+1} has invalid direction ${r.direction}.`);
+    for (let i=1;i<r.cards.length;i++) {
+      if (r.cards[i].rank === 'K' && r.cards[i-1].rank === 'K') {
+        // This can be legal only if one was created by Jailbreak. We cannot fully infer later, so warn only.
+        problems.push(`Run ${idx+1} has back-to-back Kings at positions ${i} and ${i+1}; verify this came from Jailbreak.`);
+      }
+    }
+  });
+  state.brig.forEach((c,i)=>{ if (c.rank !== 'K') problems.push(`Brig card ${i+1} is not a King: ${cardLabel(c)}.`); });
+  return problems.length ? problems : ['No obvious state problems found.'];
+}
+function saveState() {
+  if (!state) return alert('No game to save.');
+  localStorage.setItem('saltySchoonerV7State', JSON.stringify({uid, state, selected:null}));
+  log('Game state saved locally.');
+}
+function loadState() {
+  const raw = localStorage.getItem('saltySchoonerV7State');
+  if (!raw) return alert('No saved state found.');
+  try {
+    const data = JSON.parse(raw);
+    uid = data.uid || uid;
+    state = data.state;
+    selected = null;
+    document.getElementById('setup').classList.add('hidden');
+    document.getElementById('game').classList.remove('hidden');
+    log('Saved game state loaded.');
+    render();
+  } catch (err) { alert('Could not load saved state: ' + err.message); }
+}
+function exportState() {
+  if (!state) return alert('No game to export.');
+  document.getElementById('stateText').value = JSON.stringify({uid, state, selected:null}, null, 2);
+}
+function importState() {
+  const raw = document.getElementById('stateText').value.trim();
+  if (!raw) return alert('Paste exported state first.');
+  try {
+    const data = JSON.parse(raw);
+    uid = data.uid || uid;
+    state = data.state;
+    selected = null;
+    document.getElementById('setup').classList.add('hidden');
+    document.getElementById('game').classList.remove('hidden');
+    log('Imported game state.');
+    render();
+  } catch (err) { alert('Could not import state: ' + err.message); }
+}
+function forceCard() {
+  if (!state) return alert('Start a game first.');
+  const rank = document.getElementById('forceRank').value;
+  const suit = document.getElementById('forceSuit').value;
+  const target = document.getElementById('forceTarget').value;
+  const c = makeCard(rank, suit);
+  const p = currentPlayer();
+  if (target === 'hand') p.hand.push(c);
+  else if (target === 'goalTop') p.goal.push(c);
+  else if (target === 'goalBottom') p.goal.unshift(c);
+  else if (target === 'brig') state.brig.push(c.rank === 'K' ? c : {...c, rank:'K', value:13});
+  else if (target === 'deckTop') state.deck.push(c);
+  else if (target.startsWith('run')) {
+    const idx = Number(target.replace('run',''));
+    state.runs[idx].cards.push(c);
+    if (c.value === 1) state.runs[idx].direction = 'up';
+    if (c.value === 12) state.runs[idx].direction = 'down';
+  }
+  log(`Debug added ${cardLabel(c)} to ${target}.`);
+  render();
+}
+function selectCard(zone,index) { selected = {zone,index}; render(); }
+function showModal(title, body, choices) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  const ch = document.getElementById('modalChoices');
+  ch.innerHTML = '';
+  choices.forEach((c,idx)=>{
+    const btn = document.createElement('button');
+    btn.textContent = c.label;
+    btn.className = idx===0 ? 'primary' : '';
+    btn.onclick = c.action;
+    ch.appendChild(btn);
+  });
+  document.getElementById('modalBackdrop').classList.add('show');
+}
+function hideModal(){ document.getElementById('modalBackdrop').classList.remove('show'); }
+
+function setupInputs(n=2) {
+  const el = document.getElementById('playerInputs');
+  el.innerHTML = '';
+  for (let i=0;i<n;i++) el.innerHTML += `<input class="playerName" value="Player ${i+1}" />`;
+}
+document.getElementById('addPlayer').onclick = () => {
+  const n = document.querySelectorAll('.playerName').length;
+  if (n<6) setupInputs(n+1);
+};
+document.getElementById('removePlayer').onclick = () => {
+  const n = document.querySelectorAll('.playerName').length;
+  if (n>2) setupInputs(n-1);
+};
+document.getElementById('startGame').onclick = () => {
+  const names = [...document.querySelectorAll('.playerName')].map(i=>i.value.trim()).filter(Boolean);
+  if (names.length < 2) return alert('Need at least 2 players.');
+  startGame(names);
+};
+document.getElementById('newGameBtn').onclick = () => location.reload();
+document.getElementById('miniNewGameBtn').onclick = () => location.reload();
+document.getElementById('clearSelection').onclick = () => { selected=null; render(); };
+document.getElementById('forceEnd').onclick = () => {
+  const p = currentPlayer();
+  if (p.hand.length > 0) return alert('To end normally, select a hand card and discard it to a port.');
+  drawTo(p,5); nextTurn();
+};
+document.getElementById('debugToggle').onchange = (e) => { debugEnabled = e.target.checked; renderDebug(); };
+document.getElementById('saveStateBtn').onclick = saveState;
+document.getElementById('loadStateBtn').onclick = loadState;
+document.getElementById('exportStateBtn').onclick = exportState;
+document.getElementById('importStateBtn').onclick = importState;
+document.getElementById('forceCardBtn').onclick = forceCard;
+document.getElementById('validateStateBtn').onclick = () => alert(validateState().join('\n'));
+document.getElementById('jsStatus').innerHTML = '<b>Status:</b> Ready. JavaScript is running.';
+setupInputs(2);
+window.selectCard = selectCard;
+window.playSelectedToRun = playSelectedToRun;
+window.discardSelectedTo = discardSelectedTo;
+window.saltyDebug = { getState:()=>getPublicDebugState(), validateState, saveState, loadState, exportState, importState };
+</script>
+</body>
+</html>

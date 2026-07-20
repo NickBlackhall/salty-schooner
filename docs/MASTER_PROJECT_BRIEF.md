@@ -1,7 +1,7 @@
 # Salty Schooner Master Project Brief
 
 **Status:** Active prototype  
-**Latest stable build:** v11 iPad Fit  
+**Latest stable build:** v26 Tappable Runs (`app/index.html`)  
 **Owner:** Nick Blackhall
 
 ## Project Purpose
@@ -11,10 +11,13 @@
 
 ## Current Stable Build
 
-- Latest build: v11 iPad Fit.
-- Format: single-file HTML, two-player tabletop mode, optimized for landscape iPad play.
+- Latest build: v26 Tappable Runs, internal version string `v26-configurable-match`.
+- Canonical location in this repo: `app/index.html` (with `app/assets/`). This is the build deployed to Netlify.
+- Format: single-file HTML plus art/audio assets, two-player tabletop mode, optimized for landscape iPad play.
+- v26 uses a tap-to-play interaction on the Runs (earlier builds used select-card-then-"Play here").
 - Current prototype is hot-seat only. It does not yet include networking or hidden private hands.
-- Latest artifact filename: `salty_schooner_v11_ipad_fit.html`.
+- Older prototypes are archived under `reference/` (e.g. `reference/salty_schooner_v11_ipad_fit.html`).
+- NOTE: builds v12 through v26 were produced in separate ChatGPT sessions and pushed straight to Netlify. Only v11 and v26 exist locally; the intermediate builds were not preserved.
 
 ## Game Goal and Scoring
 
@@ -32,6 +35,7 @@
 - Deal each player a 10-card goal pile. Only the top goal card is available to play.
 - Deal each player a 5-card hand.
 - Deal one opening card face-up into Run 1.
+- The opening card may not be a King. If a King is drawn for the opener, return it to the deck, reshuffle, and draw again.
 - The remaining cards form the draw deck.
 - Each player has four personal discard piles.
 - There are four shared runs.
@@ -63,6 +67,7 @@
 - A King may not complete a run.
 - When a King is played, the player declares the represented value and the direction of the run.
 - Kings set the direction of the run.
+- The King's represented value must be numerically adjacent to the run's current top card (the same value that would be required to continue the run's existing direction, if one is already established). The player may then declare either direction going forward, regardless of the run's prior direction — a King can act as the "peak" where an ascending run reverses to descend, or vice versa. This is the player's choice, made freely at the time the King is played.
 - During normal play, a King may not be played directly on top of another King.
 - Multiple Kings may appear in the same run as long as they are not directly adjacent, except during a Jailbreak.
 
@@ -73,6 +78,7 @@
 - When a run completes, all Kings in that run are moved to The Brig.
 - All non-King cards from a completed run are discarded out of play.
 - The cleared run becomes available for a new run.
+- DISCREPANCY (needs Nick's decision): the v26 build does NOT discard completed-run non-King cards out of play. Instead it moves them to a "recycle pile" (`state.recycle`). This rule change was introduced in a ChatGPT session and is not yet ratified here. Decide whether the recycle pile is official; if so, document how/when the recycle pile re-enters play.
 
 ## Forced Jailbreak
 
@@ -137,6 +143,8 @@
 - v6: Added save/load, export/import, state validation, force-card testing, and debug state inspection.
 - v7-v10: Developed and refined the two-player mirrored tabletop layout.
 - v11: Tightened the layout for landscape iPad use and added Home Screen / PWA-friendly metadata.
+- v12-v25: Iterated in separate ChatGPT sessions (not preserved locally). Known additions by v26 include configurable match settings, a recycle pile for completed-run cards, and art/audio assets.
+- v26: "Tappable Runs" — tap-to-play interaction. King-opener rule changed here to re-deal (a King is never the opening card; if drawn it returns to the deck and another is dealt). Earlier v26 had treated an opening King as a wildcard anchor; that approach is now retired.
 
 ## Multiplayer Architecture Direction
 

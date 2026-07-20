@@ -1,0 +1,3005 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+  <title>Salty Schooner v26 Tappable Runs</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffaf0;
+      --ink: #1f2933;
+      --muted: #6b7280;
+      --line: #d9cbb8;
+      --accent: #0f766e;
+      --danger: #b91c1c;
+      --good: #15803d;
+      --shadow: rgba(0,0,0,.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: var(--muted); font-size: 14px; }
+    main { padding: 16px; max-width: 1280px; margin: 0 auto; }
+    .grid { display: grid; gap: 16px; }
+    .setup { max-width: 600px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 3px 12px var(--shadow);
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select, button {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      background: #fff;
+    }
+    button {
+      cursor: pointer;
+      background: #fff;
+      transition: transform .05s ease, background .15s ease;
+    }
+    button:hover { background: #f3f4f6; }
+    button:active { transform: translateY(1px); }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    button.primary:hover { background: #115e59; }
+    button.danger { background: var(--danger); color: white; border-color: var(--danger); }
+    button.small { padding: 5px 8px; font-size: 13px; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+    .scoreboard { display: flex; flex-wrap: wrap; gap: 8px; }
+    .score {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      min-width: 120px;
+    }
+    .score.active { outline: 3px solid #99f6e4; }
+    .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .value { font-weight: 700; }
+    .table {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 16px;
+      align-items: start;
+    }
+    .runs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+    .run {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      min-height: 150px;
+    }
+    .runHeader { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .cards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .card {
+      width: 48px;
+      height: 68px;
+      border-radius: 8px;
+      border: 1px solid #9ca3af;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      box-shadow: 0 1px 3px var(--shadow);
+      user-select: none;
+      position: relative;
+      text-align: center;
+      line-height: 1;
+    }
+    .card.red { color: #b91c1c; }
+    .card.black { color: #111827; }
+    .card.back { background: repeating-linear-gradient(45deg,#0f766e,#0f766e 6px,#115e59 6px,#115e59 12px); color: white; }
+    .card.selected { outline: 4px solid #facc15; }
+    .card.playable { outline: 3px solid #86efac; }
+    .card.king::after {
+      content: attr(data-as);
+      position: absolute;
+      bottom: 3px;
+      left: 3px;
+      right: 3px;
+      font-size: 10px;
+      color: #4b5563;
+      font-weight: 600;
+    }
+    .meta { color: var(--muted); font-size: 13px; }
+    .dir {
+      display: inline-flex; align-items:center; gap: 5px;
+      padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); background: #fff;
+      font-size: 13px; font-weight: 700;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display:inline-block; }
+    .dot.up { background: var(--good); }
+    .dot.down { background: var(--danger); }
+    .playerArea { display: grid; gap: 12px; }
+    .hand, .discards, .goal { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+    .discards { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+    .discardPile {
+      border: 1px dashed #b9a58f;
+      border-radius: 12px;
+      min-height: 92px;
+      padding: 7px;
+      display: grid;
+      place-items: center;
+      background: #fffaf0;
+    }
+    .side { display: grid; gap: 12px; }
+    .log {
+      max-height: 240px;
+      overflow: auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .log p { margin: 0 0 7px; }
+    .modalBackdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 50;
+      padding: 16px;
+    }
+    .modalBackdrop.show { display: flex; }
+    .modal {
+      width: min(560px,100%);
+      background: #fff;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    .modal h2 { margin-top: 0; }
+    .choices { display: grid; gap: 10px; margin-top: 12px; }
+    .choice { display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--line); border-radius:12px; padding:10px; }
+    .hidden { display:none !important; }
+    .notice { padding: 10px 12px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; }
+    @media (max-width: 900px) {
+      .table { grid-template-columns: 1fr; }
+      .runs { grid-template-columns: 1fr; }
+      .topbar { grid-template-columns: 1fr; }
+    }
+
+    /* ============================================================
+   v25 responsive board
+   Replaces the v18 fixed-coordinate system.
+   No fixed board size. No transform:scale. No baked-in art.
+   The layout reflows; the background is only atmosphere.
+   ============================================================ */
+
+:root {
+  --gold:     #c9a227;
+  --gold-lt:  #f0d089;
+  --wood:     rgba(46,27,15,.88);
+  --parch:    rgba(238,226,196,.95);
+  --teal:     rgba(14,58,62,.85);
+  --gap:      clamp(6px, 1vw, 14px);
+  --serif:    "Cinzel", "Trajan Pro", Georgia, serif;
+}
+
+html, body { width:100%; min-height:100%; margin:0; background:#07151d; overflow-x:hidden; }
+header { display:none; }
+main { width:100%; max-width:none; padding:0; margin:0; }
+#setup { margin:24px auto; width:min(92vw,520px); }
+
+#game.landscapeGame {
+  min-height:100dvh;
+  background-color:#0b2b33;
+  background-image:
+    linear-gradient(rgba(4,16,22,.42), rgba(4,16,22,.62)),
+    url("assets/board-bg.webp");
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
+  color:#f7e4b2;
+}
+#game.landscapeGame.hidden { display:none !important; }
+
+/* ---- the board is a grid, not a coordinate space ---- */
+.landscapeBoard {
+  max-width:1600px;
+  margin:0 auto;
+  padding-top:    max(var(--gap), env(safe-area-inset-top));
+  padding-right:  max(var(--gap), env(safe-area-inset-right));
+  padding-bottom: max(calc(var(--gap) * 4), env(safe-area-inset-bottom));
+  padding-left:   max(var(--gap), env(safe-area-inset-left));
+  display:grid;
+  gap:var(--gap);
+  align-content:start;
+  grid-template-columns: minmax(150px,210px) minmax(0,1fr) minmax(110px,160px);
+  grid-template-areas:
+    "status status status"
+    "goal   runs   opps"
+    "brig   runs   opps"
+    "hand   hand   opps"
+    "ports  ports  opps";
+}
+
+/* #playerArea is a JS-owned wrapper; dissolve it so its children
+   (.goal / .hand / ports) become grid items of the board itself. */
+#playerArea { display:contents; }
+
+.boardStatus                 { grid-area:status; }
+#runs                        { grid-area:runs; }
+.brigOverlay                 { grid-area:brig; }
+#opponentGoals               { grid-area:opps; }
+#playerArea .goal            { grid-area:goal; }
+#playerArea .hand            { grid-area:hand; }
+#playerArea > div:last-child { grid-area:ports; }
+
+/* ---- shared chrome ---- */
+.run, .goal, .hand, .brigOverlay, .oppGoal, #playerArea > div:last-child {
+  border:2px solid var(--gold);
+  border-radius:14px;
+  box-shadow:0 4px 18px rgba(0,0,0,.45), inset 0 0 0 1px rgba(240,208,137,.22);
+  background:var(--wood);
+  padding:calc(var(--gap) * .9);
+  min-width:0;
+}
+
+h3, .oppName, .runHeader b, .boardStatus {
+  font-family:var(--serif);
+  letter-spacing:.03em;
+  color:var(--gold-lt);
+  text-shadow:0 1px 3px rgba(0,0,0,.8);
+}
+h3 { margin:0 0 6px; font-size:clamp(12px,1.5vw,16px); text-transform:uppercase; }
+
+.boardStatus {
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  font-weight:800; font-size:clamp(13px,1.7vw,19px);
+  padding:calc(var(--gap) * .7);
+  border:2px solid var(--gold); border-radius:14px;
+  background:var(--wood);
+  text-align:center;
+  padding-right:clamp(96px, 12vw, 132px);
+}
+
+/* ---- labels come back on. They were only hidden so the
+       painted ones underneath could show through. ---- */
+.run .runHeader b            { display:block !important; }
+#playerArea .hand h3         { display:block !important; }
+#playerArea .goal .row       { display:flex !important; }
+#playerArea > div:last-child > h3 { display:block !important; }
+
+/* ---- runs ---- */
+#runs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--gap); }
+.run {
+  background:var(--parch) !important;
+  color:#3a2a16;
+  display:flex; flex-direction:column;
+  min-height:clamp(150px,26vh,260px);
+}
+.run .runHeader { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:6px; }
+.run .runHeader b { color:#4a3418 !important; text-shadow:none !important; font-size:clamp(12px,1.4vw,15px); }
+.run {
+  /* one knob drives both card size and the overlap */
+  --rc: clamp(52px, 13vw, 78px);
+}
+.run .cards {
+  flex:1;
+  display:flex;
+  flex-wrap:nowrap;
+  justify-content:center;
+  align-items:center;
+  gap:0;
+  min-width:0;
+}
+/* show only the last three cards of the run */
+.run .cards > .card:nth-last-child(n+4) { display:none; }
+/* fan them over each other; DOM order paints later cards on top */
+.run .card {
+  width:var(--rc);
+  font-size:calc(var(--rc) * .38);
+  position:relative;
+  flex:0 0 auto;
+  box-shadow:-3px 2px 7px rgba(0,0,0,.4);
+}
+.run .cards > .card + .card { margin-left:calc(var(--rc) * -.52); }
+.run .meta { color:#6b553d; font-size:clamp(10px,1.1vw,12px); }
+.run .dir { font-size:clamp(10px,1.1vw,12px); background:rgba(255,250,240,.85); color:#382716; }
+.run > div:last-child { margin-top:auto; padding-top:6px; }
+
+/* ---- cards: sized in viewport units, never scaled by a parent ---- */
+.card {
+  width:clamp(38px, 8.5vw, 58px);
+  height:auto;
+  aspect-ratio:5 / 7;
+  font-size:clamp(13px, 3vw, 20px);
+  border-radius:6px;
+  background:#fffdf7;
+  border:1px solid #9ca3af;
+}
+
+/* ---- hand ---- */
+#playerArea .hand { --hc: clamp(62px, 17vw, 98px); }
+#playerArea .hand .cards { display:flex; flex-wrap:wrap; justify-content:center; gap:clamp(6px,1.5vw,12px); }
+#playerArea .hand .card {
+  width:var(--hc);
+  font-size:calc(var(--hc) * .36);
+  box-shadow:0 3px 10px rgba(0,0,0,.45);
+}
+#playerArea .hand button, #playerArea .goal button { padding:0; border:0; background:transparent; }
+
+/* ---- goal ---- */
+#playerArea .goal { display:flex; flex-direction:column; }
+#playerArea .goal .row { justify-content:space-between; gap:6px; }
+#playerArea .goal h3 { font-size:clamp(11px,1.3vw,14px); }
+
+/* ---- ports ---- */
+.discards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--gap); background:transparent; border:0; padding:0; }
+.discards > div { min-width:0; text-align:center; }
+.discardPile {
+  min-height:clamp(70px,12vh,100px);
+  border:2px dashed rgba(201,162,39,.55);
+  background:var(--teal);
+  border-radius:10px;
+  display:grid; place-items:center;
+}
+.discards .meta { color:var(--gold-lt); font-size:clamp(10px,1.1vw,12px); }
+.discards button { font-size:clamp(10px,1.1vw,12px) !important; }
+
+/* ---- brig ---- */
+.brigOverlay { display:flex; flex-direction:column; align-items:center; gap:6px; }
+#brigCards { display:flex; flex-wrap:nowrap; justify-content:center; align-items:center; gap:0; --brigOverlap:-22px; }
+.brigOverlay #brigCards > * + * { margin-left:var(--brigOverlap); }        /* overlap like run cards */
+.brigOverlay #brigCards > *:nth-child(n+4) { display:none; }               /* cap visible at 3 */
+.brigCountBadge {                                                          /* count pill, mirrors the discard badge */
+  position:absolute; top:8px; right:10px; z-index:6;
+  min-width:22px; height:22px; padding:0 6px; border-radius:12px;
+  background:linear-gradient(180deg,#e8c96a,#b8892f); color:#2c1a0d;
+  font-weight:800; font-size:12px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid #6b4a12; box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;
+}
+#brigText { margin:0; color:var(--gold-lt); font-size:clamp(10px,1.1vw,12px); text-align:center; }
+
+/* ---- opponents: driven by player count, not painted slots ---- */
+#opponentGoals { display:flex; flex-direction:column; gap:var(--gap); background:none; border:0; box-shadow:none; padding:0; }
+.oppGoal { display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center; }
+.oppName  { font-size:clamp(11px,1.2vw,13px); font-weight:800; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oppCount { font-size:clamp(10px,1vw,12px); color:var(--gold-lt); font-weight:700; }
+
+/* ---- menu ---- */
+.boardTools { position:fixed; right:max(10px, env(safe-area-inset-right)); top:max(10px, env(safe-area-inset-top)); z-index:10; }
+.boardTools summary { list-style:none; cursor:pointer; padding:7px 13px; border-radius:999px; background:rgba(20,12,7,.92); border:1px solid #c99a43; font-size:13px; color:var(--gold-lt); font-family:var(--serif); }
+.boardTools[open] { left:auto; width:min(92vw,460px); max-height:80vh; background:rgba(15,10,7,.97); padding:14px; border:1px solid #b98a3f; border-radius:14px; overflow:auto; }
+.boardTools[open] summary { display:inline-block; margin-bottom:8px; }
+.boardTools .toolrow { display:flex; flex-wrap:wrap; gap:6px; }
+.boardTools button { font-size:12px; padding:6px 8px; }
+#selectedInfo, #log { color:#222; background:#fff; }
+#scoreboard { display:none; }
+
+/* ============================================================
+   Phone is a DIFFERENT layout, not a smaller one.
+   Breakpoints key off ORIENTATION and HEIGHT, not width alone.
+   An iPhone in landscape is 844px wide but only 390px tall --
+   a width-only query hands it the portrait stack. That was the bug.
+   ============================================================ */
+
+/* Portrait reuses the shared board plate with a dark readability wash. */
+@media (orientation: portrait) {
+  #game.landscapeGame {
+    background-image:
+      linear-gradient(rgba(4,16,22,.42), rgba(4,16,22,.62)),
+      url("assets/board-bg.webp");
+  }
+}
+
+/* --- TALL AND NARROW: stack it --- */
+@media (max-width: 860px) and (orientation: portrait) {
+  .landscapeBoard {
+    grid-template-columns:1fr 1fr;
+    grid-template-areas:
+      "status status"
+      "runs   runs"
+      "brig   goal"
+      "hand   hand"
+      "ports  ports"
+      "opps   opps";
+  }
+  #runs { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #opponentGoals { flex-direction:row; overflow-x:auto; padding-bottom:4px; }
+  .oppGoal { min-width:88px; flex:0 0 auto; }
+  #game.landscapeGame { background-attachment:scroll; }
+  .run { min-height:clamp(130px,20vh,200px); }
+  #playerArea .goal > div:last-child { align-self:center; }
+}
+
+/* --- SHORT AND WIDE (phone on its side): keep the columns, go compact --- */
+@media (orientation: landscape) and (max-height: 600px) {
+  :root { --gap: 5px; }
+  .landscapeBoard {
+    height:100dvh !important;
+    min-height:100dvh !important;
+    align-content:stretch !important;
+    gap:5px !important;
+    padding:max(3px,env(safe-area-inset-top)) 6px max(4px,env(safe-area-inset-bottom)) 6px !important;
+    grid-template-columns: minmax(104px,140px) minmax(0,1fr) minmax(78px,104px);
+    grid-template-rows:auto 1fr 1fr auto auto;
+    grid-template-areas:
+      "status status status"
+      "goal   runs   opps"
+      "brig   runs   opps"
+      "hand   hand   opps"
+      "ports  ports  opps";
+  }
+  #runs { grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px !important; }
+  .run  { min-height:0 !important; padding:4px 6px !important; overflow:hidden !important; }
+  .run .runHeader { margin-bottom:2px !important; }
+  .run .runHeader b{ font-size:11px !important; }
+  .run .cards{ min-height:0 !important; align-items:flex-start !important; }
+  .run { --rc: 40px !important; }
+  .run .meta, .run .dir{ font-size:9px !important; }
+  .run .runPlayButton{ font-size:10px !important; padding:2px 6px !important; }
+
+  /* frames slim down so they don't eat the short height */
+  .hand{ border-width:12px !important; border-image-width:12px !important; padding:3px 8px !important; overflow:hidden !important; }
+  #playerArea > div:last-child{ border-width:10px !important; border-image-width:10px !important; padding:3px 6px !important; }
+  #playerArea .hand { --hc: 46px !important; }
+  #playerArea .hand h3{ font-size:11px !important; margin:0 0 1px !important; }
+
+  /* Hold + Brig compact */
+  #playerArea .goal, .brigOverlay{ padding:30px 24px 24px !important; min-height:0 !important; overflow:hidden !important; }
+  #playerArea .goal .card, .brigOverlay #brigCards .card{ --hc:42px !important; }
+
+  /* compact ports (new tile design) sit in one short row */
+  .discards{ grid-template-columns:repeat(4,minmax(0,1fr)) !important; gap:5px !important; }
+  .portTile{ max-height:62px; max-width:48px; }
+  .portsWrap h3{ font-size:10px !important; margin:0 0 2px !important; }
+
+  #opponentGoals{ gap:4px !important; }
+  #opponentGoals .card{ --hc:38px !important; }
+  #opponentGoals .oppName{ font-size:10px !important; }
+
+  h3 { font-size:11px; margin:0 0 3px; }
+  .boardStatus { font-size:12px; padding:3px; padding-right:100px; }
+  #game.landscapeGame { background-attachment:scroll; }
+}
+
+/* --- very narrow --- */
+@media (max-width: 430px) and (orientation: portrait) {
+  .discards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .card { width:clamp(44px,12vw,60px); font-size:clamp(15px,4.2vw,22px); }
+}
+  
+/* ============================================================
+   v25 motion / juice
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference){
+
+  /* view-transition timing for cards gliding between zones */
+  ::view-transition-group(*) { animation-duration:.34s; animation-timing-function:cubic-bezier(.34,1.4,.5,1); }
+
+  /* selected card lifts off the board */
+  .card.selected {
+    transform:translateY(-8px) scale(1.05);
+    transition:transform .16s cubic-bezier(.34,1.56,.5,1);
+    box-shadow:0 10px 22px rgba(0,0,0,.5) !important;
+    z-index:5;
+  }
+  .card { transition:transform .16s ease, box-shadow .16s ease; }
+
+  /* hand cards nudge up on hover (desktop) */
+  @media (hover:hover){ #playerArea .hand .card:hover { transform:translateY(-5px); } }
+
+  /* button squash on press */
+  button.small, .boardTools summary { transition:transform .09s ease; }
+  .squash { animation:squash .18s ease; }
+  @keyframes squash { 0%{transform:scale(.9)} 60%{transform:scale(1.04)} 100%{transform:scale(1)} }
+
+  /* run completes: gold flash + quick pop */
+  .run-complete { animation:runFlash .6s ease; }
+  @keyframes runFlash {
+    0%   { box-shadow:0 0 0 0 rgba(240,208,137,0); }
+    30%  { box-shadow:0 0 0 6px rgba(240,208,137,.9), 0 0 40px 6px rgba(240,208,137,.7); background:rgba(250,240,205,1); }
+    100% { box-shadow:0 0 0 0 rgba(240,208,137,0); }
+  }
+
+  /* jailbreak: brig rattles */
+  .brig-shake { animation:brigShake .5s cubic-bezier(.36,.07,.19,.97); }
+  @keyframes brigShake {
+    10%,90%{transform:translateX(-2px)} 20%,80%{transform:translateX(3px)}
+    30%,50%,70%{transform:translateX(-5px)} 40%,60%{transform:translateX(5px)}
+  }
+
+  /* newly dealt cards fade+rise (applied to the hand container on turn start) */
+  .dealing .card { animation:dealIn .32s ease backwards; }
+  .dealing .card:nth-child(1){animation-delay:.02s}
+  .dealing .card:nth-child(2){animation-delay:.07s}
+  .dealing .card:nth-child(3){animation-delay:.12s}
+  .dealing .card:nth-child(4){animation-delay:.17s}
+  .dealing .card:nth-child(5){animation-delay:.22s}
+  @keyframes dealIn { from{opacity:0; transform:translateY(16px) scale(.85)} to{opacity:1; transform:none} }
+}
+
+
+/* ============================================================
+   v25 STYLED PREVIEW — polish faked entirely in CSS.
+   No image assets. Shows the SHAPE of the mockup's polish so you
+   can see the real board dressed up before we generate art.
+   Every rope frame here becomes a 9-slice PNG later.
+   ============================================================ */
+
+:root{
+  --rope1:#e8c96a; --rope2:#a9781f; --rope3:#6b4a12;
+  --brass:#d8ad3f;
+}
+
+/* --- ornate double-border "frame" faked with layered box-shadows --- */
+.run, .goal, .hand, .brigOverlay, #playerArea > div:last-child, .oppGoal {
+  position:relative;
+  border:0 !important;
+  border-radius:16px;
+  box-shadow:
+    0 0 0 2px var(--rope3),
+    0 0 0 5px var(--rope1),
+    0 0 0 7px var(--rope3),
+    0 6px 20px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,240,200,.25),
+    inset 0 -8px 24px rgba(0,0,0,.35) !important;
+}
+/* gold corner studs */
+.run::before, .goal::before, .hand::before, .brigOverlay::before,
+#playerArea > div:last-child::before {
+  content:""; position:absolute; inset:-3px; border-radius:16px; pointer-events:none;
+  background:
+    radial-gradient(circle at 10px 10px, var(--brass) 0 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 10px) 10px, var(--brass) 0 3px, transparent 3.5px),
+    radial-gradient(circle at 10px calc(100% - 10px), var(--brass) 0 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), var(--brass) 0 3px, transparent 3.5px);
+}
+
+/* --- parchment texture on the runs (aged paper via layered gradients) --- */
+.run{
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(180,150,90,.18), transparent 60%),
+    radial-gradient(ellipse at 75% 80%, rgba(150,110,60,.22), transparent 55%),
+    linear-gradient(135deg, #efe4c4 0%, #e4d4a8 45%, #d8c496 100%) !important;
+  box-shadow:
+    0 0 0 2px var(--rope3),
+    0 0 0 5px var(--rope1),
+    0 0 0 7px var(--rope3),
+    0 6px 20px rgba(0,0,0,.55),
+    inset 0 0 40px rgba(120,90,40,.25) !important;
+}
+/* faint compass-rose ghost in each run, like the mockup */
+.run .cards::after{
+  content:""; position:absolute; inset:0; margin:auto; width:38%; aspect-ratio:1;
+  background:
+    conic-gradient(from 0deg, transparent 0 43deg, rgba(90,70,40,.10) 44deg 46deg, transparent 47deg 90deg,
+    transparent 90deg 133deg, rgba(90,70,40,.10) 134deg 136deg, transparent 137deg 180deg,
+    transparent 180deg 223deg, rgba(90,70,40,.10) 224deg 226deg, transparent 227deg 270deg,
+    transparent 270deg 313deg, rgba(90,70,40,.10) 314deg 316deg, transparent 317deg 360deg);
+  border-radius:50%; z-index:0; pointer-events:none;
+}
+.run{ position:relative; }
+.run .cards{ position:relative; }
+.run .card{ position:relative; z-index:1; }
+
+/* --- weathered dark wood on hand / brig / ports header --- */
+.hand, .brigOverlay, #playerArea > div:last-child{
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.10) 0 2px, transparent 2px 26px),
+    linear-gradient(180deg, #4a2f18 0%, #3a2412 55%, #2c1a0d 100%) !important;
+}
+.hand{
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.12) 0 2px, transparent 2px 30px),
+    linear-gradient(180deg, #5a3820 0%, #46281440 60%, #3a2210 100%) !important;
+}
+
+/* --- title/status banner: carved wood plaque --- */
+.boardStatus{
+  background:
+    linear-gradient(180deg, #4a2f18, #2c1a0d) !important;
+  box-shadow:
+    0 0 0 2px var(--rope3),
+    0 0 0 5px var(--rope1),
+    0 0 0 7px var(--rope3),
+    0 6px 18px rgba(0,0,0,.6),
+    inset 0 2px 8px rgba(0,0,0,.5) !important;
+  color:var(--gold-lt) !important;
+  text-shadow:0 0 8px rgba(240,208,137,.4), 0 2px 3px #000 !important;
+}
+
+/* --- opponent chips: hanging placards, deeper --- */
+.oppGoal{
+  background:linear-gradient(180deg,#3a2038,#241228) !important;
+  padding:8px !important;
+}
+
+/* --- ports: teal glass wells --- */
+.discardPile{
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(30,120,120,.5), transparent 70%),
+    linear-gradient(180deg, #0e3a3e, #08282b) !important;
+  box-shadow:inset 0 3px 12px rgba(0,0,0,.5), 0 0 0 1px rgba(201,162,39,.4) !important;
+}
+
+/* --- cards: cleaner, warmer paper + inner bevel --- */
+.card{
+  background:linear-gradient(160deg,#fffef9,#f2ead6) !important;
+  box-shadow:0 3px 9px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.06), inset 0 1px 0 #fff !important;
+  border:0 !important;
+  border-radius:8px !important;
+}
+
+/* --- headings: engraved gold --- */
+h3, .run .runHeader b{
+  text-shadow:0 1px 0 rgba(0,0,0,.6), 0 0 10px rgba(240,208,137,.25) !important;
+}
+
+/* --- Play here buttons: brass --- */
+.runPlayButton, #playerArea .goal button.small, .discards button{
+  background:linear-gradient(180deg,#e8c96a,#b8892f) !important;
+  color:#2c1a0d !important; font-weight:800 !important;
+  border:1px solid #6b4a12 !important; border-radius:10px !important;
+  text-shadow:0 1px 0 rgba(255,240,200,.5) !important;
+  box-shadow:0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.4) !important;
+}
+
+
+/* ============================================================
+   v25 REAL FRAMES (v2 — corrected slices + no self-override)
+   ============================================================ */
+.run, .goal, .hand, .brigOverlay, #playerArea > div:last-child, .oppGoal{
+  box-shadow:0 6px 20px rgba(0,0,0,.5) !important;
+}
+.run::before, .goal::before, .hand::before, .brigOverlay::before,
+#playerArea > div:last-child::before{ content:none !important; }
+
+/* GENERIC frame (trimmed 256px, gold fills edge). Slice ~40 of 256. */
+.hand, #playerArea > div:last-child{
+  border-style:solid !important;
+  border-width:26px !important;
+  border-image:url("assets/frame-generic.png") 90 fill / 26px / 0 round !important;
+}
+/* Runs get a QUIET thin gold treatment — the play surface should be calm, not busy */
+.run{
+  border:2px solid rgba(201,162,39,.85) !important;
+  border-radius:12px !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.4),
+    inset 0 0 0 1px rgba(240,208,137,.35),
+    0 6px 18px rgba(0,0,0,.45) !important;
+}
+.oppGoal{
+  border-style:solid !important;
+  border-width:20px !important;
+  border-image:url("assets/frame-generic.png") 90 fill / 20px / 0 round !important;
+  background:url("assets/tex-purple.webp") center / 200px !important;
+}
+
+/* HOLD — ornate crown frame, scaled whole. Purple wood behind, frame on TOP layer. */
+#playerArea .goal{
+  border:0 !important;
+  position:relative !important;
+  isolation:isolate !important;
+  background:none !important;
+  padding:56px 50px 50px !important;
+  box-shadow:none !important;                           /* no panel shadow to reveal the halo */
+}
+/* Purple is cropped to the opening; the transparent gold PNG gets its own
+   top layer so neither texture can spill outside or cover the ornament. */
+#playerArea .goal::before{
+  content:"" !important;
+  position:absolute !important;
+  inset:13% !important;
+  background:url("assets/tex-purple.webp") center / 240px !important;
+  border-radius:5px !important;
+  z-index:0 !important;
+  pointer-events:none !important;
+}
+#playerArea .goal::after{
+  content:"" !important;
+  position:absolute !important;
+  inset:0 !important;
+  background:url("assets/frame-hold.png") center / 100% 100% no-repeat !important;
+  z-index:1 !important;
+  pointer-events:none !important;
+}
+#playerArea .goal > *{ position:relative !important; z-index:2 !important; }
+
+/* BRIG — iron frame w/ baked text, scaled whole. Wood behind. */
+.brigOverlay{
+  border:0 !important;
+  background:
+    url("assets/frame-brig.png") center / 100% 100% no-repeat,
+    linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)),
+    url("assets/tex-stone.webp") center / 300px !important;
+  padding:66px 46px 50px !important;
+}
+.brigOverlay > h3{ display:none !important; }
+
+/* textures for the tiled panels (frame is the border, texture is the fill) */
+.hand{ background:url("assets/tex-wood.webp") center / 340px !important; }
+.run{ background-clip:padding-box; }
+
+/* Runs are getting too tall/skinny — cap their height so cards aren't in a channel */
+.run{ min-height:190px !important; }
+.run .cards{ align-content:flex-start !important; }
+
+
+/* ============================================================
+   v25 PORTRAIT FIT — everything on one screen, no scroll.
+   Runs give first (they're mostly empty). Uses dvh units and
+   compresses panel padding/gaps on phones.
+   ============================================================ */
+@media (orientation: portrait){
+  .landscapeBoard{
+    min-height:100dvh !important;
+    height:100dvh !important;
+    gap:5px !important;
+    padding:max(4px, env(safe-area-inset-top)) 6px max(6px, env(safe-area-inset-bottom)) 6px !important;
+    align-content:stretch !important;
+  }
+
+  /* Runs: compact, capped short. Cards shrink so the panel can be short. */
+  #runs{ gap:5px !important; }
+  .run{
+    min-height:0 !important;
+    padding:6px 8px !important;
+  }
+  .run .runHeader{ margin-bottom:2px !important; }
+  .run .runHeader b{ font-size:12px !important; }
+  .run .dir{ font-size:9px !important; padding:1px 5px !important; }
+  .run .cards{ min-height:54px !important; }
+  .run .meta{ font-size:9px !important; }
+  .run .card{ --rc:40px !important; }
+  .run .runPlayButton{ font-size:11px !important; padding:3px 8px !important; }
+
+  /* framed panels: trim the fat padding on phones so frames don't eat height */
+  .hand{ border-width:14px !important; border-image-width:14px !important; }
+  #playerArea > div:last-child{ border-width:12px !important; border-image-width:12px !important; }
+  .hand{ padding:4px 8px !important; }
+  #playerArea .hand h3{ margin:0 0 2px !important; font-size:12px !important; }
+  #playerArea .hand .card{ --hc:52px !important; }
+  #playerArea .hand .cards{ gap:6px !important; }
+
+  /* Hold + Brig: shrink the whole-scaled frames a bit on phones */
+  #playerArea .goal, .brigOverlay{ padding:44px 34px 34px !important; min-height:0 !important; }
+  #playerArea .goal .card, .brigOverlay #brigCards .card{ --hc:50px !important; }
+
+  /* Ports: compact wells */
+  .discards{ gap:6px !important; }
+  .discardPile{ min-height:44px !important; }
+  #playerArea > div:last-child{ padding:4px 8px !important; }
+
+  /* status + opp row: keep tight */
+  .boardStatus{ padding:4px !important; font-size:13px !important; }
+  #opponentGoals .oppGoal{ padding:10px 8px !important; }
+  #opponentGoals .card{ --hc:46px !important; }
+}
+
+/* very short phones (landscape-ish portrait or small devices) */
+@media (orientation:portrait) and (max-height:720px){
+  .run .card{ --rc:38px !important; }
+  #playerArea .hand .card{ --hc:52px !important; }
+  .run .cards{ min-height:46px !important; }
+}
+
+
+/* ============================================================
+   Compact Ports (v25): each port = one card-sized tile.
+   ============================================================ */
+.portsWrap h3{ margin:0 0 4px !important; }
+.discards{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px !important; }
+.portTile{
+  position:relative;
+  aspect-ratio:5/7;
+  max-height:82px;
+  margin:0 auto;
+  width:100%;
+  max-width:64px;
+  border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(30,120,120,.45), transparent 70%),
+    linear-gradient(180deg,#0e3a3e,#08282b);
+  border:2px dashed rgba(201,162,39,.5);
+  transition:transform .1s ease, box-shadow .1s ease;
+}
+.portTile.has{ border-style:solid; }
+.portTile:active{ transform:scale(.96); }
+.portTile .card{ width:88% !important; }
+.portEmpty{ color:rgba(240,208,137,.7); font-size:11px; text-align:center; }
+.portBadge{
+  position:absolute; top:-6px; right:-6px;
+  min-width:20px; height:20px; padding:0 5px;
+  border-radius:11px;
+  background:linear-gradient(180deg,#e8c96a,#b8892f);
+  color:#2c1a0d; font-weight:800; font-size:12px;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid #6b4a12; cursor:pointer; z-index:2;
+  box-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+/* the fan-out view */
+.portFan{
+  margin-top:8px; padding:8px;
+  background:rgba(8,20,22,.95);
+  border:1px solid rgba(201,162,39,.5); border-radius:10px;
+}
+.portFanInner{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.portFanInner .card{ width:44px !important; }
+.portFanClose{
+  margin-left:auto; padding:4px 10px; border-radius:8px;
+  background:linear-gradient(180deg,#e8c96a,#b8892f); color:#2c1a0d;
+  font-weight:700; border:1px solid #6b4a12; cursor:pointer;
+}
+
+
+/* portrait: keep cards INSIDE their framed panels (they were overflowing) */
+@media (orientation:portrait){
+  #playerArea .hand{ overflow:hidden !important; }
+  #playerArea .hand .cards{ align-items:center !important; }
+  #playerArea .goal, .brigOverlay{ overflow:hidden !important; }
+  #playerArea .goal > div:last-child{ display:flex; justify-content:center; }
+  .run{ overflow:hidden !important; }
+  .run .cards{ align-items:flex-start !important; }
+
+  /* guarantee the opponent row at the very top can't be clipped off-screen */
+  #opponentGoals{ margin-top:2px !important; }
+  #opponentGoals .oppGoal{ overflow:hidden !important; }
+  .landscapeBoard{ padding-top:max(6px, env(safe-area-inset-top)) !important; }
+}
+
+
+/* Keep the whole-scaled Brig + Hold frames near-square so they don't distort
+   in wide grid cells. aspect-ratio holds their shape; the frame fills them. */
+@media (orientation:portrait){
+  #playerArea .goal, .brigOverlay{
+    aspect-ratio:1 / 0.92 !important;
+    max-width:100% !important;
+    align-self:start !important;
+  }
+  /* opponents at the bottom: horizontal strip, guaranteed visible */
+  #opponentGoals{ order:99; }
+  #opponentGoals .oppGoal .card{ --hc:40px !important; }
+}
+
+/* ============================================================
+   v26 TAPPABLE RUNS
+   The run itself is the play target. Removing the button and direction
+   pill makes room for larger cards inside shorter portrait panels.
+   ============================================================ */
+.run.runTarget{
+  cursor:pointer;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.run.runTarget:focus-visible{
+  outline:3px solid #f0d089;
+  outline-offset:2px;
+}
+
+/* HOLD uses the same simple vertical information hierarchy as opponent panels. */
+#playerArea .goal.holdPanel{
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  text-align:center;
+}
+#playerArea .goal.holdPanel .holdTitle{
+  font-size:clamp(12px,1.5vw,15px);
+}
+#playerArea .goal.holdPanel .holdCount{
+  color:var(--gold-lt);
+}
+#playerArea .goal.holdPanel > button{
+  flex:0 0 auto;
+}
+
+/* Direction is communicated by both color and where the color is strongest. */
+.run.direction-up{
+  background:
+    linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.09) 58%, rgba(26,145,85,0)),
+    radial-gradient(ellipse at 30% 20%, rgba(180,150,90,.18), transparent 60%),
+    linear-gradient(135deg,#efe4c4 0%,#e4d4a8 45%,#d8c496 100%) !important;
+}
+.run.direction-down{
+  background:
+    linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.09) 42%, rgba(184,48,42,.34)),
+    radial-gradient(ellipse at 30% 20%, rgba(180,150,90,.18), transparent 60%),
+    linear-gradient(135deg,#efe4c4 0%,#e4d4a8 45%,#d8c496 100%) !important;
+}
+
+.runFeedback{
+  position:absolute;
+  right:6px;
+  bottom:5px;
+  z-index:4;
+  min-height:18px;
+  padding:2px 6px;
+  border-radius:999px;
+  color:#fff;
+  background:rgba(132,22,22,.9);
+  font:700 10px/1.4 system-ui,sans-serif;
+  opacity:0;
+  transform:translateY(3px);
+  pointer-events:none;
+}
+.run.illegal-run .runFeedback{ opacity:1; transform:none; }
+.run.illegal-run{
+  animation:illegalRunShake .38s ease;
+  box-shadow:0 0 0 3px rgba(220,38,38,.78), 0 6px 18px rgba(0,0,0,.45) !important;
+}
+@keyframes illegalRunShake{
+  0%,100%{ transform:translateX(0); }
+  20%,60%{ transform:translateX(-5px); }
+  40%,80%{ transform:translateX(5px); }
+}
+@media (prefers-reduced-motion:reduce){
+  .run.illegal-run{ animation:none; }
+}
+
+@media (orientation:portrait){
+  /* Let short phones scroll instead of squeezing grid rows until panels overlap.
+     On tall phones the natural board height still fits within the viewport. */
+  .landscapeBoard{
+    height:auto !important;
+    min-height:100dvh !important;
+    align-content:start !important;
+  }
+  #playerArea .goal.holdPanel{
+    padding:30px 26px 20px !important;
+    gap:2px;
+  }
+  .brigOverlay{
+    padding:34px 26px 24px !important;
+  }
+  #playerArea .goal.holdPanel .card,
+  .brigOverlay #brigCards .card{
+    width:58px !important;
+    font-size:26px !important;
+  }
+  #runs{
+    grid-auto-rows:100px;
+    align-content:start;
+  }
+  .run{
+    height:100px !important;
+    min-height:100px !important;
+  }
+  .run .cards{
+    min-height:67px !important;
+    align-items:center !important;
+  }
+  .run{
+    --rc:48px !important;
+  }
+  .run .card{
+    --rc:48px !important;
+    width:var(--rc) !important;
+    font-size:22px !important;
+  }
+}
+
+/* ============================================================
+   HOT-SEAT TURN HANDOFF
+   Keeps the outgoing board dimly visible, then reveals the next player only
+   after the four-second captain announcement completes.
+   ============================================================ */
+.turnHandoffBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:80;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));
+  background:rgba(0,0,0,.70);
+  backdrop-filter:blur(2px);
+  -webkit-backdrop-filter:blur(2px);
+  opacity:0;
+  transition:opacity .28s ease;
+}
+.turnHandoffBackdrop.show{ display:flex; opacity:1; }
+.turnHandoffBackdrop.departing{ opacity:0; }
+.turnHandoffCard{
+  width:min(88vw,420px);
+  max-height:calc(100dvh - 28px);
+  overflow:auto;
+  padding:18px 20px 20px;
+  border:2px solid #c9a227;
+  border-radius:22px;
+  background:
+    radial-gradient(circle at 50% 0%,rgba(25,104,109,.34),transparent 58%),
+    linear-gradient(180deg,rgba(18,49,53,.98),rgba(25,14,10,.98));
+  box-shadow:0 0 0 3px #6b4a12,0 18px 60px rgba(0,0,0,.72),inset 0 0 30px rgba(0,0,0,.35);
+  color:#f7e4b2;
+  text-align:center;
+}
+.captainPortrait{
+  display:block;
+  width:clamp(130px,34vw,178px);
+  aspect-ratio:1;
+  object-fit:cover;
+  margin:0 auto 10px;
+  border-radius:50%;
+  border:3px solid #d7b44a;
+  box-shadow:0 0 0 3px #5d3c10,0 8px 24px rgba(0,0,0,.65);
+}
+.handoffEyebrow{
+  color:#d8ad3f;
+  font:700 11px/1.2 system-ui,sans-serif;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+.turnHandoffCard h2{
+  margin:5px 0 4px;
+  color:#f0d089;
+  font-family:var(--serif);
+  font-size:clamp(23px,6.5vw,34px);
+  line-height:1.12;
+  text-shadow:0 2px 4px #000;
+}
+.turnHandoffCard p{ margin:0 0 10px; color:#e7d7b0; font-size:14px; }
+.handoffCountdown{
+  display:flex;
+  justify-content:center;
+  align-items:baseline;
+  gap:7px;
+  margin-bottom:8px;
+  color:#e7d7b0;
+  font-size:13px;
+}
+#handoffSeconds{ color:#f0d089; font:800 22px/1 var(--serif); }
+.handoffProgress{
+  height:7px;
+  overflow:hidden;
+  border:1px solid #6b4a12;
+  border-radius:999px;
+  background:rgba(0,0,0,.48);
+}
+.handoffProgressFill{
+  width:100%;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#b8892f,#f0d089);
+  transform-origin:left;
+}
+.turnHandoffBackdrop.show .handoffProgressFill{ animation:handoffDrain 4s linear forwards; }
+@keyframes handoffDrain{ to{ transform:scaleX(0); } }
+@media (prefers-reduced-motion:reduce){
+  .turnHandoffBackdrop{ transition:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+  .turnHandoffBackdrop.show .handoffProgressFill{ animation:none; }
+}
+
+/* ============================================================
+   JAILBREAK — four-beat event sequence
+   1) full-screen trigger, 2) Brig opens, 3) persistent live state,
+   4) success/failure resolution.
+   ============================================================ */
+.boardStatus{ position:relative; }
+.jailbreakBadge{
+  position:absolute;
+  left:50%;
+  top:calc(100% + 7px);
+  z-index:24;
+  display:none;
+  width:max-content;
+  max-width:min(84vw,520px);
+  transform:translateX(-50%);
+  padding:6px 14px;
+  border:2px solid #ffd95b;
+  border-radius:999px;
+  background:linear-gradient(90deg,rgba(4,69,76,.98),rgba(81,23,89,.98));
+  box-shadow:0 0 0 2px #241033,0 0 24px rgba(255,74,151,.72),0 7px 18px rgba(0,0,0,.55);
+  color:#fff2b8;
+  font:900 clamp(10px,2.8vw,14px)/1.1 system-ui,sans-serif;
+  letter-spacing:.08em;
+  text-shadow:0 2px 3px #000;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+.landscapeBoard.jailbreak-live .jailbreakBadge{ display:block; animation:jailbreakBadgeIn .34s cubic-bezier(.2,1.5,.4,1); }
+.landscapeBoard.jailbreak-live{
+  box-shadow:inset 0 0 0 4px rgba(255,207,55,.9),inset 0 0 42px rgba(255,43,137,.36);
+  animation:jailbreakBoardPulse 1.25s ease-in-out infinite alternate;
+}
+@keyframes jailbreakBadgeIn{ from{ opacity:0; transform:translate(-50%,-10px) scale(.8); } }
+@keyframes jailbreakBoardPulse{
+  from{ box-shadow:inset 0 0 0 3px rgba(255,207,55,.72),inset 0 0 24px rgba(0,221,205,.22); }
+  to{ box-shadow:inset 0 0 0 5px rgba(255,79,158,.9),inset 0 0 48px rgba(255,207,55,.32); }
+}
+
+.brigOverlay{
+  position:relative !important;
+  isolation:isolate;
+  perspective:760px;
+}
+.brigOverlay #brigCards{ position:relative; z-index:2; }
+.brigOverlay #brigText{ position:relative; z-index:6; }   /* sit ABOVE the door (z-index 5) so it's readable */
+.brigDoor{
+  position:absolute;
+  inset:13% 12% 14%;
+  z-index:5;
+  will-change:transform,opacity;
+  overflow:visible;
+  transform:perspective(760px) rotateY(0deg);
+  transform-origin:left center;
+  transition:transform .68s cubic-bezier(.2,.75,.15,1),filter .4s ease,opacity .4s ease;
+  border:5px solid #20272a;
+  border-radius:5px;
+  background:
+    linear-gradient(180deg,transparent 17%,#283034 18% 23%,transparent 24% 76%,#1c2326 77% 82%,transparent 83%),
+    repeating-linear-gradient(90deg,transparent 0 12%,#151b1e 12.5% 18%,#40494c 18.5% 20%,transparent 20.5% 31%);
+  box-shadow:inset 0 0 0 2px #596164,0 4px 12px rgba(0,0,0,.76);
+  pointer-events:none;
+  backface-visibility:visible;
+}
+.brigDoorLock{
+  position:absolute;
+  left:50%;
+  top:52%;
+  width:26px;
+  height:23px;
+  transform:translate(-50%,-50%);
+  border:2px solid #4c260a;
+  border-radius:4px 4px 7px 7px;
+  background:linear-gradient(145deg,#f0d089,#9c6717 62%,#53310b);
+  box-shadow:0 3px 8px #000,inset 0 1px 2px #fff3bd;
+}
+.brigDoorLock::before{
+  content:"";
+  position:absolute;
+  left:5px;
+  right:5px;
+  bottom:16px;
+  height:15px;
+  border:4px solid #c2922b;
+  border-bottom:0;
+  border-radius:12px 12px 0 0;
+}
+.brigDoorLock::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:8px;
+  width:4px;
+  height:8px;
+  transform:translateX(-50%);
+  border-radius:50% 50% 2px 2px;
+  background:#261508;
+}
+.brigOverlay.brig-open{
+  filter:saturate(1.28);
+  box-shadow:0 0 0 3px #14d8c8,0 0 30px 8px rgba(255,58,145,.62) !important;
+}
+.brigOverlay.brig-open .brigDoor{
+  transform:perspective(760px) rotateY(-104deg) translateX(-3%);
+  filter:drop-shadow(13px 8px 8px rgba(0,0,0,.72));
+  opacity:.88;
+}
+.brigOverlay.brig-open .brigDoorLock::before{ transform:rotate(-26deg) translate(-3px,-2px); transform-origin:left bottom; }
+.brigOverlay .releasedKingButton{
+  position:relative;
+  z-index:3;
+  padding:0;
+  border:0;
+  background:transparent;
+}
+.card.released-king{
+  outline:3px solid #ffe272;
+  box-shadow:0 0 0 3px #ff3c9c,0 0 24px 9px rgba(19,224,211,.86),0 4px 10px #000 !important;
+  animation:releasedKingPulse .75s ease-in-out infinite alternate;
+}
+@keyframes releasedKingPulse{ to{ transform:translateY(-4px) scale(1.08); filter:brightness(1.22) saturate(1.2); } }
+.brigOverlay.brig-success-close{ animation:brigSuccessSeal 1.2s ease; }
+.brigOverlay.brig-failure-close{ animation:brigFailureSeal 1.5s ease; }
+@keyframes brigSuccessSeal{ 35%{ box-shadow:0 0 0 5px #f9da58,0 0 34px 10px rgba(249,218,88,.82) !important; } }
+@keyframes brigFailureSeal{ 20%,45%,70%{ transform:translateX(-4px); filter:hue-rotate(265deg) brightness(.72); } 35%,60%{ transform:translateX(4px); } }
+
+.jailbreakSplash{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  display:none;
+  background:#06131a;
+  opacity:0;
+  transition:opacity .22s ease;
+}
+.jailbreakSplash.show{ display:block; opacity:1; animation:jailbreakSplashHit .32s cubic-bezier(.15,.9,.2,1); }
+.jailbreakSplash.departing{ opacity:0; }
+.jailbreakSplashDismiss{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  padding:0;
+  border:0;
+  background:#06131a;
+  cursor:pointer;
+}
+.jailbreakSplashDismiss::before{
+  content:"";
+  position:absolute;
+  inset:-28px;
+  background:url("assets/jailbreak-tropical-kings.webp") center / cover no-repeat;
+  filter:blur(18px) brightness(.34) saturate(1.25);
+  transform:scale(1.08);
+}
+.jailbreakSplash img{ position:relative; z-index:1; display:block; width:100%; height:100%; object-fit:contain; object-position:center; }
+.jailbreakSplashHint{
+  position:absolute;
+  left:50%;
+  bottom:max(18px,env(safe-area-inset-bottom));
+  transform:translateX(-50%);
+  width:max-content;
+  padding:8px 15px;
+  border:1px solid rgba(255,222,105,.84);
+  border-radius:999px;
+  background:rgba(7,22,28,.82);
+  color:#fff0a8;
+  font:800 12px/1 system-ui,sans-serif;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  box-shadow:0 5px 18px rgba(0,0,0,.65);
+  z-index:2;
+}
+@keyframes jailbreakSplashHit{ from{ transform:scale(1.12); filter:brightness(2) saturate(1.45); } }
+
+.jailbreakResolution{
+  position:fixed;
+  inset:0;
+  z-index:90;
+  display:none;
+  place-items:center;
+  padding:18px;
+  background:rgba(0,0,0,.58);
+  backdrop-filter:blur(2px);
+  opacity:0;
+  transition:opacity .2s ease;
+}
+.jailbreakResolution.show{ display:grid; opacity:1; }
+.jailbreakResolution.departing{ opacity:0; }
+.jailbreakResolutionCard{
+  width:min(86vw,410px);
+  padding:22px 22px 20px;
+  border:3px solid #f3ce55;
+  border-radius:22px;
+  background:linear-gradient(160deg,rgba(7,80,86,.98),rgba(36,12,55,.98));
+  box-shadow:0 0 0 3px #301345,0 18px 55px rgba(0,0,0,.75),inset 0 0 26px rgba(255,58,145,.25);
+  color:#fff1bd;
+  text-align:center;
+}
+.jailbreakResolution.failure .jailbreakResolutionCard{
+  border-color:#ff4c86;
+  background:linear-gradient(160deg,rgba(52,7,38,.98),rgba(2,30,48,.99));
+  box-shadow:0 0 0 3px #160817,0 18px 55px rgba(0,0,0,.82),inset 0 0 32px rgba(162,9,62,.42);
+}
+.resolutionEyebrow{ font:900 11px/1 system-ui,sans-serif; letter-spacing:.16em; color:#69f1df; text-transform:uppercase; }
+.jailbreakResolution.failure .resolutionEyebrow{ color:#ff849f; }
+.jailbreakResolution h2{ margin:7px 0 5px; color:#ffd75e; font:900 clamp(25px,8vw,38px)/1 var(--serif); text-shadow:0 3px 0 #331340,0 0 15px rgba(255,60,156,.55); }
+.jailbreakResolution.failure h2{ color:#ff7897; }
+.jailbreakResolution p{ margin:0; color:#f6e6c5; font:600 14px/1.45 system-ui,sans-serif; }
+.resolutionIcon{ position:relative; height:74px; margin:3px 0 6px; }
+.resolutionBars{
+  position:absolute;
+  left:50%; top:6px;
+  width:92px; height:62px;
+  transform:translateX(-50%);
+  border:5px solid #d7a93a;
+  background:repeating-linear-gradient(90deg,transparent 0 14px,#e6c04e 15px 20px);
+  box-shadow:0 0 16px rgba(255,214,85,.62);
+}
+.resolutionBars::after{ content:"✓"; position:absolute; inset:10px 21px; display:grid; place-items:center; border-radius:50%; background:#0f766e; color:white; font:900 28px/1 system-ui; }
+.resolutionCrowns{ display:none; }
+.jailbreakResolution.failure .resolutionBars{ display:none; }
+.jailbreakResolution.failure .resolutionCrowns{ display:flex; justify-content:center; gap:12px; color:#f0c54a; font:38px/1 serif; text-shadow:0 4px 0 #441328; animation:crownsSink 1.45s ease-in forwards; }
+@keyframes crownsSink{ 0%{ transform:translateY(-16px); opacity:1; } 75%{ opacity:1; } 100%{ transform:translateY(38px) rotate(-8deg); opacity:.12; } }
+.resolutionTap{ margin-top:12px !important; color:#c6b58f !important; font-size:11px !important; text-transform:uppercase; letter-spacing:.08em; }
+
+@media (orientation:portrait){
+  .jailbreakSplash img{ object-position:center center; }
+  .jailbreakBadge{ top:calc(100% + 5px); }
+}
+@media (prefers-reduced-motion:reduce){
+  .landscapeBoard.jailbreak-live,.card.released-king,.jailbreakResolution.failure .resolutionCrowns{ animation:none; }
+  .brigDoor{ transition:none; }
+  .jailbreakSplash.show{ animation:none; }
+}
+
+/* ============================================================
+   TABLETS ONLY
+   Keep the proven phone layout below 600px untouched. Coarse-pointer and
+   minimum-height guards distinguish iPad landscape from a phone on its side.
+   ============================================================ */
+@media (any-pointer:coarse) and (orientation:landscape) and (min-width:900px) and (max-width:1400px) and (min-height:601px) and (max-height:1100px){
+  .landscapeBoard{
+    grid-template-rows:auto 148px 148px auto auto !important;
+    align-content:start !important;
+  }
+  #runs{
+    min-height:0 !important;
+    height:auto !important;
+    align-self:stretch !important;
+  }
+  .run{
+    min-height:0 !important;
+    height:auto !important;
+    padding:9px 10px !important;
+  }
+  .run .cards{
+    min-height:0 !important;
+    align-items:center !important;
+  }
+  #playerArea .goal.holdPanel,
+  .brigOverlay{
+    min-height:0 !important;
+    height:auto !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+  }
+  #playerArea .goal.holdPanel{
+    padding:22px 20px 14px !important;
+    gap:2px !important;
+  }
+  .brigOverlay{
+    padding:26px 20px 16px !important;
+  }
+  #playerArea .goal.holdPanel .card,
+  .brigOverlay #brigCards .card{
+    width:48px !important;
+    font-size:21px !important;
+  }
+  #brigText{ font-size:10px !important; }
+}
+
+@media (any-pointer:coarse) and (orientation:portrait) and (min-width:600px) and (max-width:1180px){
+  #playerArea .goal.holdPanel,
+  .brigOverlay{
+    width:min(100%,260px) !important;
+    max-width:260px !important;
+    aspect-ratio:1 / .92 !important;
+    justify-self:center !important;
+    align-self:start !important;
+  }
+  #playerArea .goal.holdPanel{
+    padding:28px 24px 18px !important;
+  }
+  .brigOverlay{
+    padding:31px 24px 20px !important;
+  }
+  #playerArea .goal.holdPanel .card,
+  .brigOverlay #brigCards .card{
+    width:54px !important;
+    font-size:24px !important;
+  }
+}
+
+/* ============================================================
+   COMPLETE ENTRY FLOW — opening splash, title menu, crew setup,
+   rules and settings. Kept above the board so game layout is untouched.
+   ============================================================ */
+body.entry-active{ overflow:hidden; }
+.bootSplash,
+.titleScreen,
+.entryScreen{
+  position:fixed;
+  inset:0;
+  width:100%;
+  min-height:100dvh;
+}
+.bootSplash{
+  z-index:130;
+  display:grid;
+  place-items:center;
+  padding:0;
+  overflow:hidden;
+  background:#04151b;
+  opacity:1;
+  transition:opacity .32s ease,visibility .32s ease;
+}
+.bootSplash::before{
+  content:"";
+  position:absolute;
+  inset:-24px;
+  background:url("assets/opening-splash-landscape.webp") center / cover no-repeat;
+  opacity:.62;
+  filter:blur(18px) brightness(.5) saturate(1.12);
+  transform:scale(1.04);
+}
+.bootSplash.departing{ opacity:0; visibility:hidden; pointer-events:none; }
+.bootSplash.hidden{ display:none !important; }
+.bootSplashButton{
+  position:relative;
+  z-index:1;
+  display:block;
+  width:100%;
+  height:100%;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#f8e6b2;
+  cursor:pointer;
+}
+.bootArtwork,
+.bootArtwork img{
+  display:block;
+  width:100%;
+  height:100%;
+}
+.bootArtwork{ position:relative; z-index:1; }
+.bootArtwork img{ object-fit:contain; object-position:center; }
+.bootPrompt{
+  position:absolute;
+  z-index:2;
+  left:50%;
+  bottom:max(18px,env(safe-area-inset-bottom));
+  transform:translateX(-50%);
+  padding:8px 15px;
+  border:1px solid rgba(255,216,104,.5);
+  border-radius:999px;
+  background:rgba(2,17,24,.68);
+  box-shadow:0 4px 18px rgba(0,0,0,.52);
+  color:#fff0bd;
+  font:800 11px/1.2 system-ui,sans-serif;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  text-shadow:0 2px 4px #000;
+  white-space:nowrap;
+}
+@media (orientation:portrait){
+  .bootSplash::before{ background-image:url("assets/opening-splash-portrait.webp"); }
+}
+
+.titleScreen{
+  z-index:100;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:max(18px,env(safe-area-inset-top)) 18px max(24px,env(safe-area-inset-bottom));
+  overflow:auto;
+  background:
+    radial-gradient(circle at 50% 12%,rgba(18,176,169,.24),transparent 46%),
+    linear-gradient(180deg,rgba(4,31,39,.68),rgba(15,8,16,.94)),
+    url("assets/board-bg.webp") center / cover;
+}
+.titleScreen.hidden{ display:none !important; }
+.titlePanel{
+  display:flex;
+  width:min(94vw,720px);
+  flex-direction:column;
+  align-items:center;
+  gap:clamp(9px,1.7vh,16px);
+  text-align:center;
+}
+.titleLogo{ display:block; width:min(90vw,610px); height:auto; filter:drop-shadow(0 8px 20px rgba(0,0,0,.78)); }
+.titlePortrait{
+  display:block;
+  width:clamp(104px,22vh,178px);
+  aspect-ratio:1;
+  object-fit:cover;
+  border:3px solid #f0cc55;
+  border-radius:50%;
+  box-shadow:0 0 0 3px #5c2b66,0 0 28px rgba(20,223,207,.4),0 10px 28px rgba(0,0,0,.72);
+}
+.titleTagline{ max-width:35ch; margin:0; color:#f1dfb8; font:700 clamp(13px,3vw,17px)/1.35 system-ui,sans-serif; text-shadow:0 2px 4px #000; }
+.titleButtons{ display:flex; width:min(86vw,330px); flex-direction:column; gap:9px; }
+.menuBtn{
+  min-height:46px;
+  padding:12px 18px;
+  border:2px solid #c9a227;
+  border-radius:15px;
+  background:linear-gradient(180deg,#f2d36f,#c99428);
+  box-shadow:0 3px 0 #65420e,0 7px 18px rgba(0,0,0,.54),inset 0 1px 0 rgba(255,255,255,.55);
+  color:#28170a;
+  cursor:pointer;
+  font:800 clamp(14px,3.7vw,18px)/1 var(--serif,Georgia,serif);
+  letter-spacing:.03em;
+  text-shadow:0 1px 0 rgba(255,247,213,.65);
+}
+.menuBtn.secondary{
+  border-color:#9a7227;
+  background:linear-gradient(180deg,rgba(13,71,76,.97),rgba(31,15,31,.98));
+  box-shadow:0 3px 0 #2b180d,0 7px 18px rgba(0,0,0,.55),inset 0 0 18px rgba(255,55,143,.12);
+  color:#f3d57d;
+  text-shadow:0 2px 3px #000;
+}
+.menuBtn:active{ transform:translateY(2px); box-shadow:0 1px 0 #65420e,0 4px 11px rgba(0,0,0,.52); }
+
+.entryScreen{
+  z-index:115;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:max(18px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom));
+  overflow:auto;
+  background:
+    linear-gradient(180deg,rgba(4,31,39,.82),rgba(15,8,16,.96)),
+    url("assets/board-bg.webp") center / cover;
+}
+.entryScreen.show{ display:flex; }
+.entryCard{
+  width:min(92vw,560px);
+  max-height:calc(100dvh - 36px);
+  overflow:auto;
+  padding:20px 22px;
+  border:2px solid #d0aa39;
+  border-radius:22px;
+  background:
+    radial-gradient(circle at 50% 0%,rgba(23,132,136,.34),transparent 55%),
+    linear-gradient(180deg,rgba(15,54,58,.98),rgba(31,14,29,.99));
+  box-shadow:0 0 0 3px #573316,0 18px 60px rgba(0,0,0,.76),inset 0 0 30px rgba(0,0,0,.36);
+  color:#f7e4b2;
+}
+.entryCard h2{ margin:0 0 8px; color:#f2d16b; font:900 clamp(24px,6vw,34px)/1.1 var(--serif,Georgia,serif); text-align:center; text-shadow:0 3px 4px #000; }
+.entryLead{ margin:0 0 15px; color:#d9caab; font:600 14px/1.45 system-ui,sans-serif; text-align:center; }
+.rulesList{ display:grid; gap:10px; margin:14px 0 18px; padding:0; list-style:none; counter-reset:rules; }
+.rulesList li{ position:relative; min-height:38px; padding:9px 10px 9px 46px; border:1px solid rgba(219,177,56,.3); border-radius:12px; background:rgba(3,26,31,.56); color:#efe0bf; font:500 13px/1.42 system-ui,sans-serif; }
+.rulesList li::before{ counter-increment:rules; content:counter(rules); position:absolute; left:10px; top:50%; display:grid; width:25px; height:25px; place-items:center; transform:translateY(-50%); border-radius:50%; background:linear-gradient(145deg,#f1d36a,#a97117); color:#261406; font:900 13px/1 system-ui; }
+.settingsRow{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 20px; padding:13px; border:1px solid rgba(219,177,56,.34); border-radius:13px; background:rgba(3,26,31,.58); }
+.settingsRow strong{ display:block; color:#f3d476; font:800 15px/1.2 system-ui,sans-serif; }
+.settingsRow span{ color:#c7baa0; font:500 12px/1.3 system-ui,sans-serif; }
+.settingsRow .menuBtn{ flex:0 0 auto; min-height:40px; padding:9px 13px; font-size:13px; }
+.entryActions{ display:flex; flex-wrap:wrap; gap:9px; }
+.entryActions .menuBtn{ flex:1 1 150px; }
+
+#setup.setupScreen{
+  z-index:110;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  width:100% !important;
+  min-height:100dvh;
+  margin:0 !important;
+  padding:max(18px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom)) !important;
+  overflow:auto;
+  border:0;
+  border-radius:0;
+  background:
+    linear-gradient(180deg,rgba(4,31,39,.78),rgba(15,8,16,.96)),
+    url("assets/board-bg.webp") center / cover;
+}
+#setup.setupScreen:not(.hidden){ display:flex; }
+#setup .entryCard{ width:min(92vw,470px); text-align:center; }
+#setup .playerNameInput{
+  width:100%;
+  margin:4px 0;
+  padding:11px 13px;
+  border:2px solid #77531d;
+  border-radius:11px;
+  background:rgba(3,27,32,.88);
+  color:#f8e8c1;
+  font:700 15px/1.2 system-ui,sans-serif;
+}
+#setup .playerNameInput::placeholder{ color:#8fa7a1; }
+.matchSetupOptions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin:14px 0 4px;
+}
+.setupRule{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  align-items:center;
+  gap:9px;
+  padding:12px 10px;
+  border:1px solid rgba(219,177,56,.34);
+  border-radius:13px;
+  background:rgba(3,26,31,.58);
+  box-shadow:inset 0 0 16px rgba(0,0,0,.25);
+}
+.setupRuleLabel strong{ display:block; color:#f3d476; font:800 14px/1.2 system-ui,sans-serif; }
+.setupRuleLabel span{ display:block; margin-top:3px; color:#c7baa0; font:500 11px/1.3 system-ui,sans-serif; }
+.setupStepper{
+  display:grid;
+  width:min(100%,170px);
+  grid-template-columns:42px minmax(54px,1fr) 42px;
+  align-items:center;
+  overflow:hidden;
+  border:2px solid #8c6722;
+  border-radius:12px;
+  background:rgba(2,22,27,.9);
+  box-shadow:0 4px 12px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.08);
+}
+.setupStep{
+  display:grid;
+  min-height:40px;
+  place-items:center;
+  padding:0;
+  border:0;
+  background:linear-gradient(180deg,rgba(18,91,94,.98),rgba(31,15,31,.98));
+  color:#f3d57d;
+  cursor:pointer;
+  font:900 24px/1 system-ui,sans-serif;
+  text-shadow:0 2px 3px #000;
+}
+.setupStep:first-child{ border-right:1px solid rgba(219,177,56,.35); }
+.setupStep:last-child{ border-left:1px solid rgba(219,177,56,.35); }
+.setupStep:disabled{ opacity:.34; cursor:not-allowed; }
+.setupNumber{
+  width:100%;
+  min-width:0;
+  padding:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#fff0bd;
+  text-align:center;
+  font:900 19px/1 var(--serif,Georgia,serif);
+  text-shadow:0 2px 3px #000;
+  appearance:textfield;
+}
+.setupNumber::-webkit-inner-spin-button,
+.setupNumber::-webkit-outer-spin-button{ appearance:none; margin:0; }
+.setupControls{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.setupControls #startGame{ grid-column:1/-1; }
+
+@media (max-width:430px){
+  .matchSetupOptions{ grid-template-columns:1fr; }
+}
+
+@media (orientation:landscape) and (max-height:600px){
+  .titlePanel{
+    display:grid;
+    width:min(94vw,780px);
+    grid-template-columns:minmax(0,1fr) minmax(230px,.72fr);
+    grid-template-areas:"logo buttons" "portrait buttons" "tagline buttons";
+    column-gap:24px;
+    row-gap:5px;
+  }
+  .titleLogo{ grid-area:logo; width:100%; }
+  .titlePortrait{ grid-area:portrait; width:96px; margin:auto; }
+  .titleTagline{ grid-area:tagline; font-size:12px; }
+  .titleButtons{ grid-area:buttons; width:100%; }
+  .menuBtn{ min-height:40px; padding:9px 14px; }
+  .entryCard{ padding:15px 18px; }
+  .entryCard h2{ font-size:24px; }
+  .rulesList{ grid-template-columns:1fr 1fr; gap:7px; margin:9px 0 12px; }
+  .rulesList li{ padding-top:7px; padding-bottom:7px; }
+}
+@media (prefers-reduced-motion:reduce){
+  .bootSplash{ transition:none; }
+}
+
+</style>
+</head>
+<body class="entry-active">
+<header>
+  <h1>Salty Schooner v26 Tappable Runs</h1>
+  <div class="sub">Simple hot-seat prototype. No networking yet.</div>
+</header>
+
+<div id="bootSplash" class="bootSplash" aria-hidden="false">
+  <button class="bootSplashButton" type="button" onclick="finishBootSplash()" aria-label="Continue to the Salty Schooner title screen">
+    <picture class="bootArtwork">
+      <source media="(orientation: portrait)" srcset="assets/opening-splash-portrait.webp" />
+      <img src="assets/opening-splash-landscape.webp" alt="Salty Schooner pirate captain aboard his ship" />
+    </picture>
+    <span class="bootPrompt">Tap to continue</span>
+  </button>
+</div>
+
+<div id="titleScreen" class="titleScreen" aria-hidden="false">
+  <div class="titlePanel">
+    <img class="titleLogo" src="assets/logo.webp" alt="Salty Schooner" />
+    <img class="titlePortrait" src="assets/captain-turn-comic.webp" alt="The Salty Schooner pirate captain" />
+    <p class="titleTagline">Play your cards. Free the Kings. Rule the tide.</p>
+    <div class="titleButtons">
+      <button class="menuBtn" type="button" onclick="showSetup()">Play</button>
+      <button class="menuBtn secondary" type="button" onclick="showEntryScreen('rulesScreen')">How to Play</button>
+      <button class="menuBtn secondary" type="button" onclick="showEntryScreen('settingsScreen')">Settings</button>
+    </div>
+  </div>
+</div>
+
+<div id="rulesScreen" class="entryScreen" aria-hidden="true">
+  <div class="entryCard" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <h2 id="rulesTitle">How to Play</h2>
+    <p class="entryLead">Clear your Hold before your rivals. After the chosen number of rounds, the lowest total score wins.</p>
+    <ol class="rulesList">
+      <li>Play adjacent cards onto the four Runs. Empty Runs begin with an Ace or Queen; an unset opening card can establish either direction.</li>
+      <li>Kings are wild for values 2 through Jack. They may continue or reverse a set Run, or establish direction after one natural opening card.</li>
+      <li>Play as many legal cards as you can. Emptying your Hand refills it to five cards.</li>
+      <li>End your turn by discarding one Hand card to a Port. Port top cards can be played on later turns.</li>
+      <li>Completed Runs send their Kings to the Brig. A qualifying Key King springs every imprisoned King for a Jailbreak.</li>
+      <li>During a Jailbreak, play every released King before discarding—or the remaining Kings sink to Davy Jones’s Locker and add penalties to your Hold.</li>
+    </ol>
+    <div class="entryActions"><button class="menuBtn secondary" type="button" onclick="hideEntryScreen('rulesScreen')">Back to Menu</button></div>
+  </div>
+</div>
+
+<div id="settingsScreen" class="entryScreen" aria-hidden="true">
+  <div class="entryCard" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h2 id="settingsTitle">Settings</h2>
+    <p class="entryLead">These settings also control the in-game menu.</p>
+    <div class="settingsRow">
+      <div><strong>Background Music</strong><span>Corsair’s Endless Loop</span></div>
+      <button id="entryMusicToggle" class="menuBtn secondary" type="button" aria-pressed="false">Play Music</button>
+    </div>
+    <div class="entryActions"><button class="menuBtn secondary" type="button" onclick="hideEntryScreen('settingsScreen')">Back to Menu</button></div>
+  </div>
+</div>
+
+<main>
+  <section id="setup" class="setupScreen hidden">
+    <div class="entryCard">
+      <h2>Choose Yer Crew</h2>
+      <p class="entryLead">Enter 2–6 captains, then set sail.</p>
+      <div id="playerInputs" class="grid"></div>
+      <div class="matchSetupOptions" aria-label="Match rules">
+        <div class="setupRule">
+          <div class="setupRuleLabel"><strong>HOLD Cards</strong><span>Starting cards per captain</span></div>
+          <div class="setupStepper">
+            <button class="setupStep" type="button" data-setup-target="holdCardsInput" data-setup-change="-1" aria-label="Fewer HOLD cards">−</button>
+            <input id="holdCardsInput" class="setupNumber" type="number" min="5" max="20" value="10" readonly aria-label="HOLD cards per player" />
+            <button class="setupStep" type="button" data-setup-target="holdCardsInput" data-setup-change="1" aria-label="More HOLD cards">+</button>
+          </div>
+        </div>
+        <div class="setupRule">
+          <div class="setupRuleLabel"><strong>Rounds</strong><span>Lowest total after all rounds</span></div>
+          <div class="setupStepper">
+            <button class="setupStep" type="button" data-setup-target="roundsInput" data-setup-change="-1" aria-label="Fewer rounds">−</button>
+            <input id="roundsInput" class="setupNumber" type="number" min="1" max="10" value="4" readonly aria-label="Rounds to play" />
+            <button class="setupStep" type="button" data-setup-target="roundsInput" data-setup-change="1" aria-label="More rounds">+</button>
+          </div>
+        </div>
+      </div>
+      <div id="setupStatus" class="meta" style="margin-top:8px;color:#d9caab;">Ready · 10 HOLD cards · 4 rounds.</div>
+      <div class="setupControls">
+        <button id="addPlayer" class="menuBtn secondary" type="button">Add Player</button>
+        <button id="removePlayer" class="menuBtn secondary" type="button">Remove Player</button>
+        <button id="startGame" class="menuBtn" type="button">Set Sail</button>
+        <button class="menuBtn secondary" type="button" style="grid-column:1/-1" onclick="backToTitle()">Back to Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="game" class="hidden landscapeGame">
+    <div class="landscapeBoard">
+      <div class="boardStatus">ROUND <span id="roundLabel"></span> &bull; DECK <span id="deckLabel"></span> &bull; <span id="turnLabel"></span>'S TURN <span id="jailbreakBadge" class="jailbreakBadge" aria-live="polite"></span></div>
+      <div id="runs"></div>
+      <div class="brigOverlay"><div class="brigDoor" aria-hidden="true"><span class="brigDoorLock"></span></div><div id="brigCards" class="cards"></div><span id="brigCountBadge" class="brigCountBadge hidden"></span><p id="brigText"></p></div>
+      <div id="playerArea"></div>
+      <div id="opponentGoals"></div>
+      <div id="scoreboard"></div>
+      <details class="boardTools"><summary>MENU &#9776;</summary>
+        <div class="toolrow"><button id="musicToggle" type="button" aria-pressed="false">Mute Music</button><button id="clearSelection">Clear selection</button><button id="forceEnd" class="danger">Force end</button><button id="newGameBtn">New game</button></div>
+        <h4>Game info</h4><div id="menuGameInfo" class="notice"></div>
+        <h4>Selected card</h4><div id="selectedInfo" class="notice">Select a card.</div>
+        <h4>Log</h4><div id="log" class="log"></div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<audio id="titleMusic" src="assets/title-theme.mp3" loop preload="auto"></audio>
+<audio id="gameMusic" src="assets/game-loop.mp3" loop preload="auto"></audio>
+
+<div id="modalBackdrop" class="modalBackdrop">
+  <div class="modal">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div id="modalChoices" class="choices"></div>
+  </div>
+</div>
+
+<div id="turnHandoff" class="turnHandoffBackdrop" aria-hidden="true">
+  <div class="turnHandoffCard" role="dialog" aria-modal="true" aria-labelledby="handoffTitle">
+    <img class="captainPortrait" src="assets/captain-turn-comic.webp" alt="Pirate captain" />
+    <div class="handoffEyebrow">Next Captain</div>
+    <h2 id="handoffTitle"><span id="handoffPlayerName"></span>, take the helm!</h2>
+    <p>Pass the device to the next player.</p>
+    <div class="handoffCountdown"><span>Next turn in</span><span id="handoffSeconds" aria-live="polite">4</span></div>
+    <div class="handoffProgress" aria-hidden="true"><div class="handoffProgressFill"></div></div>
+  </div>
+</div>
+
+<div id="jailbreakSplash" class="jailbreakSplash" aria-hidden="true">
+  <button class="jailbreakSplashDismiss" type="button" onclick="finishJailbreakSplash()" aria-label="Continue the Jailbreak">
+    <img src="assets/jailbreak-tropical-kings.webp" alt="The pirate captain smashes open the Brig as four Kings fly free" />
+    <span id="jailbreakSplashHint" class="jailbreakSplashHint">Tap to continue</span>
+  </button>
+</div>
+
+<div id="jailbreakResolution" class="jailbreakResolution" aria-hidden="true" onclick="finishJailbreakResolution()">
+  <div class="jailbreakResolutionCard" role="dialog" aria-modal="true" aria-labelledby="jailbreakResolutionTitle" onclick="finishJailbreakResolution()">
+    <div id="jailbreakResolutionEyebrow" class="resolutionEyebrow"></div>
+    <div class="resolutionIcon" aria-hidden="true"><span class="resolutionBars"></span><span class="resolutionCrowns">♛ ♛ ♛</span></div>
+    <h2 id="jailbreakResolutionTitle"></h2>
+    <p id="jailbreakResolutionBody"></p>
+    <p class="resolutionTap">Tap to continue</p>
+  </div>
+</div>
+
+<script>
+const VALUES = { A:1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, J:11, Q:12, K:13 };
+const VALUE_NAMES = {1:'A',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K'};
+const SUITS = ['♠','♥','♦','♣'];
+const RED = new Set(['♥','♦']);
+const MATCH_LIMITS = Object.freeze({
+  holdCards: {min:5, max:20, defaultValue:10},
+  rounds: {min:1, max:10, defaultValue:4}
+});
+let uid = 1;
+let state = null;
+let selected = null;
+let turnHandoffTimer = null;
+let turnHandoffTicker = null;
+let jailbreakSplashTimer = null;
+let jailbreakSplashPending = false;
+let jailbreakResolutionTimer = null;
+let jailbreakResolutionCallback = null;
+const titleMusic = document.getElementById('titleMusic');   // menu / title theme
+const gameMusic = document.getElementById('gameMusic');     // in-game loop
+const musicToggle = document.getElementById('musicToggle');
+const entryMusicToggle = document.getElementById('entryMusicToggle');
+if (titleMusic) titleMusic.volume = 0.45;   // title theme sits up front
+if (gameMusic) gameMusic.volume = 0.28;     // gameplay bed stays under the game
+let musicWanted = false;          // has the player turned music on?
+let musicContext = 'menu';        // 'menu' -> titleMusic, 'game' -> gameMusic
+function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic; }
+
+function clampMatchNumber(value, limits) {
+  const parsed = Number.parseInt(value, 10);
+  const safe = Number.isFinite(parsed) ? parsed : limits.defaultValue;
+  return Math.min(limits.max, Math.max(limits.min, safe));
+}
+function normalizeMatchConfig(config={}) {
+  return {
+    holdCards: clampMatchNumber(config.holdCards, MATCH_LIMITS.holdCards),
+    rounds: clampMatchNumber(config.rounds, MATCH_LIMITS.rounds)
+  };
+}
+function activeMatchConfig() {
+  return normalizeMatchConfig(state && state.matchConfig ? state.matchConfig : {});
+}
+function createMatchState(names, requestedConfig={}) {
+  const matchConfig = normalizeMatchConfig(requestedConfig);
+  return {
+    players: names.map(name => ({ name, total:0, roundScore:0, goal:[], hand:[], discards:[[],[],[],[]] })),
+    matchConfig,
+    round: 1,
+    currentPlayer: 0,
+    deck: [], runs: [], brig: [], locker: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, log: [], version: 'v26-configurable-match'
+  };
+}
+
+function updateMusicToggle() {
+  const track = activeMusic();
+  const on = musicWanted && track && !track.paused;
+  if (musicToggle) {
+    musicToggle.textContent = on ? 'Mute Music' : 'Play Music';
+    musicToggle.setAttribute('aria-pressed', String(!on));
+  }
+  if (entryMusicToggle) {
+    entryMusicToggle.textContent = on ? 'Music: On' : 'Play Music';
+    entryMusicToggle.setAttribute('aria-pressed', String(!on));
+  }
+}
+// Play whichever track matches the current context; make sure the other is stopped.
+function playActiveMusic() {
+  const track = activeMusic();
+  [titleMusic, gameMusic].forEach(t => {
+    if (t && t !== track && typeof t.pause === 'function' && !t.paused) { t.pause(); t.currentTime = 0; }
+  });
+  if (!track) { updateMusicToggle(); return; }
+  if (musicWanted && typeof track.play === 'function') {
+    const attempt = track.play();
+    if (attempt && typeof attempt.then === 'function') attempt.then(updateMusicToggle).catch(updateMusicToggle);
+    else updateMusicToggle();
+  } else {
+    if (typeof track.pause === 'function') track.pause();
+    updateMusicToggle();
+  }
+}
+// Switch between the title theme and the gameplay loop.
+function setMusicContext(ctx) {
+  if (ctx !== 'menu' && ctx !== 'game') return;
+  musicContext = ctx;
+  playActiveMusic();
+}
+// Called by startGame(): entering the game turns music on and swaps to the loop.
+function startBackgroundMusic() {
+  musicWanted = true;
+  setMusicContext('game');
+}
+function toggleBackgroundMusic() {
+  musicWanted = !musicWanted;
+  playActiveMusic();
+}
+
+function makeDeck(playerCount) {
+  const deck = [];
+  for (let d=0; d<playerCount; d++) {
+    for (const suit of SUITS) {
+      for (const rank of Object.keys(VALUES)) {
+        deck.push({ id: 'c' + (uid++), rank, suit, value: VALUES[rank] });
+      }
+    }
+  }
+  return shuffle(deck);
+}
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function cardLabel(card) { return card ? card.rank + card.suit : ''; }
+function cardColor(card) { return RED.has(card.suit) ? 'red' : 'black'; }
+function topCard(arr) { return arr[arr.length-1]; }
+function log(msg) {
+  state.log.unshift(msg);
+  renderLog();
+}
+function drawCard() {
+  if (!Array.isArray(state.recycle)) state.recycle = [];
+  if (state.deck.length === 0 && state.recycle.length > 0) {
+    const recycledCount = state.recycle.length;
+    state.deck = shuffle(state.recycle);
+    state.recycle = [];
+    log(`The draw deck was empty. ${recycledCount} cleared-run card${recycledCount===1?' was':'s were'} shuffled into a new draw deck.`);
+  }
+  if (state.deck.length === 0) return null;
+  return state.deck.pop();
+}
+function drawTo(player, n) {
+  let drawn = 0;
+  while (player.hand.length < n) {
+    const card = drawCard();
+    if (!card) break;
+    player.hand.push(card);
+    drawn++;
+  }
+  return drawn;
+}
+function currentPlayer() { return state.players[state.currentPlayer]; }
+function hasKing(run) { return run.cards.some(c => c.rank === 'K'); }
+function runLastValue(run) {
+  const c = topCard(run.cards);
+  if (!c) return null;
+  return c.effectiveValue || c.value;
+}
+function nextValuesForRun(run) {
+  if (run.cards.length === 0) return [{value:1, dir:'up'}, {value:12, dir:'down'}];
+  const last = runLastValue(run);
+  const vals = [];
+  if (!run.direction) {
+    if (last < 12) vals.push({value:last+1, dir:'up'});
+    if (last > 1) vals.push({value:last-1, dir:'down'});
+  } else if (run.direction === 'up') {
+    if (last < 12) vals.push({value:last+1, dir:'up'});
+  } else if (run.direction === 'down') {
+    if (last > 1) vals.push({value:last-1, dir:'down'});
+  }
+  return vals;
+}
+function kingRequiredValue(run) {
+  if (!run || run.cards.length === 0 || !run.direction) return null;
+  const last = runLastValue(run);
+  const required = run.direction === 'up' ? last + 1 : last - 1;
+  return required >= 2 && required <= 11 ? required : null;
+}
+function isOpeningKingAnchor(run) {
+  if (!run || run.direction || run.cards.length !== 1) return false;
+  const first = run.cards[0];
+  return first && first.rank === 'K' && !first.effectiveValue;
+}
+function openingKingChoices(card, run) {
+  if (!card || card.rank === 'K' || !isOpeningKingAnchor(run)) return [];
+  const choices = [];
+  const lower = card.value - 1;
+  const higher = card.value + 1;
+  // The opening King may represent only 2 through Jack. The natural card establishes direction.
+  if (lower >= 2 && lower <= 11) choices.push({kingValue:lower, dir:'up'});
+  if (higher >= 2 && higher <= 11) choices.push({kingValue:higher, dir:'down'});
+  return choices;
+}
+function unsetNaturalKingChoices(run) {
+  if (!run || run.direction || run.cards.length !== 1) return [];
+  const natural = run.cards[0];
+  if (!natural || natural.rank === 'K') return [];
+  const choices = [];
+  const lower = natural.value - 1;
+  const higher = natural.value + 1;
+  // A King played after the opening natural card establishes the run's direction.
+  // Kings may represent only 2 through Jack.
+  if (lower >= 2 && lower <= 11) choices.push({kingValue:lower, dir:'down'});
+  if (higher >= 2 && higher <= 11) choices.push({kingValue:higher, dir:'up'});
+  return choices;
+}
+function canPlayCardOnRun(card, run) {
+  if (!card) return false;
+  if (card.rank === 'K') {
+    if (run.cards.length === 0) return false;
+    const last = topCard(run.cards);
+    // A King cannot be laid directly on another King, including an unresolved opening King.
+    if (last && last.rank === 'K') return false;
+    // On a single natural opening card, the King may establish direction as N-1/down or N+1/up.
+    if (!run.direction) return unsetNaturalKingChoices(run).length > 0;
+    // Kings substitute only for the next required numbered card: 2 through Jack.
+    return kingRequiredValue(run) !== null;
+  }
+  if (isOpeningKingAnchor(run)) return openingKingChoices(card, run).length > 0;
+  if (run.cards.length === 0) return card.value === 1 || card.value === 12;
+  return nextValuesForRun(run).some(n => n.value === card.value);
+}
+function naturalCompletesRun(card, run) {
+  if (!card || card.rank === 'K') return false;
+  const value = card.value;
+  if (value === 12) return true;
+  if (value === 1) return true;
+  return false;
+}
+function checkComplete(runIndex) {
+  const run = state.runs[runIndex];
+  const last = topCard(run.cards);
+  if (!last || last.rank === 'K') return;
+  if (!((run.direction === 'up' && last.value === 12) || (run.direction === 'down' && last.value === 1))) return;
+  const kings = run.cards.filter(c => c.rank === 'K');
+  const recyclable = run.cards.filter(c => c.rank !== 'K');
+  if (!Array.isArray(state.recycle)) state.recycle = [];
+  state.recycle.push(...recyclable);
+  if (kings.length) {
+    state.brig.push(...kings.map(c => ({...c, effectiveValue:null, playedDirection:null})));
+    log(`Run ${runIndex+1} reached safe harbor. ${kings.length} King${kings.length>1?'s':''} sent to The Brig and ${recyclable.length} non-King card${recyclable.length===1?'':'s'} moved to the recycle pile.`);
+  } else {
+    log(`Run ${runIndex+1} reached safe harbor. ${recyclable.length} card${recyclable.length===1?'':'s'} moved to the recycle pile.`);
+  }
+  state.runs[runIndex] = { cards: [], direction: null };
+}
+function startRound() {
+  uid = uid + 1000;
+  state.deck = makeDeck(state.players.length);
+  state.brig = [];
+  state.locker = [];
+  state.recycle = [];
+  state.jailbreak = { active:false, kings:[], initialCount:0 };
+  state.pendingWinner = null;
+  if (!Array.isArray(state.stalls)) state.stalls = [];
+  // remove one random king for the brig
+  const kIndex = state.deck.findIndex(c => c.rank === 'K');
+  if (kIndex >= 0) state.brig.push(state.deck.splice(kIndex,1)[0]);
+  state.deck = shuffle(state.deck);
+  state.runs = Array.from({length:4}, () => ({cards:[], direction:null}));
+  const matchConfig = activeMatchConfig();
+  state.players.forEach(p => {
+    p.goal = [];
+    p.hand = [];
+    p.discards = [[],[],[],[]];
+    for (let i=0;i<matchConfig.holdCards;i++) p.goal.push(drawCard());
+    for (let i=0;i<5;i++) p.hand.push(drawCard());
+  });
+  // The opening card may not be a King. If one is drawn, return it to the deck,
+  // reshuffle, and draw again — mirrors putting the King back and dealing another.
+  let opener = drawCard();
+  while (opener && opener.rank === 'K') {
+    state.deck.push(opener);
+    state.deck = shuffle(state.deck);
+    opener = drawCard();
+  }
+  if (opener) {
+    state.runs[0].cards.push(opener);
+    if (opener.value === 1) state.runs[0].direction = 'up';
+    if (opener.value === 12) state.runs[0].direction = 'down';
+  }
+  state.currentPlayer = 0;
+  selected = null;
+  log(`Round ${state.round} started. The Brig begins with 1 King.`);
+  render();
+}
+function startGame(names, requestedConfig={}) {
+  state = createMatchState(names, requestedConfig);
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('game').classList.remove('hidden');
+  if (document.body) document.body.classList.remove('entry-active');
+  startRound();
+  startBackgroundMusic();
+}
+function endRound(winner) {
+  state.players.forEach(p => {
+    p.roundScore = p.goal.length + p.hand.length;
+    p.total += p.roundScore;
+  });
+  render();
+  const rounds = activeMatchConfig().rounds;
+  showModal('Round Over', `<p><b>${winner.name}</b> cleared their goal pile.</p><p>${state.players.map(p => `${p.name}: +${p.roundScore} (${p.total} total)`).join('<br>')}</p>`, [
+    {label: state.round >= rounds ? 'Show Final Scores' : 'Start Next Round', action: () => {
+      hideModal();
+      if (state.round >= rounds) endGame(); else { state.round++; startRound(); }
+    }}
+  ]);
+}
+function endGame() {
+  const sorted = [...state.players].sort((a,b)=>a.total-b.total);
+  showModal('Game Over', `<p><b>${sorted[0].name}</b> wins!</p><p>${sorted.map(p => `${p.name}: ${p.total}`).join('<br>')}</p>`, [
+    {label:'New Game', action:()=>location.reload()}
+  ]);
+}
+function nextTurn() {
+  selected = null;
+  state.currentPlayer = (state.currentPlayer + 1) % state.players.length;
+  render();
+}
+function beginTurnHandoff(duration=4000) {
+  const overlay = document.getElementById('turnHandoff');
+  const seconds = document.getElementById('handoffSeconds');
+  const nextIndex = (state.currentPlayer + 1) % state.players.length;
+  const nextPlayer = state.players[nextIndex];
+  if (!overlay || !nextPlayer) return nextTurn();
+
+  clearTimeout(turnHandoffTimer);
+  clearInterval(turnHandoffTicker);
+  selected = null;
+  window.suppressCardTransitions = true;
+  try { render(); }
+  finally { window.suppressCardTransitions = false; }
+
+  document.getElementById('handoffPlayerName').textContent = nextPlayer.name;
+  const progress = overlay.querySelector('.handoffProgressFill');
+  if (progress) {
+    progress.style.animation = 'none';
+    void progress.offsetWidth;
+    progress.style.animation = '';
+  }
+  overlay.classList.remove('departing');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+
+  const endsAt = Date.now() + duration;
+  const updateCountdown = () => {
+    seconds.textContent = Math.max(1, Math.ceil((endsAt - Date.now()) / 1000));
+  };
+  updateCountdown();
+  turnHandoffTicker = setInterval(updateCountdown, 200);
+  turnHandoffTimer = setTimeout(() => {
+    clearInterval(turnHandoffTicker);
+    turnHandoffTicker = null;
+    window.suppressCardTransitions = true;
+    try { nextTurn(); }
+    finally { window.suppressCardTransitions = false; }
+    overlay.classList.add('departing');
+    setTimeout(() => {
+      overlay.classList.remove('show','departing');
+      overlay.setAttribute('aria-hidden','true');
+    }, 300);
+  }, duration);
+}
+function getSelectedCard() {
+  if (!selected) return null;
+  const p = currentPlayer();
+  if (selected.zone === 'goal') return topCard(p.goal);
+  if (selected.zone === 'hand') return p.hand[selected.index];
+  if (selected.zone === 'discard') return topCard(p.discards[selected.index]);
+  if (selected.zone === 'jailbreak') return state.jailbreak && state.jailbreak.kings[selected.index];
+  return null;
+}
+function removeSelectedCard() {
+  const p = currentPlayer();
+  if (selected.zone === 'goal') return p.goal.pop();
+  if (selected.zone === 'hand') return p.hand.splice(selected.index,1)[0];
+  if (selected.zone === 'discard') return p.discards[selected.index].pop();
+  if (selected.zone === 'jailbreak') return state.jailbreak.kings.splice(selected.index,1)[0];
+}
+function undoAddSelected(card) {
+  const p = currentPlayer();
+  if (selected.zone === 'goal') p.goal.push(card);
+  if (selected.zone === 'hand') p.hand.splice(selected.index,0,card);
+  if (selected.zone === 'discard') p.discards[selected.index].push(card);
+  if (selected.zone === 'jailbreak') state.jailbreak.kings.splice(selected.index,0,card);
+}
+function flashIllegalRun(runIndex, message) {
+  emitSoundCue('illegal');
+  const runEl = document.querySelector(`.run[data-run-index="${runIndex}"]`);
+  if (!runEl) return;
+  const feedback = runEl.querySelector('.runFeedback');
+  runEl.classList.remove('illegal-run');
+  void runEl.offsetWidth;
+  if (feedback) feedback.textContent = message || 'Illegal play';
+  runEl.classList.add('illegal-run');
+  setTimeout(() => {
+    runEl.classList.remove('illegal-run');
+    if (feedback) feedback.textContent = '';
+  }, 700);
+}
+function playSelectedToRun(runIndex) {
+  const card = getSelectedCard();
+  const run = state.runs[runIndex];
+  if (!card) return flashIllegalRun(runIndex, 'Select card');
+  if (!canPlayCardOnRun(card, run)) return flashIllegalRun(runIndex, 'Illegal play');
+  if (card.rank === 'K') {
+    handleKingPlay(runIndex, card);
+    return;
+  }
+  if (isOpeningKingAnchor(run)) {
+    handleOpeningKingAnchorPlay(runIndex, card);
+    return;
+  }
+  const nexts = nextValuesForRun(run).filter(n => n.value === card.value);
+  const c = removeSelectedCard();
+  if (!run.direction && run.cards.length > 0) run.direction = nexts[0].dir;
+  if (run.cards.length === 0) {
+    if (c.value === 1) run.direction = 'up';
+    if (c.value === 12) run.direction = 'down';
+  }
+  run.cards.push(c);
+  emitSoundCue('place');
+  saltyTauntCheck(c.value);
+  log(`${currentPlayer().name} played ${cardLabel(c)} to Run ${runIndex+1}.`);
+  selected = null;
+  checkComplete(runIndex);
+  afterPlay();
+}
+function handleOpeningKingAnchorPlay(runIndex, card) {
+  const run = state.runs[runIndex];
+  const choices = openingKingChoices(card, run);
+  if (!choices.length) return flashIllegalRun(runIndex, 'Illegal play');
+  if (choices.length === 1) {
+    commitOpeningKingAnchor(runIndex, choices[0].kingValue, choices[0].dir);
+    return;
+  }
+  showModal(
+    'Set the Course',
+    `<p>The opening King can anchor ${cardLabel(card)} in either direction.</p><p>What value does the King represent?</p>`,
+    choices.map(choice => ({
+      label:`King as ${VALUE_NAMES[choice.kingValue]} — run ${choice.dir.toUpperCase()}`,
+      action:()=>commitOpeningKingAnchor(runIndex, choice.kingValue, choice.dir)
+    }))
+  );
+}
+function commitOpeningKingAnchor(runIndex, kingValue, dir) {
+  hideModal();
+  const run = state.runs[runIndex];
+  if (!isOpeningKingAnchor(run)) return;
+  const card = getSelectedCard();
+  if (!card || card.rank === 'K') return;
+  const natural = removeSelectedCard();
+  const openingKing = run.cards[0];
+  openingKing.effectiveValue = kingValue;
+  openingKing.playedDirection = dir;
+  run.direction = dir;
+  run.cards.push(natural);
+  emitSoundCue('place');
+  saltyTauntCheck(natural.value);
+  log(`${currentPlayer().name} played ${cardLabel(natural)} on the opening King. The King represents ${VALUE_NAMES[kingValue]} and the run is now ${dir.toUpperCase()}.`);
+  selected = null;
+  checkComplete(runIndex);
+  afterPlay();
+}
+function trackNoDrawStall(reason) {
+  const p = currentPlayer();
+  if (!p || p.hand.length !== 0 || state.deck.length !== 0 || (state.recycle || []).length !== 0) return false;
+  const snapshot = {
+    round: state.round,
+    player: p.name,
+    reason,
+    goalCounts: state.players.map(x => x.goal.length),
+    handCounts: state.players.map(x => x.hand.length),
+    portCounts: state.players.map(x => x.discards.map(pile => pile.length)),
+    runCounts: state.runs.map(run => run.cards.length),
+    brig: state.brig.length,
+    activeJailbreakKings: state.jailbreak && state.jailbreak.active ? state.jailbreak.kings.length : 0,
+    locker: (state.locker || []).length,
+    deck: state.deck.length,
+    recycle: (state.recycle || []).length
+  };
+  if (!Array.isArray(state.stalls)) state.stalls = [];
+  const previous = state.stalls[state.stalls.length - 1];
+  const signature = JSON.stringify(snapshot);
+  if (!previous || previous.signature !== signature) {
+    state.stalls.push({...snapshot, signature});
+    log(`STALL TRACKED: ${p.name} has no hand cards and no cards are available to draw.`);
+  }
+  return true;
+}
+function afterPlay() {
+  const p = currentPlayer();
+  const jailbreakActive = state.jailbreak && state.jailbreak.active;
+  const releasedKingsRemain = jailbreakActive && state.jailbreak.kings.length > 0;
+  if (jailbreakActive && !releasedKingsRemain) {
+    return completeActiveJailbreak();
+  }
+  if (p.goal.length === 0) {
+    if (!jailbreakActive || !releasedKingsRemain) {
+      state.pendingWinner = null;
+      return endRound(p);
+    }
+    state.pendingWinner = state.currentPlayer;
+    log(`${p.name} cleared their goal pile, but must finish the active Jailbreak before winning the round.`);
+  }
+  if (p.hand.length === 0) {
+    const drawn = drawTo(p, 5);
+    log(`${p.name} played through their hand and drew ${drawn}.`);
+    if (drawn === 0) trackNoDrawStall('after-play refill');
+  }
+  render();
+}
+function handleKingPlay(runIndex, card) {
+  const run = state.runs[runIndex];
+  if (!run.direction) return handleUnsetNaturalKingPlay(runIndex, card);
+  const required = kingRequiredValue(run);
+  if (required === null) return flashIllegalRun(runIndex, 'Natural A/Q');
+  const currentDir = run.direction;
+  const reverseDir = currentDir === 'up' ? 'down' : 'up';
+  showModal(
+    'Captain’s Orders',
+    `<p>${cardLabel(card)} represents <b>${VALUE_NAMES[required]}</b>.</p><p>Which direction does the run continue?</p>`,
+    [
+      {label:`Continue ${currentDir.toUpperCase()}`, action:()=>commitKing(runIndex, required, currentDir)},
+      {label:`Reverse ${reverseDir.toUpperCase()}`, action:()=>commitKing(runIndex, required, reverseDir)}
+    ]
+  );
+}
+function handleUnsetNaturalKingPlay(runIndex, card) {
+  const run = state.runs[runIndex];
+  const natural = run && run.cards.length === 1 ? run.cards[0] : null;
+  const choices = unsetNaturalKingChoices(run);
+  if (!card || card.rank !== 'K' || !choices.length) return flashIllegalRun(runIndex, 'Illegal play');
+  if (choices.length === 1) {
+    commitKing(runIndex, choices[0].kingValue, choices[0].dir);
+    return;
+  }
+  showModal(
+    'Set the Course',
+    `<p>${cardLabel(card)} follows ${cardLabel(natural)} as a wildcard.</p><p>What value does the King represent?</p>`,
+    choices.map(choice => ({
+      label:`King as ${VALUE_NAMES[choice.kingValue]} — run ${choice.dir.toUpperCase()}`,
+      action:()=>commitKing(runIndex, choice.kingValue, choice.dir)
+    }))
+  );
+}
+function commitKing(runIndex, value, dir) {
+  hideModal();
+  const p = currentPlayer();
+  const run = state.runs[runIndex];
+  const sourceWasReleasedKing = selected && selected.zone === 'jailbreak';
+  const previousRunHadKing = run.cards.some(c => c.rank === 'K');
+  const king = removeSelectedCard();
+  king.effectiveValue = value;
+  king.playedDirection = dir;
+  run.cards.push(king);
+  run.direction = dir;
+  emitSoundCue('place');
+  saltyTauntCheck(king.effectiveValue);
+  // JAILBREAK TRIGGER (canonical rule — all four must hold):
+  //   1. King comes from Hand/Goal/Port, not a released Jailbreak King  -> !sourceWasReleasedKing
+  //   2. the Run did not already contain a King before this play         -> !previousRunHadKing
+  //   3. at least one King is in the Brig                                 -> state.brig.length > 0
+  //   4. no Jailbreak is already active                                   -> !jailbreak.active
+  // Table shorthand: "the Brig springs once per turn, the first time a Run gets a King."
+  // Do not remove a guard without updating the handoff doc §8.
+  const triggersJailbreak = !sourceWasReleasedKing && state.brig.length > 0 && !previousRunHadKing && !(state.jailbreak && state.jailbreak.active);
+  log(`${p.name} played ${cardLabel(king)} as ${VALUE_NAMES[value]} and chose ${dir.toUpperCase()} on Run ${runIndex+1}.`);
+  selected = null;
+  if (triggersJailbreak) {
+    beginJailbreak(king);
+  } else {
+    afterPlay();
+  }
+}
+function beginJailbreak(keyKing) {
+  const released = state.brig.map(c => ({...c, effectiveValue:null, playedDirection:null}));
+  state.brig = [];
+  state.jailbreak = { active:true, kings:released, initialCount:released.length };
+  log(`${currentPlayer().name} triggered a Jailbreak with ${cardLabel(keyKing)}. ${released.length} Brig King${released.length===1?' was':'s were'} released for this turn.`);
+  render();
+  showJailbreakSplash(released.length);
+}
+function emitSoundCue(name, detail={}) {
+  // Sound files can subscribe to this event later without touching game logic.
+  document.dispatchEvent(new CustomEvent('salty-sound-cue', {detail:{name,...detail}}));
+}
+
+// ---- Sound-effect manager (v28) -------------------------------------------
+// Game logic announces moments via emitSoundCue(); this plays a matching clip.
+// Ships SILENT: until the files below exist in assets/, play() just rejects and
+// we swallow it — no sound, no crash. Drop the clips in and it comes alive.
+// Wire a Settings toggle to sfxEnabled later; big-event cues (jailbreak-*,
+// round-win, game-win) get their files added here when that pass happens.
+let sfxEnabled = true;
+const SFX_VOLUME = 0.55;
+const SFX_FILES = {
+  select:   'assets/sfx-select.mp3',
+  deselect: 'assets/sfx-deselect.mp3',
+  place:    'assets/sfx-place.mp3',
+  discard:  'assets/sfx-discard.mp3',
+  illegal:  'assets/sfx-illegal.mp3',
+  ui:       'assets/sfx-ui.mp3',
+  taunt:    'assets/sfx-taunt.mp3'
+};
+if (typeof Audio !== 'undefined') {
+  const sfxBase = {};
+  Object.keys(SFX_FILES).forEach(name => {
+    const a = new Audio(SFX_FILES[name]);
+    a.preload = 'auto';
+    a.volume = SFX_VOLUME;
+    sfxBase[name] = a;
+  });
+  const playSfx = name => {
+    if (!sfxEnabled) return;
+    const base = sfxBase[name];
+    if (!base) return;                        // unknown cue (e.g. big events, not wired yet)
+    const clip = base.cloneNode ? base.cloneNode(true) : new Audio(base.src);
+    clip.volume = SFX_VOLUME;                 // clone so rapid taps overlap instead of cutting off
+    const attempt = clip.play();
+    if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {}); // missing file: stay silent
+  };
+  document.addEventListener('salty-sound-cue', e => {
+    const name = e && e.detail && e.detail.name;
+    if (name) playSfx(name);
+  });
+  // Menu / dialog buttons -> a subtle UI tick (card taps have their own cues).
+  document.addEventListener('click', e => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('menuBtn')) playSfx('ui');
+  });
+}
+
+// Salty taunt (v28): a card lands on a run and an OPPONENT's face-up goal top
+// shares that value -> laugh. Pure flavor, the spiteful heart of the game.
+// Uses topCard() so the trigger always matches the card shown in #opponentGoals.
+function saltyTauntCheck(value) {
+  if (value == null || !state || !Array.isArray(state.players)) return;
+  const me = state.currentPlayer;
+  const salty = state.players.some((p, idx) => {
+    if (idx === me) return false;
+    const top = topCard(p.goal);
+    return top && top.value === value;
+  });
+  if (salty) emitSoundCue('taunt');
+}
+function showJailbreakSplash(releasedCount) {
+  const overlay = document.getElementById('jailbreakSplash');
+  const hint = document.getElementById('jailbreakSplashHint');
+  if (!overlay) return afterPlay();
+  clearTimeout(jailbreakSplashTimer);
+  jailbreakSplashPending = true;
+  hint.textContent = `${releasedCount} King${releasedCount===1?'':'s'} freed · Tap to continue`;
+  overlay.classList.remove('departing');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+  emitSoundCue('jailbreak-trigger', {releasedCount});
+  jailbreakSplashTimer = setTimeout(finishJailbreakSplash, 2100);
+}
+function finishJailbreakSplash() {
+  if (!jailbreakSplashPending) return;
+  jailbreakSplashPending = false;
+  clearTimeout(jailbreakSplashTimer);
+  jailbreakSplashTimer = null;
+  const overlay = document.getElementById('jailbreakSplash');
+  if (overlay) {
+    overlay.classList.add('departing');
+    overlay.setAttribute('aria-hidden','true');
+    setTimeout(() => overlay.classList.remove('show','departing'), 230);
+  }
+  afterPlay();
+}
+function showJailbreakResolution(kind, details, callback) {
+  const overlay = document.getElementById('jailbreakResolution');
+  if (!overlay) return callback && callback();
+  clearTimeout(jailbreakResolutionTimer);
+  jailbreakResolutionCallback = callback || null;
+  const success = kind === 'success';
+  overlay.classList.toggle('success', success);
+  overlay.classList.toggle('failure', !success);
+  document.getElementById('jailbreakResolutionEyebrow').textContent = success ? 'Jailbreak complete' : 'Jailbreak failed';
+  document.getElementById('jailbreakResolutionTitle').textContent = success ? 'BRIG SECURED' : 'CURSE OF THE CROWN';
+  if (success) {
+    document.getElementById('jailbreakResolutionBody').textContent = `All ${details.count} released King${details.count===1?'':'s'} played. The cage is closed.`;
+  } else {
+    const penaltyText = details.penalties ? ` ${details.penalties} penalty card${details.penalties===1?' was':'s were'} added to HOLD.` : '';
+    document.getElementById('jailbreakResolutionBody').textContent = `${details.count} unplayed King${details.count===1?' was':'s were'} sent to Davy Jones’s Locker.${penaltyText}`;
+  }
+  overlay.classList.remove('departing');
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+  emitSoundCue(success ? 'jailbreak-success' : 'jailbreak-failure', details);
+  jailbreakResolutionTimer = setTimeout(finishJailbreakResolution, success ? 1700 : 2400);
+}
+function finishJailbreakResolution() {
+  const overlay = document.getElementById('jailbreakResolution');
+  if (!overlay || !overlay.classList.contains('show') || overlay.classList.contains('departing')) return;
+  clearTimeout(jailbreakResolutionTimer);
+  jailbreakResolutionTimer = null;
+  overlay.classList.add('departing');
+  overlay.setAttribute('aria-hidden','true');
+  const callback = jailbreakResolutionCallback;
+  jailbreakResolutionCallback = null;
+  setTimeout(() => {
+    overlay.classList.remove('show','departing','success','failure');
+    if (callback) callback();
+  }, 210);
+}
+function completeActiveJailbreak() {
+  const p = currentPlayer();
+  const count = state.jailbreak.initialCount || 0;
+  state.jailbreak = {active:false,kings:[],initialCount:0,lastOutcome:'success'};
+  selected = null;
+  log(`${p.name} played every released Brig King. The Jailbreak is complete.`);
+  render();
+  const brig = document.querySelector('.brigOverlay');
+  if (brig) {
+    brig.classList.remove('brig-success-close');
+    void brig.offsetWidth;
+    brig.classList.add('brig-success-close');
+  }
+  showJailbreakResolution('success', {count}, () => afterPlay());
+}
+function failActiveJailbreak() {
+  if (!state.jailbreak || !state.jailbreak.active || state.jailbreak.kings.length === 0) return {count:0,penalties:0};
+  const p = currentPlayer();
+  const failedKings = [...state.jailbreak.kings];
+  state.jailbreak.kings = [];
+  if (!Array.isArray(state.locker)) state.locker = [];
+  let penalties = 0;
+  failedKings.forEach(king => {
+    king.effectiveValue = null;
+    king.playedDirection = null;
+    state.locker.push(king);
+    const replacement = drawCard();
+    if (replacement) {
+      p.goal.unshift(replacement);
+      penalties++;
+    }
+  });
+  log(`Jailbreak failed. ${failedKings.length} unplayed King${failedKings.length===1?' was':'s were'} sent to Davy Jones's Locker${penalties ? ` and ${penalties} card${penalties===1?' was':'s were'} added to the bottom of ${p.name}'s goal pile` : ''}.`);
+  return {count:failedKings.length, penalties};
+}
+function discardSelectedTo(index) {
+  const p = currentPlayer();
+  if (!selected || selected.zone !== 'hand') return alert('Select a card from your hand to discard.');
+  const c = p.hand.splice(selected.index,1)[0];
+  p.discards[index].push(c);
+  emitSoundCue('discard');
+  log(`${p.name} discarded ${cardLabel(c)} to Port ${index+1}.`);
+  let failedJailbreak = null;
+  if (state.jailbreak && state.jailbreak.active) {
+    if (state.jailbreak.kings.length > 0) failedJailbreak = failActiveJailbreak();
+    else log(`Jailbreak complete. ${p.name} played every released King before ending the turn.`);
+    state.jailbreak = { active:false, kings:[], initialCount:0, lastOutcome:failedJailbreak ? 'failure' : 'success' };
+  }
+  selected = null;
+  const finishDiscard = () => {
+    if (p.goal.length === 0) {
+      state.pendingWinner = null;
+      return endRound(p);
+    }
+    const drawn = drawTo(p,5);
+    if (p.hand.length === 0 && drawn === 0) trackNoDrawStall('end-turn refill');
+    beginTurnHandoff(4000);
+  };
+  if (failedJailbreak && failedJailbreak.count > 0) {
+    render();
+    const brig = document.querySelector('.brigOverlay');
+    if (brig) {
+      brig.classList.remove('brig-failure-close');
+      void brig.offsetWidth;
+      brig.classList.add('brig-failure-close');
+    }
+    showJailbreakResolution('failure', failedJailbreak, finishDiscard);
+    return;
+  }
+  finishDiscard();
+}
+function renderCard(card, opts={}) {
+  if (!card) return `<div class="card back">${opts.backText || ''}</div>`;
+  const cls = ['card', cardColor(card)];
+  if (card.rank === 'K') cls.push('king');
+  if (opts.selected) cls.push('selected');
+  if (opts.playable) cls.push('playable');
+  if (opts.released) cls.push('released-king');
+  const as = card.rank === 'K' && card.effectiveValue ? `as ${VALUE_NAMES[card.effectiveValue]} ${card.playedDirection || ''}` : '';
+  return `<div class="${cls.join(' ')}" data-as="${as}" data-vt="vtc-${card.id}">${cardLabel(card)}</div>`;
+}
+function render() {
+  if (!state) return;
+  const p = currentPlayer();
+  const matchConfig = activeMatchConfig();
+  document.getElementById('turnLabel').textContent = p.name;
+  document.getElementById('roundLabel').textContent = `${state.round} / ${matchConfig.rounds}`;
+  document.getElementById('deckLabel').textContent = state.deck.length;
+  renderScoreboard();
+  renderRuns();
+  renderPlayerArea();
+  renderBrig();
+  renderSelected();
+  renderLog();
+}
+function renderScoreboard() {
+  const el = document.getElementById('opponentGoals');
+  if (!el) return;
+  const opponents = state.players.map((p,i)=>({p,i})).filter(x=>x.i!==state.currentPlayer);
+  el.innerHTML = opponents.map(({p}) => {
+    const top = topCard(p.goal);
+    return `<div class="oppGoal"><div class="oppName">${p.name}</div>${top ? renderCard(top) : '<div class="meta"></div>'}<div class="oppCount">${p.goal.length} CARD${p.goal.length===1?'':'S'}</div></div>`;
+  }).join('');
+  const info=document.getElementById('menuGameInfo');
+  const matchConfig = activeMatchConfig();
+  if(info) info.innerHTML=`<b>${currentPlayer().name}'s turn</b><br>Round ${state.round} of ${matchConfig.rounds}<br>Starting HOLD: ${matchConfig.holdCards} cards<br>Draw deck: ${state.deck.length}<br>Recycle pile: ${(state.recycle || []).length}<br>Tracked stalls: ${(state.stalls || []).length}`;
+}
+function renderRuns() {
+  const el = document.getElementById('runs');
+  el.innerHTML = state.runs.map((r,i)=>{
+    const direction = r.direction || 'unset';
+    const directionLabel = r.direction === 'up' ? 'ascending' : r.direction === 'down' ? 'descending' : 'unset';
+    return `<div class="run runTarget direction-${direction}" data-run-index="${i}" role="button" tabindex="0" aria-label="Play selected card on Run ${i+1}, ${directionLabel}" onclick="playSelectedToRun(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();playSelectedToRun(${i})}"><div class="runHeader"><b>Run ${i+1}</b></div><div class="cards">${r.cards.map(c=>renderCard(c)).join('') || '<span class="meta">A or Q only</span>'}</div><span class="runFeedback" aria-live="polite"></span></div>`;
+  }).join('');
+}
+function renderPlayerArea() {
+  const p = currentPlayer();
+  const el = document.getElementById('playerArea');
+  const goalTop = topCard(p.goal);
+  const goalSel = selected && selected.zone === 'goal';
+  const handHtml = p.hand.map((c,i)=>`<button class="small" onclick="selectCard('hand',${i})">${renderCard(c,{selected:selected&&selected.zone==='hand'&&selected.index===i})}</button>`).join('');
+  const discards = p.discards.map((pile,i)=>{
+    const c = topCard(pile);
+    const sel = selected && selected.zone === 'discard' && selected.index === i;
+    const n = pile.length;
+    // Compact port tile: the tile IS the discard target (tap = discard).
+    // Count badge (when n>0) opens an in-place fan of the pile.
+    const badge = n>0 ? `<span class="portBadge" onclick="event.stopPropagation();window.togglePortFan(${i})">${n}</span>` : '';
+    const top = c ? renderCard(c,{selected:sel}) : '<span class="portEmpty">Port '+(i+1)+'</span>';
+    return `<div class="portTile ${c?'has':'empty'}" onclick="window.portTap(${i})" title="Tap to discard here">${top}${badge}</div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="goal holdPanel">
+      <div class="oppName holdTitle">HOLD</div>
+      <button class="small" ${goalTop?'':'disabled'} onclick="selectCard('goal',0)">${goalTop?renderCard(goalTop,{selected:goalSel}):'Cleared'}</button>
+      <div class="oppCount holdCount">${p.goal.length} CARD${p.goal.length===1?'':'S'}</div>
+    </div>
+    <div class="hand"><h3 style="margin-top:0;">Hand</h3><div class="cards">${handHtml || '<span class="meta">Empty</span>'}</div></div>
+    <div class="portsWrap"><h3>Ports</h3><div class="discards">${discards}</div></div>
+  `;
+}
+function renderBrig() {
+  const el = document.getElementById('brigCards');
+  const badgeEl = document.getElementById('brigCountBadge');
+  const isActive = !!(state.jailbreak && state.jailbreak.active);
+  const active = isActive ? state.jailbreak.kings : [];
+  const activeHtml = active.map((c,i)=>`<button class="brigCardSlot releasedKingButton" onclick="selectCard('jailbreak',${i})">${renderCard(c,{selected:selected&&selected.zone==='jailbreak'&&selected.index===i,released:true})}</button>`).join('');
+  const waitingHtml = state.brig.map(c => `<span class="brigCardSlot waitingKing">${renderCard(c)}</span>`).join('');
+  el.innerHTML = (activeHtml + waitingHtml) || '<span class="meta">Empty</span>';
+  // Count badge — only once the pile is over 3 (mirrors the discard pile).
+  const total = isActive ? active.length : state.brig.length;
+  if (badgeEl) {
+    if (total > 3) { badgeEl.textContent = total; badgeEl.classList.remove('hidden'); }
+    else { badgeEl.classList.add('hidden'); }
+  }
+  const brig = document.querySelector('.brigOverlay');
+  const board = document.querySelector('.landscapeBoard');
+  const badge = document.getElementById('jailbreakBadge');
+  if (brig) brig.classList.toggle('brig-open', isActive);
+  if (board) board.classList.toggle('jailbreak-live', isActive);
+  if (isActive) {
+    const initial = state.jailbreak.initialCount || active.length;
+    document.getElementById('brigText').textContent = `BRIG OPEN · ${active.length} of ${initial} King${initial!==1?'s':''} left`;
+    if (badge) badge.textContent = `BRIG OPEN — ${active.length} KING${active.length===1?'':'S'} LEFT TO PLAY`;
+  } else {
+    document.getElementById('brigText').textContent = `${state.brig.length} King${state.brig.length!==1?'s':''} in The Brig.`;
+    if (badge) badge.textContent = '';
+  }
+}
+function renderSelected() {
+  const el = document.getElementById('selectedInfo');
+  const c = getSelectedCard();
+  if (!c) { el.textContent = 'Select a card from goal, hand, or discard.'; return; }
+  el.innerHTML = `<b>${cardLabel(c)}</b> selected from ${selected.zone}${selected.zone==='discard' ? ' pile ' + (selected.index+1) : selected.zone==='jailbreak' ? ' the active Jailbreak' : ''}.`;
+}
+function renderLog() {
+  if (!state) return;
+  document.getElementById('log').innerHTML = state.log.slice(0,60).map(m=>`<p>${m}</p>`).join('');
+}
+function selectCard(zone,index) {
+  // Tapping the already-selected card again clears the selection.
+  if (selected && selected.zone === zone && selected.index === index) {
+    selected = null;
+    emitSoundCue('deselect');
+  } else {
+    selected = {zone,index};
+    emitSoundCue('select');
+  }
+  render();
+}
+function showModal(title, body, choices) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  const ch = document.getElementById('modalChoices');
+  ch.innerHTML = '';
+  choices.forEach((c,idx)=>{
+    const btn = document.createElement('button');
+    btn.textContent = c.label;
+    btn.className = idx===0 ? 'primary' : '';
+    btn.onclick = c.action;
+    ch.appendChild(btn);
+  });
+  document.getElementById('modalBackdrop').classList.add('show');
+}
+function hideModal(){ document.getElementById('modalBackdrop').classList.remove('show'); }
+
+function setupInputs(n=2) {
+  const el = document.getElementById('playerInputs');
+  const existingNames = [...el.querySelectorAll('.playerNameInput')].map(input => input.value);
+  el.innerHTML = '';
+  for (let i=0;i<n;i++) {
+    const input = document.createElement('input');
+    input.className = 'playerNameInput';
+    input.value = existingNames[i] || `Player ${i+1}`;
+    input.autocomplete = 'off';
+    input.setAttribute('aria-label', `Player ${i+1} name`);
+    el.appendChild(input);
+  }
+}
+function readSetupMatchConfig() {
+  return normalizeMatchConfig({
+    holdCards: document.getElementById('holdCardsInput').value,
+    rounds: document.getElementById('roundsInput').value
+  });
+}
+function syncSetupMatchControls() {
+  const config = readSetupMatchConfig();
+  const holdInput = document.getElementById('holdCardsInput');
+  const roundsInput = document.getElementById('roundsInput');
+  holdInput.value = config.holdCards;
+  roundsInput.value = config.rounds;
+  document.querySelectorAll('.setupStep').forEach(button => {
+    const input = document.getElementById(button.dataset.setupTarget);
+    const limits = input && input.id === 'holdCardsInput' ? MATCH_LIMITS.holdCards : MATCH_LIMITS.rounds;
+    const delta = Number(button.dataset.setupChange);
+    button.disabled = !input || (delta < 0 && Number(input.value) <= limits.min) || (delta > 0 && Number(input.value) >= limits.max);
+  });
+  const status = document.getElementById('setupStatus');
+  if (status) status.textContent = `Ready · ${config.holdCards} HOLD cards · ${config.rounds} round${config.rounds===1?'':'s'}.`;
+  return config;
+}
+function adjustSetupMatchValue(targetId, delta) {
+  const input = document.getElementById(targetId);
+  if (!input) return;
+  const limits = targetId === 'holdCardsInput' ? MATCH_LIMITS.holdCards : MATCH_LIMITS.rounds;
+  input.value = clampMatchNumber(Number(input.value) + Number(delta), limits);
+  syncSetupMatchControls();
+}
+document.querySelectorAll('.setupStep').forEach(button => {
+  button.onclick = () => adjustSetupMatchValue(button.dataset.setupTarget, button.dataset.setupChange);
+});
+document.getElementById('addPlayer').onclick = () => {
+  const n = document.querySelectorAll('#playerInputs .playerNameInput').length;
+  if (n<6) setupInputs(n+1);
+};
+document.getElementById('removePlayer').onclick = () => {
+  const n = document.querySelectorAll('#playerInputs .playerNameInput').length;
+  if (n>2) setupInputs(n-1);
+};
+document.getElementById('startGame').onclick = () => {
+  const status = document.getElementById('setupStatus');
+  try {
+    const names = [...document.querySelectorAll('#playerInputs .playerNameInput')]
+      .map(input => input.value.trim())
+      .filter(Boolean);
+    if (names.length < 2) {
+      status.textContent = 'Enter at least 2 player names.';
+      return alert('Need at least 2 players.');
+    }
+    const matchConfig = readSetupMatchConfig();
+    status.textContent = `Starting ${matchConfig.rounds}-round game...`;
+    startGame(names, matchConfig);
+  } catch (err) {
+    console.error('Could not start Salty Schooner:', err);
+    status.textContent = `Start failed: ${err.message}`;
+    alert(`Could not start the game: ${err.message}`);
+  }
+};
+document.getElementById('newGameBtn').onclick = () => location.reload();
+if (musicToggle) musicToggle.onclick = toggleBackgroundMusic;
+if (entryMusicToggle) entryMusicToggle.onclick = toggleBackgroundMusic;
+document.getElementById('clearSelection').onclick = () => { selected=null; render(); };
+document.getElementById('forceEnd').onclick = () => {
+  const p = currentPlayer();
+  if (p.hand.length > 0) return alert('To end normally, select a hand card and discard it to a port.');
+  drawTo(p,5); nextTurn();
+};
+window.addEventListener('error', event => {
+  const status = document.getElementById('setupStatus');
+  if (status && !document.getElementById('setup').classList.contains('hidden')) {
+    status.textContent = `JavaScript error: ${event.message}`;
+  }
+});
+setupInputs(2);
+syncSetupMatchControls();
+updateMusicToggle();
+window.selectCard = selectCard;
+window.playSelectedToRun = playSelectedToRun;
+window.discardSelectedTo = discardSelectedTo;
+
+/* v25: no board scaling. The layout reflows instead. */
+</script>
+<script>
+/* ============================================================
+   v25 motion layer — appended, self-contained.
+   Touches no game logic. Wraps render() and a few event fns.
+   Honors prefers-reduced-motion. Remove this block to revert.
+   ============================================================ */
+(function(){
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const supportsVT = typeof document.startViewTransition === 'function';
+
+  /* tag every rendered card with a stable view-transition-name so the
+     browser can tween the SAME card between its old and new position. */
+  function tagCards(){
+    document.querySelectorAll('.card').forEach(el=>{
+      const label = el.textContent.trim();
+      // find the owning card id via its onclick-bearing ancestor is unreliable;
+      // instead stamp from a data attribute we inject in renderCard (see html patch)
+      const id = el.getAttribute('data-vt');
+      if(id) el.style.viewTransitionName = id;
+    });
+  }
+
+  /* wrap render() so every re-render is a view transition */
+  const _render = window.render;
+  let animating = false;
+  window.render = function(){
+    if (window.suppressCardTransitions || reduce || !supportsVT || animating) { _render.apply(this, arguments); tagCards(); return; }
+    animating = true;
+    const vt = document.startViewTransition(()=>{ _render(); tagCards(); });
+    vt.finished.finally(()=>{ animating = false; });
+  };
+
+  /* --- juice that doesn't need view transitions --- */
+
+  // Run completion: gold flash on the run that just cleared
+  const _checkComplete = window.checkComplete;
+  if (_checkComplete) {
+    window.checkComplete = function(runIndex){
+      const before = state.runs[runIndex] && state.runs[runIndex].cards.length;
+      const r = _checkComplete.apply(this, arguments);
+      const after = state.runs[runIndex] && state.runs[runIndex].cards.length;
+      if (!reduce && before && after === 0){
+        requestAnimationFrame(()=>{
+          const el = document.querySelectorAll('.run')[runIndex];
+          if(el){ el.classList.remove('run-complete'); void el.offsetWidth; el.classList.add('run-complete'); }
+        });
+      }
+      return r;
+    };
+  }
+
+  // Jailbreak: rattle the Brig when it goes active
+  let wasActive = false;
+  const _render2 = window.render;
+  window.render = function(){
+    _render2.apply(this, arguments);
+    const active = !!(state && state.jailbreak && state.jailbreak.active);
+    if (!reduce && active && !wasActive){
+      requestAnimationFrame(()=>{
+        const el = document.querySelector('.brigOverlay');
+        if(el){ el.classList.remove('brig-shake'); void el.offsetWidth; el.classList.add('brig-shake'); }
+      });
+    }
+    wasActive = active;
+  };
+
+  // Button squash: delegate a quick scale on any .small button press
+  document.addEventListener('pointerdown', (e)=>{
+    if (reduce) return;
+    const b = e.target.closest('button.small, .boardTools summary');
+    if(!b) return;
+    b.classList.remove('squash'); void b.offsetWidth; b.classList.add('squash');
+  }, {passive:true});
+
+  // deal-in stagger when the active player changes (new hand shown)
+  let lastPlayer = -1;
+  const _r3 = window.render;
+  window.render = function(){
+    _r3.apply(this, arguments);
+    if (reduce) return;
+    if (state && state.currentPlayer !== lastPlayer){
+      lastPlayer = state.currentPlayer;
+      requestAnimationFrame(()=>{
+        const h = document.querySelector('#playerArea .hand .cards');
+        if(h){ h.classList.remove('dealing'); void h.offsetWidth; h.classList.add('dealing'); }
+      });
+    }
+  };
+
+})();
+</script>
+
+<script>
+/* Compact ports interaction (v25) */
+window.portTap = function(i){
+  // If the player has a hand card selected -> discard into this port.
+  // Otherwise, tapping selects the top card of the pile (to play it out).
+  try{
+    if (typeof selected !== 'undefined' && selected && selected.zone === 'hand'){
+      discardSelectedTo(i);
+    } else {
+      const p = currentPlayer();
+      if (p.discards[i] && p.discards[i].length){ selectCard('discard', i); }
+      else { discardSelectedTo(i); } // empty + nothing selected: still the discard target
+    }
+  }catch(e){ console.error(e); }
+};
+window.togglePortFan = function(i){
+  const wrap = document.querySelector('.discards');
+  if(!wrap) return;
+  let fan = document.getElementById('portFan');
+  if (fan && fan.dataset.port == String(i)){ fan.remove(); return; } // toggle off
+  if (fan) fan.remove();
+  const p = currentPlayer();
+  const pile = (p.discards[i]||[]);
+  fan = document.createElement('div');
+  fan.id = 'portFan'; fan.dataset.port = String(i);
+  fan.className = 'portFan';
+  fan.innerHTML = `<div class="portFanInner">${pile.map(c=>renderCard(c)).join('')}<button class="portFanClose" onclick="document.getElementById('portFan').remove()">Close</button></div>`;
+  wrap.parentElement.appendChild(fan);
+};
+</script>
+
+<script>
+/* Complete entry-screen navigation. */
+window.finishBootSplash = function(){
+  const splash = document.getElementById('bootSplash');
+  if (!splash || splash.classList.contains('departing') || splash.classList.contains('hidden')) return;
+  splash.classList.add('departing');
+  splash.setAttribute('aria-hidden','true');
+  setTimeout(() => splash.classList.add('hidden'), 340);
+};
+window.showSetup = function(){
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('titleScreen').setAttribute('aria-hidden','true');
+  document.getElementById('setup').classList.remove('hidden');
+};
+window.backToTitle = function(){
+  document.getElementById('setup').classList.add('hidden');
+  const title = document.getElementById('titleScreen');
+  title.classList.remove('hidden');
+  title.setAttribute('aria-hidden','false');
+};
+window.showEntryScreen = function(id){
+  const screen = document.getElementById(id);
+  if (!screen) return;
+  screen.classList.add('show');
+  screen.setAttribute('aria-hidden','false');
+  updateMusicToggle();
+};
+window.hideEntryScreen = function(id){
+  const screen = document.getElementById(id);
+  if (!screen) return;
+  screen.classList.remove('show');
+  screen.setAttribute('aria-hidden','true');
+};
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('.entryScreen.show').forEach(screen => hideEntryScreen(screen.id));
+});
+</script>
+</body>
+</html>
