@@ -1870,7 +1870,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 10 · 2026-07-20';
+const APP_BUILD = 'v26 · build 11 · 2026-07-20';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -3173,6 +3173,10 @@ window.finishBootSplash = function(){
   splash.classList.add('departing');
   splash.setAttribute('aria-hidden','true');
   setTimeout(() => splash.classList.add('hidden'), 340);
+  // This tap is the first user gesture, so the browser now allows audio.
+  // Start the title theme for the menu; "Set Sail" later swaps to the game loop,
+  // and the Settings music toggle still mutes/unmutes. (No-op if it's already on.)
+  if (!musicWanted) { musicWanted = true; setMusicContext('menu'); }
 };
 window.showSetup = function(){
   document.getElementById('titleScreen').classList.add('hidden');
