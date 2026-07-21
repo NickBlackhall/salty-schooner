@@ -22,33 +22,57 @@ several devices into one record works by importing each in turn.
 
 | File | Games | Notes |
 |---|---|---|
-| `2026-07-20-tracker-export.json` | 3 (1 completed, 2 abandoned) | First export. 2-player, 4-round. See the read-out below. |
+| `2026-07-20-tracker-export.json` | 3 (1 completed, 2 abandoned) | First export. 2-player, 4-round. |
+| `2026-07-21-phone-tracker-export.json` | 1 (completed) | Phone. Separate record — its `since` is 2026-07-21, confirming a build drop reset it. |
 
-## Read-out as of 2026-07-20 (3 games, only 1 completed)
+## Read-out as of 2026-07-21 (4 games, 2 completed, 8 rounds)
 
-Far too small to conclude anything. Recorded so the next export can be compared against it.
+Still a tiny sample — nothing here settles a decision. But two things already look like
+signals rather than noise, because they held across two independent sessions on two devices.
 
 | Stat | Total |
 |---|---|
-| Rounds started / completed | 6 / 4 |
+| Rounds completed | 8 |
 | King-opener re-deals | 1 |
-| Runs completed | 2 |
-| Deck recycles | 0 |
-| Jailbreaks triggered / succeeded / failed | 3 / 3 / 0 |
+| Runs completed | 10 |
+| **Deck recycles** | **0** |
+| Jailbreaks triggered / succeeded / failed | **10 / 10 / 0** |
 | Failed-Jailbreak Kings, Curse penalty cards | 0, 0 |
 | **Hard stalls** | **0** |
 
-Bearing on the open decisions in `../WORKLOG.md`:
+Per completed game:
 
-- **Residual hard stall** — 0 in 4 completed rounds. Nowhere near enough to justify leaving
-  it unresolved *or* fixing it. Needs many more games.
-- **Failed Jailbreaks / Curse of the Crown** — 3 for 3 succeeded, so the entire failure path
-  (penalty cards, Kings reshuffled into the deck) is **completely untested in real play**.
-  Worth deliberately failing one to exercise it.
-- **Deck recycles** — 0, so the recycle pile has never actually been reached either.
-- **Abandoned games** — 2 of 3 records are abandoned mid-game. Expected during development,
-  but worth knowing they're in the totals: lifetime sums include abandoned games, so
-  per-game averages skew low.
+| Game | Duration | Runs | Jailbreaks | Scores |
+|---|---|---|---|---|
+| 2026-07-20 | 15m | 2 | 3 (3/0) | 17, 26 |
+| 2026-07-21 (phone) | 85m | 8 | 7 (7/0) | 16, 26 |
+
+### What it suggests
+
+- **Jailbreaks are common, not a set-piece — 1.25 per round, 10 across 8 rounds.** The phone
+  game triggered 7 in four rounds. Build 13 gave the Jailbreak a ~1.1s shake/glow/riser
+  build-up on the assumption it is a dramatic rarity. At this frequency that is roughly 8
+  seconds of build-up per game, and the drama likely dilutes. Worth Nick's judgement on
+  device: does it still land the seventh time?
+- **The failure path has never fired. 10 for 10 succeeded.** The whole Curse of the Crown
+  design — penalty cards to the goal bottom, Kings reshuffled into the deck, ratified
+  2026-07-20 — is **untested in real play**, and so is the failure branch of build 13's
+  resolution animation. Worth deliberately failing one to exercise it end to end.
+- **The recycle pile has never been reached either** (0 recycles in 8 rounds), so the
+  deck-exhaustion fix it was ratified for is likewise unexercised.
+- **Hard stalls: 0 in 8 rounds.** Two independent sessions at zero is weak evidence that it
+  is genuinely rare, but nowhere near enough to close the deferred decision.
+- **Watch seat order.** Player 1 won both games, and Player 2 scored exactly 26 both times.
+  Almost certainly coincidence at n=2 — but a first-seat advantage is worth ruling out,
+  and it costs nothing to keep an eye on as more games land.
+- **Duration varies 5.5x** (15m vs 85m) for the same 2-player, 4-round config. Probably
+  interruptions rather than the game itself, but worth confirming.
+
+### Caveats
+
+- Totals include abandoned games (2 of 4 records), so per-game averages skew low.
+- Everything so far is 2-player, 4-round, default HOLD. No 3–4 player data at all.
+- All of it predates build 14, so none of it reflects the voluntary hand refill.
 
 ## Later
 

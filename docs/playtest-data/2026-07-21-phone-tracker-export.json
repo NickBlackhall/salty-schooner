@@ -1,0 +1,86 @@
+{
+  "schema": 2,
+  "since": "2026-07-21T02:18:08.038Z",
+  "games": [
+    {
+      "id": "gmru0z18qdmyc",
+      "started": "2026-07-21T02:19:13.034Z",
+      "ended": "2026-07-21T03:44:11.498Z",
+      "players": [
+        "Player 1",
+        "Player 2"
+      ],
+      "rounds": 4,
+      "completed": true,
+      "winner": "Player 1",
+      "scores": [
+        {
+          "name": "Player 1",
+          "total": 16
+        },
+        {
+          "name": "Player 2",
+          "total": 26
+        }
+      ],
+      "stats": {
+        "roundsStarted": 4,
+        "roundsCompleted": 4,
+        "kingOpenerRedeals": 0,
+        "runsCompleted": 8,
+        "deckRecycles": 0,
+        "recycledCardsTotal": 0,
+        "jailbreaksTriggered": 7,
+        "jailbreaksSucceeded": 7,
+        "jailbreaksFailed": 0,
+        "failedJailbreakKings": 0,
+        "cursePenaltyCards": 0,
+        "hardStalls": 0
+      },
+      "endedEarly": false
+    }
+  ],
+  "current": null,
+  "recent": [
+    {
+      "at": "2026-07-21T03:44:11.498Z",
+      "type": "game-completed",
+      "detail": "winner Player 1"
+    },
+    {
+      "at": "2026-07-21T03:37:52.101Z",
+      "type": "jailbreak-triggered",
+      "detail": "1 Kings released"
+    },
+    {
+      "at": "2026-07-21T03:34:30.580Z",
+      "type": "jailbreak-triggered",
+      "detail": "1 Kings released"
+    },
+    {
+      "at": "2026-07-21T02:59:32.787Z",
+      "type": "jailbreak-triggered",
+      "detail": "1 Kings released"
+    },
+    {
+      "at": "2026-07-21T02:33:14.361Z",
+      "type": "jailbreak-triggered",
+      "detail": "3 Kings released"
+    },
+    {
+      "at": "2026-07-21T02:27:47.203Z",
+      "type": "jailbreak-triggered",
+      "detail": "1 Kings released"
+    },
+    {
+      "at": "2026-07-21T02:25:23.788Z",
+      "type": "jailbreak-triggered",
+      "detail": "1 Kings released"
+    },
+    {
+      "at": "2026-07-21T02:19:13.034Z",
+      "type": "game-started",
+      "detail": "2 players, 4 rounds"
+    }
+  ]
+}
