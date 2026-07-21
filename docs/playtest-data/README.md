@@ -145,6 +145,21 @@ data agrees, and it points at a specific mechanism.
 The record is still `current` (unfinished), sitting at **round 2 of 4** after starting at
 22:11 and still going at 05:24 the next morning. In roughly a round and a half:
 
+> **Nick's account (2026-07-21), which corrects part of this:** *"The iPad round was partially
+> so weird because we put it down for a while to do other things, but it was genuinely stalled
+> and we sort of lost interest. I picked it up to play again and finish later last night to
+> get the data from it."*
+>
+> So **the wall-clock figures below are contaminated by idle time and should not be read as
+> play time.** The 84-minute and overnight spans include the game sitting untouched.
+>
+> The rest of the finding survives, and is arguably strengthened. The **activity counts are
+> not affected by idle time** — 9 completed runs and 2 deck recycles happened regardless of
+> how long the iPad sat on a table — and Nick confirms first-hand that the round was
+> *genuinely stalled*, not merely slow. **"We sort of lost interest" is the most important
+> sentence in this dataset:** the failure mode here is disengagement, which no counter in the
+> tracker currently detects.
+
 | | This game | Previous 2 games (8 rounds) |
 |---|---|---|
 | Runs completed | **9** | 10 |
@@ -205,8 +220,12 @@ Nick: *"I wish your tracking was more detailed so you could see how it played ou
 the current stats are lifetime counters, which show volume but not shape. To have diagnosed
 the above from data alone, it would have needed:
 
-- **Per-round timestamps and turn counts** — the single highest-value addition. "Round 1 took
-  47 minutes and 63 turns" states the problem outright.
+- **Turn counts per round — the single highest-value addition, and more important than the
+  clock.** Build 15 added per-round timestamps, but Nick's account above shows wall-clock time
+  is unreliable: a round can span hours because the iPad was put down. **Turn count cannot be
+  inflated by idle time.** "Round 1 took 63 turns" states the problem; "round 1 took 47
+  minutes" might just mean dinner. Treat duration as a weak secondary signal and turns as the
+  real measure.
 - **HOLD pile size per player at the end of each turn.** A flat line is the smoking gun for a
   stuck round, and it is one number per player per turn.
 - **Turns where the player made no run play** (discard only) — the direct measure of "nobody
