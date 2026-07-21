@@ -4,7 +4,7 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-07-20 (Claude / Opus) — build 10, sound effects.
+Last updated: 2026-07-21 (Claude / Opus) — build 13, Jailbreak reveal polish.
 
 ---
 
@@ -51,23 +51,31 @@ See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle
 
 ## Known open items
 
+- **No sound-effects on/off control.** Music has a toggle (Settings + in-game MENU); SFX do not. The `sfxEnabled` flag exists in the SFX manager but has no UI wired to it, so sound effects can't be muted independently. Small, self-contained job.
+- **Jailbreak reveal timing is tunable** (build 13): `JAILBREAK_BUILDUP_MS` (1100ms, must stay in sync with the `brigShake`/`brigGlow` CSS durations), the shake amplitudes in `@keyframes brigShake`, and the synth riser's 60→280Hz sweep. Awaiting Nick's playtest feedback on whether the intensity/length feel right.
 - **Residual hard stall** is still reachable: active player has empty hand, empty draw deck, and empty recycle pile (all cards locked in goals/discards/incomplete runs/The Brig). Player then can't draw and can't discard to end the turn. It is detected, logged, and **counted by the Tracker**, but NOT auto-resolved. Decision deferred: Nick wants to gather Tracker data on how often it happens before deciding a fix (candidate fix: recycle discard piles as a last resort, or a forced end-of-turn).
 
-## Bigger direction (planning — not started)
+## Bigger direction (planning — documented 2026-07-21, no code written)
 
-- Investigating a conversion to **Next.js** with **true remote multiplayer** on a **Supabase (or similar) backend**.
-- Nick has an **existing game project** with reusable multiplayer architecture/logic. Per `AGENTS.md`, the referenced repo is `NickBlackhall/studio` ("Make It Terrible") — patterns for room creation/join, room codes, Supabase realtime subscriptions, authoritative server actions, transition-state coordination, host departure/cleanup, reconnect handling, multiplayer browser tests, and PWA/Netlify config. Nick will share the repo link.
-- Nick began planning this with another Claude instance on **2026-07-19** (the night before). A summary of that planning is still to be provided.
-- Architecture prep per `AGENTS.md`/brief before integration: separate **game state / rules engine / validated actions / renderer**. Expected action types: `START_GAME`, `START_ROUND`, `PLAY_CARD_TO_RUN`, `DECLARE_KING`, `RESOLVE_JAILBREAK`, `DISCARD_CARD`, `END_TURN`, `COMPLETE_RUN`, `END_ROUND`. Authoritative host, player-specific views (private hands must never leak).
+- Converting to **Next.js** with **true remote multiplayer** on **Supabase**.
+- **Repo confirmed and reviewed (2026-07-21):** `github.com/NickBlackhall/studio` ("Make It Terrible"). Next.js 15 + React + TS + Supabase (Postgres + Realtime) + Netlify. **Reusable ~30% (game-agnostic):** `supabaseClient.ts`, the room-code system (migration 001 + `roomCodes.ts` + `createRoom`/`getGameByRoomCode`), the subscribe→refetch-authoritative-state context (`SharedGameContext.tsx` — the key pattern to lift), auth/roles (`auth.ts` + `gameAuth.ts`, RLS migration 003), and lifecycle (dead-room detection, `cleanupEmptyRooms`, host-ended vs room-torn-down teardown). **Not reusable:** all game logic in `src/app/game/actions.ts` (~88KB, welded to MIT's judge/cards/scenarios) and all UI. Gotcha: its realtime subscription is broad (`event:'*', schema:'public'`, filtered client-side) and `useTargetedGameSubscription.ts` is an abandoned empty stub — use targeted per-table filters for Schooner from day one.
+- **Agreed approach:** "lift the multiplayer skeleton, rewrite the game core," as a **separate Next.js app alongside** the current single-file build — not an evolution of `app/index.html`.
+- **Plans written this session (read these first):**
+  - `docs/MULTIPLAYER_PREP.md` — plain-English prep steps to do to the *current* game so the move is a lift, not a rewrite (separate rules from presentation; turn the King-direction modal into an explicit move; seed the shuffle; private/public split), plus a technical appendix sketching the Supabase schema and server-action list.
+  - `docs/RULES_VS_LOOKS_MAP.md` — every function in `app/index.html` sorted into rules / looks / mixed, as a checklist for that refactor. Pile C (~15 functions) is the actual work.
+- Confirmed by Nick: each player on their own device, sees only their own hand; only the active player can move. Hands and goal-pile contents are secret; runs/brig/scores/turn and pile *sizes* are shared. Ports are currently private but are the likely first thing to make peekable (see the brief's design-questions section).
+- Architecture prep per `AGENTS.md`/brief: separate **game state / rules engine / validated actions / renderer**. Expected action types: `START_GAME`, `START_ROUND`, `PLAY_CARD_TO_RUN`, `DECLARE_KING`, `RESOLVE_JAILBREAK`, `DISCARD_CARD`, `END_TURN`, `COMPLETE_RUN`, `END_ROUND`.
 
-### What Claude needs from Nick to proceed on multiplayer
-1. Link to the existing multiplayer repo (likely `NickBlackhall/studio`).
-2. Any notes/summary from the 2026-07-19 planning chat.
-3. A decision: keep the single-file v26 as the rules source for now, or start extracting a framework-independent rules engine from it as step one of the Next.js move.
+### What Claude still needs from Nick to proceed on multiplayer
+1. ~~Link to the existing multiplayer repo~~ — **done**, reviewed 2026-07-21 (see above).
+2. Any notes/summary from the **2026-07-19 planning chat** with the other Claude instance — still outstanding.
+3. A go-ahead to start `MULTIPLAYER_PREP.md` item #1 (extract the rules engine from `app/index.html`). Not started; Nick may prefer to keep playtesting first so the ruleset is fully settled before it's frozen into an engine.
 
 ## Change history
 
-### 2026-07-20 (Claude / Opus) — pushed to main
+### 2026-07-20 → 2026-07-21 (Claude / Opus) — pushed to main
+<!-- Entries 1–10 landed 2026-07-20; entries 11–13 landed 2026-07-21. -->
+
 1. `Restructure repo around v26 as the canonical build` — moved the v26 build into `app/`, archived v11 to `reference/`, tidied stray root files.
 2. `Remove dead opening-King anchor code; audit card-supply rules` — deleted unreachable anchor code; added the King-supply/shuffle audit to the brief; ratified the recycle pile.
 3. `Failed Jailbreak: reshuffle unplaced Kings into the draw deck` — removed the permanent Locker; kept 1-per-King penalty; updated player-facing text and the brief.
