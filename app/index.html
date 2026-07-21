@@ -1932,7 +1932,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 15 · 2026-07-21';
+const APP_BUILD = 'v26 · build 16 · 2026-07-21';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -1955,7 +1955,7 @@ const Telemetry = {
   startGame(names, rounds) {
     if (!this.data) this.load();
     if (this.data.current) { this.data.current.abandoned = true; this.data.games.push(this.data.current); } // finalize an abandoned game
-    this.data.current = { id:this.newId(), started:new Date().toISOString(), ended:null, players:(names||[]).slice(), rounds:rounds||null, completed:false, winner:null, scores:null, stats:this.freshStats(), roundLog:[] };
+    this.data.current = { id:this.newId(), started:new Date().toISOString(), ended:null, players:(names||[]).slice(), rounds:rounds||null, completed:false, winner:null, scores:null, stats:this.freshStats(), roundLog:[], turnLog:[] };
     this.mark('game-started', (names?names.length:0) + ' players, ' + (rounds||'?') + ' rounds', true);
     this.save();
   },
@@ -2001,6 +2001,89 @@ const Telemetry = {
     if (players && players.length) r.scores = players.map(p => ({ name:p.name, roundScore:p.roundScore, total:p.total }));
     this.save();
   },
+  // ---- Per-turn records (build 16) -------------------------------------------------
+  // The "endless round" could not be diagnosed from counters: they show volume, not shape.
+  // One compact record per turn makes a round reconstructable. Keys are short because
+  // these get pasted into chat by hand.
+  //   r round · t turn-in-round · p seat · s/e start+end ISO · plays cards played to runs
+  //   src {hand,goal,port,brig} · draws manual refills · hold HOLD sizes (all seats)
+  //   runs empty-run count · brig Kings in the Brig · how the turn ended
+  MAX_TURNS: 600,   // hard cap so a pathological game cannot fill localStorage
+  startTurn(round, seat) {
+    if (!this.data) this.load();
+    const g = this.data.current;
+    if (!g) return;
+    if (!Array.isArray(g.turnLog)) g.turnLog = [];
+    if (g.turnLog.length >= this.MAX_TURNS) { g.turnsTruncated = true; return; }
+    const priorThisRound = g.turnLog.filter(x => x.r === round).length;
+    g.turnLog.push({ r:round, t:priorThisRound + 1, p:seat, s:new Date().toISOString(), e:null,
+                     plays:0, src:{hand:0,goal:0,port:0,brig:0}, draws:0, hold:null, runs:null, brig:null, how:null });
+    this.save();
+  },
+  liveTurn() {
+    const g = this.data && this.data.current;
+    if (!g || !Array.isArray(g.turnLog) || !g.turnLog.length) return null;
+    const t = g.turnLog[g.turnLog.length - 1];
+    return t.e ? null : t;   // never write into a closed turn
+  },
+  noteRunPlay(zone) {
+    if (!this.data) this.load();
+    const t = this.liveTurn();
+    if (!t) return;
+    t.plays++;
+    const key = zone === 'discard' ? 'port' : zone === 'jailbreak' ? 'brig' : zone;
+    if (t.src[key] !== undefined) t.src[key]++;
+    this.save();
+  },
+  noteDraw() {
+    if (!this.data) this.load();
+    const t = this.liveTurn();
+    if (!t) return;
+    t.draws++;
+    this.save();
+  },
+  endTurn(snapshot, how) {
+    if (!this.data) this.load();
+    const t = this.liveTurn();
+    if (!t) return;
+    t.e = new Date().toISOString();
+    t.how = how || null;
+    if (snapshot) { t.hold = snapshot.hold; t.runs = snapshot.emptyRuns; t.brig = snapshot.brig; }
+    this.save();
+  },
+  // Tier-1 read-out. `dead` = turns that produced no run play at all, the direct measure
+  // of "nobody could do anything". `stall` = longest run of consecutive turns in which no
+  // HOLD pile shrank — a stalled round shows a long streak even if the clock says nothing.
+  // `activeMin` caps each turn at IDLE_CAP so a game left on a table cannot inflate it.
+  IDLE_CAP_MS: 180000,
+  turnStats() {
+    const rounds = {};
+    let turns = 0, dead = 0, activeMs = 0, elapsedMs = 0, idleTurns = 0, worstStall = 0;
+    this.allGames().forEach(g => (g.turnLog || []).forEach(t => {
+      if (!t.e) return;
+      turns++;
+      if (!t.plays) dead++;
+      const dur = new Date(t.e) - new Date(t.s);
+      elapsedMs += dur;
+      activeMs += Math.min(dur, this.IDLE_CAP_MS);
+      if (dur > this.IDLE_CAP_MS) idleTurns++;
+      const key = (g.id || '?') + '#' + t.r;
+      (rounds[key] = rounds[key] || []).push(t);
+    }));
+    Object.values(rounds).forEach(list => {
+      let streak = 0;
+      list.forEach((t, i) => {
+        const prev = i ? list[i-1].hold : null;
+        const shrank = prev && t.hold && t.hold.some((h, ix) => h < prev[ix]);
+        streak = shrank ? 0 : streak + 1;
+        if (streak > worstStall) worstStall = streak;
+      });
+    });
+    const roundCount = Object.keys(rounds).length;
+    return { turns, dead, roundCount, idleTurns, worstStall,
+             perRound: roundCount ? turns / roundCount : 0,
+             activeMin: Math.round(activeMs / 60000), elapsedMin: Math.round(elapsedMs / 60000) };
+  },
   bump(key, n=1) { if (!this.data) this.load(); if (this.data.current && this.data.current.stats[key] !== undefined) this.data.current.stats[key] += n; this.save(); },
   mark(type, detail, skipSave) {
     if (!this.data) this.load();
@@ -2030,6 +2113,7 @@ const Telemetry = {
     const t = this.totals();
     const rounds = t.roundsStarted || 0;
     const sw = this.starterWinRate();
+    const ts = this.turnStats();
     const per = (n) => rounds ? (n / rounds).toFixed(2) + '/round' : '';
     const row = (label, val, extra='') => `<tr><td style="padding:3px 12px 3px 0;">${label}</td><td style="text-align:right;font-weight:700;padding:3px 0;">${val}</td><td style="text-align:right;color:#9a8a6a;padding:3px 0 3px 12px;font-size:11px;">${extra}</td></tr>`;
     const rows = [
@@ -2043,7 +2127,11 @@ const Telemetry = {
       row('Failed-jailbreak Kings', t.failedJailbreakKings),
       row('Curse penalty cards dealt', t.cursePenaltyCards),
       row('HARD STALLS (out of cards)', `<span style="color:${t.hardStalls>0?'#c0392b':'inherit'}">${t.hardStalls}</span>`),
-      row('Rounds won by whoever started', sw.total ? `${sw.won} / ${sw.total}` : '—', sw.total ? Math.round(100*sw.won/sw.total) + '%' : 'build 15+')
+      row('Rounds won by whoever started', sw.total ? `${sw.won} / ${sw.total}` : '—', sw.total ? Math.round(100*sw.won/sw.total) + '%' : 'build 15+'),
+      row('Turns recorded', ts.turns || '—', ts.roundCount ? ts.perRound.toFixed(1) + '/round' : 'build 16+'),
+      row('&nbsp;&nbsp;· DEAD turns (no run play)', ts.turns ? `<span style="color:${ts.dead/ts.turns>0.4?'#c0392b':'inherit'}">${ts.dead}</span>` : '—', ts.turns ? Math.round(100*ts.dead/ts.turns) + '%' : ''),
+      row('&nbsp;&nbsp;· longest stall streak', ts.turns ? `<span style="color:${ts.worstStall>=12?'#c0392b':'inherit'}">${ts.worstStall}</span>` : '—', ts.turns ? 'turns, no HOLD progress' : ''),
+      row('Play time (idle removed)', ts.turns ? `${ts.activeMin}m` : '—', ts.turns ? `${ts.elapsedMin}m elapsed · ${ts.idleTurns} paused` : '')
     ].join('');
     const gameList = games.slice(-8).reverse().map(g => {
       const st = g.stats || {};
@@ -2073,6 +2161,26 @@ const Telemetry = {
       const st = g.stats || {};
       rows.push([g.id, g.started||'', g.ended||'', (g.players||[]).join(' | '), g.rounds||'', g.completed?'yes':'no', g.winner||'', ...this.STAT_KEYS.map(k => st[k]||0)].map(esc).join(','));
     });
+    return rows.join('\n');
+  },
+  // Turn log as CSV (build 16). The JSON turn log runs ~195 bytes/turn, so a full game is
+  // ~20KB — awkward to paste by hand. The same data as CSV is roughly a fifth of that,
+  // and it drops straight into a spreadsheet. `dead` and the hold columns are the ones
+  // that matter: a flat hold curve is the stalled round, visible at a glance.
+  turnsToCSV() {
+    if (!this.data) this.load();
+    const games = this.allGames().filter(g => (g.turnLog || []).length);
+    const seats = games.reduce((m, g) => Math.max(m, (g.players || []).length), 0) || 2;
+    const holdCols = Array.from({length:seats}, (_, i) => 'hold' + (i+1));
+    const rows = [['game','round','turn','seat','player','secs','plays','dead','fromHand','fromGoal','fromPort','fromBrig','draws',...holdCols,'emptyRuns','brigKings','endedBy'].join(',')];
+    games.forEach(g => (g.turnLog || []).forEach(t => {
+      if (!t.e) return;
+      const secs = Math.round((new Date(t.e) - new Date(t.s)) / 1000);
+      const hold = Array.from({length:seats}, (_, i) => (t.hold && t.hold[i] != null) ? t.hold[i] : '');
+      rows.push([g.id, t.r, t.t, t.p + 1, (g.players || [])[t.p] || '', secs, t.plays, t.plays ? 0 : 1,
+                 t.src.hand, t.src.goal, t.src.port, t.src.brig, t.draws, ...hold,
+                 t.runs == null ? '' : t.runs, t.brig == null ? '' : t.brig, t.how || ''].join(','));
+    }));
     return rows.join('\n');
   },
   importText(text) {
@@ -2112,7 +2220,9 @@ function showTelemetry() {
     { label: 'Close', action: hideModal },
     { label: 'Copy all (JSON)', action: () => trackerCopy(Telemetry.toJSON(), 'Tracker data') },
     { label: 'Copy games (CSV)', action: () => trackerCopy(Telemetry.toCSV(), 'CSV') },
+    { label: 'Copy turns (CSV)', action: () => trackerCopy(Telemetry.turnsToCSV(), 'Turn log') },
     { label: 'Download CSV', action: () => trackerDownload('salty-schooner-games.csv', Telemetry.toCSV(), 'text/csv') },
+    { label: 'Download turns CSV', action: () => trackerDownload('salty-schooner-turns.csv', Telemetry.turnsToCSV(), 'text/csv') },
     { label: 'Import / restore', action: () => { const t = window.prompt('Paste previously saved tracker JSON to merge it in:'); if (t && t.trim()) { const r = Telemetry.importText(t.trim()); alert(r.msg); showTelemetry(); } } },
     { label: 'Reset tracker', action: () => { if (confirm('Erase all tracked games on this device? Export first if you want to keep them.')) { Telemetry.reset(); showTelemetry(); } } }
   ]);
@@ -2367,6 +2477,7 @@ function startRound() {
   log(`Round ${state.round} started. ${starter.name} goes first. The Brig begins with 1 King.`);
   Telemetry.bump('roundsStarted');
   Telemetry.startRound(state.round, starter.name);
+  Telemetry.startTurn(state.round, state.currentPlayer);
   render();
 }
 function startGame(names, requestedConfig={}) {
@@ -2394,6 +2505,7 @@ function clinchedPlayer(remainingRounds) {
   return null;
 }
 function endRound(winner) {
+  Telemetry.endTurn(turnSnapshot(), 'round-end');
   Telemetry.bump('roundsCompleted');
   state.players.forEach(p => {
     p.roundScore = p.goal.length + p.hand.length;
@@ -2435,9 +2547,21 @@ function endGame() {
     {label:'New Game', action:()=>location.reload()}
   ]);
 }
+// Board facts the turn log needs (build 16). HOLD sizes for every seat drive the stall
+// streak; empty runs and Brig population test the "endless round" hypothesis directly —
+// completions swap flexible runs for A/Q-only ones while Kings pile up out of circulation.
+function turnSnapshot() {
+  return {
+    hold: state.players.map(p => p.goal.length),
+    emptyRuns: state.runs.filter(r => r.cards.length === 0).length,
+    brig: state.brig.length + ((state.jailbreak && state.jailbreak.active) ? state.jailbreak.kings.length : 0)
+  };
+}
 function nextTurn() {
   selected = null;
+  Telemetry.endTurn(turnSnapshot(), 'handoff');
   state.currentPlayer = (state.currentPlayer + 1) % state.players.length;
+  Telemetry.startTurn(state.round, state.currentPlayer);
   render();
 }
 function beginTurnHandoff(duration=4000) {
@@ -2531,6 +2655,7 @@ function playSelectedToRun(runIndex) {
     return;
   }
   const nexts = nextValuesForRun(run).filter(n => n.value === card.value);
+  Telemetry.noteRunPlay(selected && selected.zone);
   const c = removeSelectedCard();
   if (!run.direction && run.cards.length > 0) run.direction = nexts[0].dir;
   if (run.cards.length === 0) {
@@ -2612,6 +2737,7 @@ function drawHandCards() {
     log(`${p.name} tried to draw, but the draw deck and recycle pile are both empty.`);
   } else {
     emitSoundCue('ui');
+    Telemetry.noteDraw();
     log(`${p.name} drew ${drawn} card${drawn === 1 ? '' : 's'}.`);
   }
   selected = null;
@@ -2657,6 +2783,7 @@ function commitKing(runIndex, value, dir) {
   const run = state.runs[runIndex];
   const sourceWasReleasedKing = selected && selected.zone === 'jailbreak';
   const previousRunHadKing = run.cards.some(c => c.rank === 'K');
+  Telemetry.noteRunPlay(selected && selected.zone);
   const king = removeSelectedCard();
   king.effectiveValue = value;
   king.playedDirection = dir;
@@ -3210,6 +3337,7 @@ document.getElementById('forceEnd').onclick = () => {
   if (p.hand.length > 0) return alert('To end normally, select a hand card and discard it to a port.');
   // Build 14: no longer draws 5 on the way out. The hand panel's "Draw cards" button
   // is the one place a refill happens now, so this stays a plain escape hatch.
+  Telemetry.endTurn(turnSnapshot(), 'force');
   nextTurn();
 };
 window.addEventListener('error', event => {
