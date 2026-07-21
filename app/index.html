@@ -65,6 +65,12 @@
     button.primary:hover { background: #115e59; }
     button.danger { background: var(--danger); color: white; border-color: var(--danger); }
     button.small { padding: 5px 8px; font-size: 13px; }
+    .drawHandBtn {
+      margin-top: 10px; width: 100%; padding: 10px 12px;
+      border: 1px solid var(--accent); border-radius: 12px;
+      background: var(--accent); color: #fff; font-weight: 800; letter-spacing: .02em;
+    }
+    .drawHandBtn:hover { background: #115e59; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     .topbar {
       display: grid;
@@ -1773,7 +1779,7 @@ body.entry-active{ overflow:hidden; }
     <ol class="rulesList">
       <li>Play adjacent cards onto the four Runs. Empty Runs begin with an Ace or Queen; an unset opening card can establish either direction.</li>
       <li>Kings are wild for values 2 through Jack. They may continue or reverse a set Run, or establish direction after one natural opening card.</li>
-      <li>Play as many legal cards as you can. Emptying your Hand refills it to five cards.</li>
+      <li>Play as many legal cards as you can. If you empty your Hand, a <b>Draw cards</b> button appears — refilling is your choice, and the offer stays open all turn. Leftover Hand cards cost you a point each, so staying empty to finish a round is a real (and risky) play.</li>
       <li>End your turn by discarding one Hand card to a Port. Port top cards can be played on later turns.</li>
       <li>Completed Runs send their Kings to the Brig. A qualifying Key King springs every imprisoned King for a Jailbreak.</li>
       <li>During a Jailbreak, play every released King before discarding—or the remaining Kings are reshuffled into the draw deck and add penalties to your Hold.</li>
@@ -1926,7 +1932,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 13 · 2026-07-21';
+const APP_BUILD = 'v26 · build 14 · 2026-07-21';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -2082,7 +2088,7 @@ function createMatchState(names, requestedConfig={}) {
     matchConfig,
     round: 1,
     currentPlayer: 0,
-    deck: [], runs: [], brig: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, log: [], version: 'v26-configurable-match'
+    deck: [], runs: [], brig: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, handEmptyNoted:false, log: [], version: 'v26-configurable-match'
   };
 }
 
@@ -2178,6 +2184,7 @@ function drawTo(player, n) {
     player.hand.push(card);
     drawn++;
   }
+  if (drawn > 0) state.handEmptyNoted = false;
   return drawn;
 }
 function currentPlayer() { return state.players[state.currentPlayer]; }
@@ -2522,11 +2529,34 @@ function afterPlay() {
     state.pendingWinner = state.currentPlayer;
     log(`${p.name} cleared their goal pile, but must finish the active Jailbreak before winning the round.`);
   }
-  if (p.hand.length === 0) {
-    const drawn = drawTo(p, 5);
-    log(`${p.name} played through their hand and drew ${drawn}.`);
-    if (drawn === 0) trackNoDrawStall('after-play refill');
+  if (p.hand.length === 0 && !state.handEmptyNoted) {
+    // Refilling mid-turn is the player's call (build 14). This used to auto-draw 5,
+    // but hand cards score 1 point each at round end, so a player emptying their hand
+    // on the way to a 0-point finish was force-fed a 5-point penalty. The hand panel
+    // now offers a "Draw cards" button, and it stays available for the rest of the turn.
+    // Latched, because afterPlay() now runs repeatedly with an empty hand (Brig Kings
+    // and goal cards cost no hand cards); drawTo() clears the latch on any real draw.
+    state.handEmptyNoted = true;
+    log(`${p.name} played through their hand — draw when you're ready, or finish empty.`);
   }
+  render();
+}
+// Player-initiated hand refill (build 14). Offered by the hand panel whenever the
+// active player's hand is empty, and it stays on offer for the rest of the turn — so
+// declining is never a dead end: you can always draw, then discard to end your turn.
+function drawHandCards() {
+  const p = currentPlayer();
+  if (p.hand.length > 0) return;
+  const drawn = drawTo(p, 5);
+  if (drawn === 0) {
+    trackNoDrawStall('player-requested refill');
+    emitSoundCue('illegal');
+    log(`${p.name} tried to draw, but the draw deck and recycle pile are both empty.`);
+  } else {
+    emitSoundCue('ui');
+    log(`${p.name} drew ${drawn} card${drawn === 1 ? '' : 's'}.`);
+  }
+  selected = null;
   render();
 }
 function handleKingPlay(runIndex, card) {
@@ -2967,7 +2997,7 @@ function renderPlayerArea() {
       <button class="small" ${goalTop?'':'disabled'} onclick="selectCard('goal',0)">${goalTop?renderCard(goalTop,{selected:goalSel}):'Cleared'}</button>
       <div class="oppCount holdCount">${p.goal.length} CARD${p.goal.length===1?'':'S'}</div>
     </div>
-    <div class="hand"><h3 style="margin-top:0;">Hand</h3><div class="cards">${handHtml || '<span class="meta">Empty</span>'}</div></div>
+    <div class="hand"><h3 style="margin-top:0;">Hand</h3><div class="cards">${handHtml || '<span class="meta">Empty</span>'}</div>${p.hand.length === 0 ? '<button class="drawHandBtn" type="button" onclick="drawHandCards()">Draw cards</button>' : ''}</div>
     <div class="portsWrap"><h3>Ports</h3><div class="discards">${discards}</div></div>
   `;
 }
@@ -3120,7 +3150,9 @@ document.getElementById('clearSelection').onclick = () => { selected=null; rende
 document.getElementById('forceEnd').onclick = () => {
   const p = currentPlayer();
   if (p.hand.length > 0) return alert('To end normally, select a hand card and discard it to a port.');
-  drawTo(p,5); nextTurn();
+  // Build 14: no longer draws 5 on the way out. The hand panel's "Draw cards" button
+  // is the one place a refill happens now, so this stays a plain escape hatch.
+  nextTurn();
 };
 window.addEventListener('error', event => {
   const status = document.getElementById('setupStatus');

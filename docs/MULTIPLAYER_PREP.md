@@ -64,6 +64,35 @@ Item **#1** — separate rules from looks. It's the foundation; a structural cle
 with no rule changes, so the game should feel identical afterward. A function-by-
 function checklist for exactly this is in `docs/RULES_VS_LOOKS_MAP.md`.
 
+## Quick chat / taunts (online-only, decided 2026-07-21)
+
+Nick's ask: a way to talk to remote players mid-game — "type a note, hit send, it goes to
+the server like a card, and gets delivered to the player you're targeting."
+
+**The instinct is right, with one refinement.** A card play has to be *checked* (is it your
+turn, is the move legal) — that's the rules engine, the hard part. A message needs none of
+that: anyone can send anytime, nothing to validate. So it's **simpler** than a card, and it
+rides the same live-sync pipe you're building anyway. That's why it's cheap — but only
+*after* the multiplayer skeleton exists. Standalone, it would mean building the whole
+Supabase realtime stack just to send "nice play."
+
+**Decision: do canned quick-chat first, free text later (if at all).** Reasons:
+
+- This is a mobile game. A keyboard covers the board and typing mid-turn stalls play.
+- Taunts fit the pirate theme far better than a chat bubble — and `app/assets/sfx-taunt.mp3`
+  already ships in the build. The taunt laugh exists; it just has no one to taunt yet.
+- No abuse surface, no moderation question, nothing to design around.
+
+**Two things to settle before free text ever ships:**
+
+- **Collusion.** With secret hands in a 3–4 player game, a private channel lets two players
+  coordinate for real advantage. This is a game-design call, not a technical one: private
+  DMs, or is everything visible to the table? Quick-chat is broadcast-only, which sidesteps
+  it entirely for now.
+- **Privacy has to be enforced by the database, not the UI.** If "private" only means hidden
+  on screen, anyone with mobile dev tools reads every message. That means row-level security
+  — `studio`'s RLS migration 003 is the pattern to copy.
+
 ---
 
 ## Technical appendix (for a future coding session)
@@ -87,6 +116,16 @@ The online target, sketched:
   `resolveJailbreak`, `endTurn`). Each one: check identity → check the move is legal
   via the engine → save → live-sync fires.
 - **One thing `studio` never finished:** its live-sync listens broadly and filters
-  after. Do targeted per-table filtering from day one.
+  after. Do targeted per-table filtering from day one. **Quick chat makes this
+  urgent, not just tidy:** under the broad-listen pattern every chat message would
+  trigger a full game-state refetch on every device. Chat is chatty — the board would
+  be re-downloaded constantly. Subscribe to `messages` separately from `games`.
+- **Quick chat schema (rough):** a `messages` table (`game_id`, `sender_seat`,
+  `recipient_seat` nullable = broadcast, `preset_key` for canned taunts, `body`
+  nullable for future free text, `created_at`). Canned messages send a `preset_key`,
+  not a string, so the client owns the wording and the SFX — smaller payloads and
+  the taunt list can be re-themed without a migration. No server action needed
+  beyond an insert; it bypasses the rules engine entirely (see the quick-chat
+  section above).
 
 See also: `docs/MASTER_PROJECT_BRIEF.md`.

@@ -51,10 +51,36 @@
 ## Turn Structure
 
 - On a turn, a player may make any number of legal plays from the top of their goal pile, their hand, or the top of one of their own discard piles.
-- If the player empties their hand during the turn, they immediately draw 5 more cards and continue.
+- If the player empties their hand during the turn, they **may** draw 5 more cards and continue. The draw is the player's choice, not automatic, and it stays available for the rest of the turn (approved by Nick 2026-07-21 — see "Voluntary mid-turn refill" below).
 - To end the turn, the player must discard one card from their hand onto one of their four discard piles.
 - After discarding, the player draws back up to 5 cards.
 - Only the top card of each discard pile is playable.
+
+### Voluntary mid-turn refill (approved 2026-07-21)
+
+The mid-turn refill was inherited from Skip-Bo, where emptying your hand and drawing 5 is
+pure upside because hand cards do not score. Salty Schooner scores hand cards at 1 point
+each, so an automatic refill actively punished the strongest line of play:
+
+- Play your last HOLD card while holding 1 hand card → **1 point**.
+- Empty your hand first, then play your last HOLD card → auto-refill fires → **5 points**.
+
+A 0-point round was therefore unreachable. Found in playtest 2026-07-21, where a player
+deliberately emptied their hand to finish at zero, was handed 5 cards, and lost the round
+on points to an opponent who had not even cleared their goal.
+
+The rule is now: **emptying your hand mid-turn offers a draw; it does not force one.**
+
+- The offer stays open for the whole turn, so declining is never a dead end — a player who
+  changes their mind draws, then discards to end the turn as normal.
+- Ending a turn still requires discarding a hand card. No new end-turn rule was added.
+- The end-of-turn refill (after the discard) is unchanged, so a turn still begins with 5.
+- Clearing your goal pile still ends the round immediately with no discard required, so a
+  player who empties their hand and then plays their last HOLD card scores 0.
+- Released Brig Kings are played from The Brig, not from hand, so an empty hand is no
+  obstacle to finishing a Jailbreak. Clearing hand + HOLD + Brig in one turn scores 0.
+- The risk: stay empty and fail to finish, and you draw 5 anyway, having given up the tail
+  of your turn.
 
 ## Run Rules
 
