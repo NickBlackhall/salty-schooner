@@ -1932,7 +1932,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 14 · 2026-07-21';
+const APP_BUILD = 'v26 · build 15 · 2026-07-21';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -1955,7 +1955,7 @@ const Telemetry = {
   startGame(names, rounds) {
     if (!this.data) this.load();
     if (this.data.current) { this.data.current.abandoned = true; this.data.games.push(this.data.current); } // finalize an abandoned game
-    this.data.current = { id:this.newId(), started:new Date().toISOString(), ended:null, players:(names||[]).slice(), rounds:rounds||null, completed:false, winner:null, scores:null, stats:this.freshStats() };
+    this.data.current = { id:this.newId(), started:new Date().toISOString(), ended:null, players:(names||[]).slice(), rounds:rounds||null, completed:false, winner:null, scores:null, stats:this.freshStats(), roundLog:[] };
     this.mark('game-started', (names?names.length:0) + ' players, ' + (rounds||'?') + ' rounds', true);
     this.save();
   },
@@ -1973,6 +1973,34 @@ const Telemetry = {
     this.mark('game-completed', (g.winner ? ('winner ' + g.winner) : '') + (g.endedEarly ? ' (ended early)' : ''), true);
     this.save();
   },
+  // Per-round records (build 15). Game-level scores gave one data point per game; a
+  // 5-game sample contained 15 rounds, so recording each round triples the evidence for
+  // questions like first-player advantage. `starter` + `winner` answers that directly,
+  // and `started`/`ended` gives round duration — the measure the "endless round" needs.
+  startRound(round, starter) {
+    if (!this.data) this.load();
+    const g = this.data.current;
+    if (!g) return;
+    if (!Array.isArray(g.roundLog)) g.roundLog = [];
+    g.roundLog.push({ round, starter:starter||null, started:new Date().toISOString(), ended:null, winner:null, scores:null });
+    this.save();
+  },
+  endRound(round, winner, players) {
+    if (!this.data) this.load();
+    const g = this.data.current;
+    if (!g || !Array.isArray(g.roundLog)) return;
+    // Match the most recent unfinished entry for this round, so a re-entered round
+    // cannot overwrite an already-closed record.
+    let r = null;
+    for (let i = g.roundLog.length - 1; i >= 0; i--) {
+      if (g.roundLog[i].round === round && !g.roundLog[i].ended) { r = g.roundLog[i]; break; }
+    }
+    if (!r) return;
+    r.ended = new Date().toISOString();
+    r.winner = winner || null;
+    if (players && players.length) r.scores = players.map(p => ({ name:p.name, roundScore:p.roundScore, total:p.total }));
+    this.save();
+  },
   bump(key, n=1) { if (!this.data) this.load(); if (this.data.current && this.data.current.stats[key] !== undefined) this.data.current.stats[key] += n; this.save(); },
   mark(type, detail, skipSave) {
     if (!this.data) this.load();
@@ -1983,12 +2011,25 @@ const Telemetry = {
   reset() { this.data = this.fresh(); this.save(); },
   allGames() { const g = [...this.data.games]; if (this.data.current) g.push(this.data.current); return g; },
   totals() { const t = this.freshStats(); this.allGames().forEach(g => this.STAT_KEYS.forEach(k => t[k] += (g.stats && g.stats[k]) || 0)); return t; },
+  // Does starting a round win it? The direct test for first-player advantage — one
+  // data point per ROUND rather than per game. Only counts rounds recorded since
+  // build 15, so it reads 0/0 until new games are played.
+  starterWinRate() {
+    let won = 0, total = 0;
+    this.allGames().forEach(g => (g.roundLog || []).forEach(r => {
+      if (!r.ended || !r.winner || !r.starter) return;
+      total++;
+      if (r.winner === r.starter) won++;
+    }));
+    return { won, total };
+  },
   summaryHtml() {
     if (!this.data) this.load();
     const games = this.allGames();
     const completed = games.filter(g => g.completed).length;
     const t = this.totals();
     const rounds = t.roundsStarted || 0;
+    const sw = this.starterWinRate();
     const per = (n) => rounds ? (n / rounds).toFixed(2) + '/round' : '';
     const row = (label, val, extra='') => `<tr><td style="padding:3px 12px 3px 0;">${label}</td><td style="text-align:right;font-weight:700;padding:3px 0;">${val}</td><td style="text-align:right;color:#9a8a6a;padding:3px 0 3px 12px;font-size:11px;">${extra}</td></tr>`;
     const rows = [
@@ -2001,12 +2042,22 @@ const Telemetry = {
       row('&nbsp;&nbsp;· FAILED', t.jailbreaksFailed),
       row('Failed-jailbreak Kings', t.failedJailbreakKings),
       row('Curse penalty cards dealt', t.cursePenaltyCards),
-      row('HARD STALLS (out of cards)', `<span style="color:${t.hardStalls>0?'#c0392b':'inherit'}">${t.hardStalls}</span>`)
+      row('HARD STALLS (out of cards)', `<span style="color:${t.hardStalls>0?'#c0392b':'inherit'}">${t.hardStalls}</span>`),
+      row('Rounds won by whoever started', sw.total ? `${sw.won} / ${sw.total}` : '—', sw.total ? Math.round(100*sw.won/sw.total) + '%' : 'build 15+')
     ].join('');
     const gameList = games.slice(-8).reverse().map(g => {
       const st = g.stats || {};
       const tag = g.completed ? (g.winner ? 'won by ' + g.winner : 'done') : (g.abandoned ? 'abandoned' : g.legacy ? 'legacy' : 'in progress');
-      return `<div style="font-size:11px;padding:2px 0;border-top:1px solid rgba(154,138,106,.25);">${(g.started||'').slice(5,16).replace('T',' ')} · ${(g.players||[]).join(' v ')||'—'} · ${g.rounds||'?'}r · <b>${tag}</b> · JB ${st.jailbreaksTriggered||0}/${st.jailbreaksFailed||0}f · stalls ${st.hardStalls||0}</div>`;
+      // Per-round strip (build 15): seat numbers keep it readable — "R1 ▶1 ✓2" means
+      // round 1 was started by seat 1 and won by seat 2. Gold when the starter won.
+      const seat = (name) => { const i = (g.players || []).indexOf(name); return i < 0 ? '?' : (i + 1); };
+      const strip = (g.roundLog || []).filter(r => r.ended).map(r => {
+        const mins = r.started ? Math.round((new Date(r.ended) - new Date(r.started)) / 60000) : null;
+        const hit = r.winner && r.starter && r.winner === r.starter;
+        return `<span style="white-space:nowrap;margin-right:8px;${hit?'color:#c9a227;font-weight:700;':''}">R${r.round} &#9654;${seat(r.starter)} &#10003;${seat(r.winner)}${mins!==null?` <span style="color:#9a8a6a;">${mins}m</span>`:''}</span>`;
+      }).join('');
+      const stripHtml = strip ? `<div style="font-size:10px;padding:1px 0 2px 0;color:#6f6350;">${strip}</div>` : '';
+      return `<div style="font-size:11px;padding:2px 0;border-top:1px solid rgba(154,138,106,.25);">${(g.started||'').slice(5,16).replace('T',' ')} · ${(g.players||[]).join(' v ')||'—'} · ${g.rounds||'?'}r · <b>${tag}</b> · JB ${st.jailbreaksTriggered||0}/${st.jailbreaksFailed||0}f · stalls ${st.hardStalls||0}${stripHtml}</div>`;
     }).join('') || '<div style="font-size:12px;color:#9a8a6a;">No games recorded yet.</div>';
     return `<p style="margin:0 0 8px;font-size:11px;color:#9a8a6a;">${completed} completed game${completed===1?'':'s'} recorded (${games.length} total). Saved on this device+URL only — Export before re-dropping a new build.</p>`
       + `<table style="border-collapse:collapse;width:100%;font-size:13px;">${rows}</table>`
@@ -2306,10 +2357,16 @@ function startRound() {
     if (opener.value === 1) state.runs[0].direction = 'up';
     if (opener.value === 12) state.runs[0].direction = 'down';
   }
-  state.currentPlayer = 0;
+  // Rotate the starting player each round (build 15). A round is a race — it ends the
+  // instant someone clears their HOLD pile, and the loser keeps theirs as points — so
+  // whoever starts gets an extra turn. This used to be hardcoded to player 0, handing
+  // that edge to Player 1 in every round of every game.
+  state.currentPlayer = (state.round - 1) % state.players.length;
   selected = null;
-  log(`Round ${state.round} started. The Brig begins with 1 King.`);
+  const starter = currentPlayer();
+  log(`Round ${state.round} started. ${starter.name} goes first. The Brig begins with 1 King.`);
   Telemetry.bump('roundsStarted');
+  Telemetry.startRound(state.round, starter.name);
   render();
 }
 function startGame(names, requestedConfig={}) {
@@ -2342,6 +2399,7 @@ function endRound(winner) {
     p.roundScore = p.goal.length + p.hand.length;
     p.total += p.roundScore;
   });
+  Telemetry.endRound(state.round, winner.name, state.players);
   render();
   const rounds = activeMatchConfig().rounds;
   const scoresHtml = `<p><b>${winner.name}</b> cleared their goal pile.</p><p>${state.players.map(p => `${p.name}: +${p.roundScore} (${p.total} total)`).join('<br>')}</p>`;

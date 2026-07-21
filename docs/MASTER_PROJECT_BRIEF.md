@@ -47,6 +47,12 @@
 - The remaining cards form the draw deck.
 - Each player has four personal discard piles.
 - There are four shared runs.
+- **The starting player rotates each round** (approved 2026-07-21): player 1 starts round 1,
+  player 2 starts round 2, and so on, wrapping around. Previously player 1 started every
+  round, which handed them a standing edge — a round is a race that ends the instant someone
+  clears their HOLD pile, and the loser keeps theirs as points, so whoever starts gets an
+  extra turn. Note that with 3 players over 4 rounds the rotation is still slightly uneven
+  (player 1 starts twice); revisit if 3-handed play becomes common.
 
 ## Turn Structure
 
