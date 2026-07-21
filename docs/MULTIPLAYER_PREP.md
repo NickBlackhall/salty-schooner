@@ -64,6 +64,27 @@ Item **#1** — separate rules from looks. It's the foundation; a structural cle
 with no rule changes, so the game should feel identical afterward. A function-by-
 function checklist for exactly this is in `docs/RULES_VS_LOOKS_MAP.md`.
 
+## Tracker sync — a good first use of Supabase, before multiplayer (2026-07-21)
+
+The playtest Tracker lives in `localStorage`, so the record is per-device *and* per-URL:
+phone, iPad, and computer each keep their own, and every new Netlify Drop URL starts empty
+— shipping a build wipes it. Manual export/import works (merges, deduped by game id) but
+is tedious, and getting a file off a phone is worse.
+
+**This does not need the multiplayer work.** At game end the Tracker posts its record to a
+single insert-only table. Every device writes to the same place; build drops stop mattering.
+
+- One table, insert-only. No login, no reads from the game, no realtime, no RLS puzzle.
+- `localStorage` stays primary and the post is best-effort, so a dead network never blocks
+  a game — records sync later. The game must stay fully playable offline.
+- Game ids already exist, so re-sending is harmless.
+- Free tier is far more than enough.
+
+Roughly half a day, and it is not throwaway: it stands up the Supabase project multiplayer
+needs anyway, with a low-stakes first use. Good rehearsal. The one real cost is that
+`app/index.html` is currently 100% offline with no network calls — this adds a dependency,
+so it needs care. Archived exports meanwhile live in `docs/playtest-data/`.
+
 ## Quick chat / taunts (online-only, decided 2026-07-21)
 
 Nick's ask: a way to talk to remote players mid-game — "type a note, hit send, it goes to

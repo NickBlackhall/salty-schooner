@@ -1,0 +1,137 @@
+{
+  "schema": 2,
+  "since": "2026-07-20T18:23:46.397Z",
+  "games": [
+    {
+      "id": "gmrthvlnlw2g2",
+      "started": "2026-07-20T17:24:40.161Z",
+      "ended": null,
+      "players": [
+        "Player 1",
+        "Player 2"
+      ],
+      "rounds": 4,
+      "completed": false,
+      "winner": null,
+      "scores": null,
+      "stats": {
+        "roundsStarted": 1,
+        "roundsCompleted": 0,
+        "kingOpenerRedeals": 0,
+        "runsCompleted": 0,
+        "deckRecycles": 0,
+        "recycledCardsTotal": 0,
+        "jailbreaksTriggered": 0,
+        "jailbreaksSucceeded": 0,
+        "jailbreaksFailed": 0,
+        "failedJailbreakKings": 0,
+        "cursePenaltyCards": 0,
+        "hardStalls": 0
+      },
+      "abandoned": true
+    },
+    {
+      "id": "gmrtivfaw01p9",
+      "started": "2026-07-20T17:52:31.544Z",
+      "ended": "2026-07-20T18:07:54.032Z",
+      "players": [
+        "Player 1",
+        "Player 2"
+      ],
+      "rounds": 4,
+      "completed": true,
+      "winner": "Player 1",
+      "scores": [
+        {
+          "name": "Player 1",
+          "total": 17
+        },
+        {
+          "name": "Player 2",
+          "total": 26
+        }
+      ],
+      "stats": {
+        "roundsStarted": 4,
+        "roundsCompleted": 4,
+        "kingOpenerRedeals": 1,
+        "runsCompleted": 2,
+        "deckRecycles": 0,
+        "recycledCardsTotal": 0,
+        "jailbreaksTriggered": 3,
+        "jailbreaksSucceeded": 3,
+        "jailbreaksFailed": 0,
+        "failedJailbreakKings": 0,
+        "cursePenaltyCards": 0,
+        "hardStalls": 0
+      }
+    },
+    {
+      "id": "gmrtjzr3w6ntn",
+      "started": "2026-07-20T18:23:53.084Z",
+      "ended": null,
+      "players": [
+        "Player 1",
+        "Player 2"
+      ],
+      "rounds": 4,
+      "completed": false,
+      "winner": null,
+      "scores": null,
+      "stats": {
+        "roundsStarted": 1,
+        "roundsCompleted": 0,
+        "kingOpenerRedeals": 0,
+        "runsCompleted": 0,
+        "deckRecycles": 0,
+        "recycledCardsTotal": 0,
+        "jailbreaksTriggered": 0,
+        "jailbreaksSucceeded": 0,
+        "jailbreaksFailed": 0,
+        "failedJailbreakKings": 0,
+        "cursePenaltyCards": 0,
+        "hardStalls": 0
+      },
+      "abandoned": true
+    }
+  ],
+  "current": {
+    "id": "gmrtnm01ygmlq",
+    "started": "2026-07-20T20:05:09.958Z",
+    "ended": null,
+    "players": [
+      "Player 1",
+      "Player 2"
+    ],
+    "rounds": 4,
+    "completed": false,
+    "winner": null,
+    "scores": null,
+    "stats": {
+      "roundsStarted": 1,
+      "roundsCompleted": 0,
+      "kingOpenerRedeals": 0,
+      "runsCompleted": 0,
+      "deckRecycles": 0,
+      "recycledCardsTotal": 0,
+      "jailbreaksTriggered": 0,
+      "jailbreaksSucceeded": 0,
+      "jailbreaksFailed": 0,
+      "failedJailbreakKings": 0,
+      "cursePenaltyCards": 0,
+      "hardStalls": 0
+    }
+  },
+  "recent": [
+    {
+      "at": "2026-07-20T20:05:09.958Z",
+      "type": "game-started",
+      "detail": "2 players, 4 rounds"
+    },
+    {
+      "at": "2026-07-20T18:23:53.084Z",
+      "type": "game-started",
+      "detail": "2 players, 4 rounds"
+    }
+  ]
+}
