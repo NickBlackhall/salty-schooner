@@ -1,0 +1,42 @@
+{
+  "schema": 2,
+  "since": "2026-07-20T22:10:53.135Z",
+  "games": [],
+  "current": {
+    "id": "gmrts51e3rzrj",
+    "started": "2026-07-20T22:11:56.619Z",
+    "ended": null,
+    "players": [
+      "Becky",
+      "NICK"
+    ],
+    "rounds": 4,
+    "completed": false,
+    "winner": null,
+    "scores": null,
+    "stats": {
+      "roundsStarted": 2,
+      "roundsCompleted": 1,
+      "kingOpenerRedeals": 0,
+      "runsCompleted": 9,
+      "deckRecycles": 2,
+      "recycledCardsTotal": 74,
+      "jailbreaksTriggered": 4,
+      "jailbreaksSucceeded": 3,
+      "jailbreaksFailed": 1,
+      "failedJailbreakKings": 1,
+      "cursePenaltyCards": 1,
+      "hardStalls": 0
+    }
+  },
+  "recent": [
+    { "at": "2026-07-21T05:24:40.094Z", "type": "deck-recycle", "detail": "29 cards" },
+    { "at": "2026-07-20T23:01:34.603Z", "type": "deck-recycle", "detail": "45 cards" },
+    { "at": "2026-07-20T23:00:15.427Z", "type": "jailbreak-triggered", "detail": "1 Kings released" },
+    { "at": "2026-07-20T22:43:46.800Z", "type": "jailbreak-FAILED", "detail": "1 Kings, 1 penalty cards" },
+    { "at": "2026-07-20T22:42:51.660Z", "type": "jailbreak-triggered", "detail": "2 Kings released" },
+    { "at": "2026-07-20T22:38:01.690Z", "type": "jailbreak-triggered", "detail": "2 Kings released" },
+    { "at": "2026-07-20T22:16:00.628Z", "type": "jailbreak-triggered", "detail": "1 Kings released" },
+    { "at": "2026-07-20T22:11:56.619Z", "type": "game-started", "detail": "2 players, 4 rounds" }
+  ]
+}

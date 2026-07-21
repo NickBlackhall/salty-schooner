@@ -24,6 +24,7 @@ several devices into one record works by importing each in turn.
 |---|---|---|
 | `2026-07-20-tracker-export.json` | 3 (1 completed, 2 abandoned) | First export. 2-player, 4-round. |
 | `2026-07-21-phone-tracker-export.json` | 1 (completed) | Phone. Separate record — its `since` is 2026-07-21, confirming a build drop reset it. |
+| `2026-07-21-ipad-tracker-export.json` | 1 (in progress) | iPad. **The "endless round" game — see the section below.** Record is `current`, not yet in `games`. |
 
 ## Read-out as of 2026-07-21 (4 games, 2 completed, 8 rounds)
 
@@ -67,6 +68,84 @@ Per completed game:
   and it costs nothing to keep an eye on as more games land.
 - **Duration varies 5.5x** (15m vs 85m) for the same 2-player, 4-round config. Probably
   interruptions rather than the game itself, but worth confirming.
+
+## The 2026-07-21 iPad game — the "endless round" (IMPORTANT)
+
+Nick's note: *"genuinely the longest and most unenjoyable round I've played so far."* The
+data agrees, and it points at a specific mechanism.
+
+The record is still `current` (unfinished), sitting at **round 2 of 4** after starting at
+22:11 and still going at 05:24 the next morning. In roughly a round and a half:
+
+| | This game | Previous 2 games (8 rounds) |
+|---|---|---|
+| Runs completed | **9** | 10 |
+| Deck recycles | **2 (74 cards)** | 0 |
+| Jailbreaks | 4 (3 succeeded, **1 failed**) | 10 (10 succeeded) |
+
+Two players is 104 cards, so **74 recycled means most of the pack cycled through twice
+without the round ending.** High activity, no progress toward the actual win condition.
+
+### Hypothesis: completing runs makes the board *harder* to play, and nothing forces an end
+
+Two mechanisms, both visible in the code, that compound:
+
+1. **Completed runs drain Kings out of circulation.** On completion, non-King cards go to
+   the recycle pile ([`app/index.html:2263`](../../app/index.html#L2263)) but **Kings go to
+   The Brig** ([`:2265`](../../app/index.html#L2265)). Recycled cards return to the deck when
+   it empties ([`:2167`](../../app/index.html#L2167)); Brig Kings do not. Kings only leave the
+   Brig via a Jailbreak, get played onto runs, and when those runs complete they go straight
+   back to the Brig. So Kings cycle Brig → run → Brig and are rarely in anyone's hand.
+   Kings are the wildcards that unstick an awkward HOLD top — as they concentrate in the
+   Brig, HOLD piles get progressively harder to clear as the round wears on.
+   Worse, it is self-reinforcing: a Jailbreak only triggers when a player *plays* a King
+   onto a run ([`:2616`](../../app/index.html#L2616)), so the fewer Kings in circulation, the
+   less often the Brig opens to release them.
+
+2. **A completed run is replaced by an empty run, which is a narrower target.** An empty run
+   accepts only an Ace or a Queen. A partially built run accepts its next value *and* a King.
+   So each completion trades a flexible target for a restrictive one. Nine completions in a
+   round and a half plausibly left the board sitting on empty runs waiting for A/Q.
+
+3. **Nothing terminates the round.** Before the recycle pile, deck exhaustion ended things
+   (badly — via the hard stall). The recycle pile fixed that, but the card loop is now closed:
+   run → recycle → deck → hand → run. A round ends *only* when someone empties their HOLD
+   pile. If HOLD tops are stuck, the game churns indefinitely. **0 hard stalls here is not
+   good news** — it means the game never even reached the failure state we were watching for.
+   It just kept going.
+
+**This looks like the recycle-pile ratification's unintended consequence:** it converted a
+hard stall (game breaks, obvious) into a soft stall (game continues, unenjoyable, invisible
+to the tracker). Soft stalls are worse, because nothing flags them.
+
+### Caveat on the hypothesis
+
+This is inference from aggregate counters plus Nick's account. The tracker records *what*
+happened, not the board state, so it cannot show whether runs really were sitting empty or
+whether HOLD tops really were stuck. Confirming it needs either the richer telemetry below
+or a deliberate replay. **Do not change a rule on this alone.**
+
+### Also: the Curse of the Crown finally fired
+
+`jailbreak-FAILED — 1 Kings, 1 penalty cards` at 22:43:46. First time in 14 recorded
+Jailbreaks. The failure path — penalty card to the goal bottom, King reshuffled into the
+deck, build 13's failure animation — has now executed once in real play without incident.
+
+## What the tracker should record next
+
+Nick: *"I wish your tracking was more detailed so you could see how it played out."* Agreed —
+the current stats are lifetime counters, which show volume but not shape. To have diagnosed
+the above from data alone, it would have needed:
+
+- **Per-round timestamps and turn counts** — the single highest-value addition. "Round 1 took
+  47 minutes and 63 turns" states the problem outright.
+- **HOLD pile size per player at the end of each turn.** A flat line is the smoking gun for a
+  stuck round, and it is one number per player per turn.
+- **Turns where the player made no run play** (discard only) — the direct measure of "nobody
+  could do anything."
+- **Board snapshot at run completion** — how many runs were empty, how many Kings in the Brig.
+- **Card counts by location over time** (deck / hands / HOLD / ports / runs / Brig) — would
+  show the King drain into the Brig directly.
 
 ### Caveats
 
