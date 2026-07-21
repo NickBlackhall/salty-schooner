@@ -25,6 +25,7 @@ several devices into one record works by importing each in turn.
 | `2026-07-20-tracker-export.json` | 3 (1 completed, 2 abandoned) | First export. 2-player, 4-round. |
 | `2026-07-21-phone-tracker-export.json` | 4 (all completed) | Phone. Its `since` is 2026-07-21, confirming a build drop reset it. Updated later the same day with 3 further games (`recent` trimmed; superset of the earlier 1-game version, see git history). |
 | `2026-07-21-ipad-tracker-export.json` | 1 (in progress) | iPad. **The "endless round" game — see the section below.** Record is `current`, not yet in `games`. |
+| `2026-07-21-1648-tracker-export.json` | 1 (completed) | Another fresh record (`since` 16:48). **The last pre-build-15 game** — closes the "P1 always starts" baseline. |
 
 ## Read-out as of 2026-07-21 (4 games, 2 completed, 8 rounds)
 
@@ -81,33 +82,42 @@ so **Player 1 starts every round of every game**. That matters because a round i
 it ends the instant someone empties their HOLD pile, and the loser eats their remaining HOLD
 as points. If P1 clears on their 12th turn, P2 has had only 11.
 
-All completed games so far:
+### The pre-rotation baseline — all 6 games where P1 always started
 
-| Date | Config | Rounds | Duration | Runs | Jailbreaks | Winner | Scores | Ended early |
+These are every completed game played under the old rule. **This set is closed**: build 15
+rotates the starter, so nothing further will be added to it. It is the baseline any
+post-rotation data should be compared against.
+
+| Date | Config | Rounds | Duration | Runs | Jailbreaks | Winner | Scores | Margin |
 |---|---|---|---|---|---|---|---|---|
-| 07-20 | 4 | 4 | 15m | 2 | 3 | P1 | 17, 26 | |
-| 07-21 | 4 | 4 | 84m | 8 | 7 | P1 | 16, 26 | |
-| 07-21 | 3 | 2 | 10m | 2 | 3 | **P2** | 17, **5** | clinch |
-| 07-21 | 3 | 2 | 3m | 1 | 1 | P1 | **5**, 20 | clinch |
-| 07-21 | 3 | 3 | 18m | 4 | 5 | P1 | 15, 19 | |
+| 07-20 | 4 | 4 | 15m | 2 | 3 | P1 | 17, 26 | 9 |
+| 07-21 | 4 | 4 | 84m | 8 | 7 | P1 | 16, 26 | 10 |
+| 07-21 | 3 | 2 | 10m | 2 | 3 | **P2** | 17, **5** | 12 (clinch) |
+| 07-21 | 3 | 2 | 3m | 1 | 1 | P1 | **5**, 20 | 15 (clinch) |
+| 07-21 | 3 | 3 | 18m | 4 | 5 | P1 | 15, 19 | 4 |
+| 07-21 | 3 | 3 | 14m | 3 | 3 | P1 | 16, 17 | **1** |
 
-**P1 has won 4 of 5. That is not evidence yet** — a fair coin produces 4-or-more heads in 5
-tosses **18.8%** of the time. Settling it statistically would take roughly 20+ games.
+**P1 won 5 of 6 — and that is still not statistical evidence.** A fair coin produces
+5-or-more heads in 6 tosses **10.9%** of the time, above the usual 5% bar. The change was
+made on the structural argument, not this table.
 
-**Recommendation: make the change anyway.** The structural argument stands without the data,
-rotating the starting player is standard practice in card games, and there is no downside. It
-also removes a confound, so future games measure the game rather than the seat.
+Note the final game's **margin of 1** (16 v 17), by far the closest yet — a useful reminder
+that the seat, if it matters at all, does not decide games on its own.
 
 Wrinkle for later: with **3 players over 4 rounds** the rotation gives P1 two starts (P1, P2,
-P3, P1). Not a reason to wait — just something to revisit if 3-handed play becomes common.
+P3, P1). Revisit if 3-handed play becomes common.
 
-### The cheapest way to actually settle it: record round winners
+### How this gets settled from here (build 15 onward)
 
-The tracker stores only final game scores, so those 5 games yielded **5** data points. They
-contained **15 rounds**. Recording the winner of each round would have given 15 — triple the
-statistical power, from games already played, for one extra field. This is the single
-highest-value telemetry addition for this question, and it belongs with the richer per-round
-telemetry described further down.
+Game-level scores gave **6** data points across **18 rounds**. Build 15 records each round's
+starter and winner, so the same amount of play now yields three times the evidence, and the
+Tracker computes the number directly:
+
+> **Rounds won by whoever started** — around **50%** means the seat is fair.
+
+If that settles well above 50% even with rotation, the race dynamic itself favours the
+starter and rotation alone is not the fix. Pre-build-15 games have no round log and are
+excluded, so the figure reads `—` until new games accumulate.
 
 ## Other observations from the 2026-07-21 phone games
 
@@ -117,12 +127,15 @@ telemetry described further down.
   are winner-take-most, because the round loser keeps their whole remaining HOLD pile.
 - **Games are usually short.** 3, 10, 15, 18 minutes — with one 84-minute outlier. The
   "endless round" below is genuinely anomalous, not typical.
-- **Jailbreak rate holds at 1.27 per round** (19 across 15 rounds), consistent with the earlier
-  read. Still frequent enough to question build 13's dramatic build-up.
-- **0 deck recycles, 0 hard stalls across all 5 completed games**, which makes the iPad game's
-  2 recycles stand out further.
-- **0 failed Jailbreaks in these 19.** Combined with earlier data that is roughly 1 failure in
-  30 — the Curse of the Crown remains very nearly untested.
+- **Jailbreak rate holds at 1.22 per round** (22 across 18 rounds), stable across every
+  session. Still frequent enough to question build 13's dramatic build-up.
+- **0 deck recycles and 0 hard stalls across all 6 completed games**, which makes the iPad
+  game's 2 recycles stand out further as an outlier.
+- **0 failed Jailbreaks in those 22.** Across everything recorded that is roughly 1 failure
+  in 30 — the Curse of the Crown remains very nearly untested.
+- **Score margins span 1 to 15** (1, 4, 9, 10, 12, 15). Rounds are winner-take-most because
+  the round loser keeps their whole remaining HOLD pile, but games are not foregone
+  conclusions.
 
 ## The 2026-07-21 iPad game — the "endless round" (IMPORTANT)
 
