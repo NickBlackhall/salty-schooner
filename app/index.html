@@ -1932,7 +1932,7 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 16 · 2026-07-21';
+const APP_BUILD = 'v26 · build 17 · 2026-07-22';
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -2249,7 +2249,7 @@ function createMatchState(names, requestedConfig={}) {
     matchConfig,
     round: 1,
     currentPlayer: 0,
-    deck: [], runs: [], brig: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, handEmptyNoted:false, log: [], version: 'v26-configurable-match'
+    deck: [], runs: [], brig: [], recycle: [], jailbreak:{active:false,kings:[],initialCount:0}, stalls:[], pendingWinner:null, pendingDecision:null, handEmptyNoted:false, log: [], version: 'v26-configurable-match'
   };
 }
 
@@ -2438,6 +2438,7 @@ function startRound() {
   state.recycle = [];
   state.jailbreak = { active:false, kings:[], initialCount:0 };
   state.pendingWinner = null;
+  state.pendingDecision = null;
   if (!Array.isArray(state.stalls)) state.stalls = [];
   // remove one random king for the brig
   const kIndex = state.deck.findIndex(c => c.rank === 'K');
@@ -2608,22 +2609,27 @@ function beginTurnHandoff(duration=4000) {
     }, 300);
   }, duration);
 }
-function getSelectedCard() {
-  if (!selected) return null;
+// Card lookup by an explicit {zone,index} source. `selected` is a screen-only idea —
+// "the card this device's user has their finger on" — so anything that has to survive
+// past the moment of tapping (a pending King declaration) records a source instead.
+function getCardFrom(source) {
+  if (!source) return null;
   const p = currentPlayer();
-  if (selected.zone === 'goal') return topCard(p.goal);
-  if (selected.zone === 'hand') return p.hand[selected.index];
-  if (selected.zone === 'discard') return topCard(p.discards[selected.index]);
-  if (selected.zone === 'jailbreak') return state.jailbreak && state.jailbreak.kings[selected.index];
+  if (source.zone === 'goal') return topCard(p.goal);
+  if (source.zone === 'hand') return p.hand[source.index];
+  if (source.zone === 'discard') return topCard(p.discards[source.index]);
+  if (source.zone === 'jailbreak') return state.jailbreak && state.jailbreak.kings[source.index];
   return null;
 }
-function removeSelectedCard() {
+function removeCardFrom(source) {
   const p = currentPlayer();
-  if (selected.zone === 'goal') return p.goal.pop();
-  if (selected.zone === 'hand') return p.hand.splice(selected.index,1)[0];
-  if (selected.zone === 'discard') return p.discards[selected.index].pop();
-  if (selected.zone === 'jailbreak') return state.jailbreak.kings.splice(selected.index,1)[0];
+  if (source.zone === 'goal') return p.goal.pop();
+  if (source.zone === 'hand') return p.hand.splice(source.index,1)[0];
+  if (source.zone === 'discard') return p.discards[source.index].pop();
+  if (source.zone === 'jailbreak') return state.jailbreak.kings.splice(source.index,1)[0];
 }
+function getSelectedCard() { return getCardFrom(selected); }
+function removeSelectedCard() { return removeCardFrom(selected); }
 function undoAddSelected(card) {
   const p = currentPlayer();
   if (selected.zone === 'goal') p.goal.push(card);
@@ -2646,6 +2652,7 @@ function flashIllegalRun(runIndex, message) {
   }, 700);
 }
 function playSelectedToRun(runIndex) {
+  if (decisionPending()) return;
   const card = getSelectedCard();
   const run = state.runs[runIndex];
   if (!card) return flashIllegalRun(runIndex, 'Select card');
@@ -2728,6 +2735,7 @@ function afterPlay() {
 // active player's hand is empty, and it stays on offer for the rest of the turn — so
 // declining is never a dead end: you can always draw, then discard to end your turn.
 function drawHandCards() {
+  if (decisionPending()) return;
   const p = currentPlayer();
   if (p.hand.length > 0) return;
   const drawn = drawTo(p, 5);
@@ -2743,6 +2751,12 @@ function drawHandCards() {
   selected = null;
   render();
 }
+// Playing a King is TWO moves, not one. The card does not land until its owner has
+// declared a value and a direction, so the question itself is written into
+// state.pendingDecision and the answer arrives later via declareKing(). The pop-up is
+// drawn *from* that record (see renderPendingDecision) rather than being the record.
+// Before build 17 the half-finished move lived only in a visible modal plus `selected`,
+// which meant nothing in the game state knew a decision was outstanding or whose it was.
 function handleKingPlay(runIndex, card) {
   const run = state.runs[runIndex];
   if (!run.direction) return handleUnsetNaturalKingPlay(runIndex, card);
@@ -2750,41 +2764,76 @@ function handleKingPlay(runIndex, card) {
   if (required === null) return flashIllegalRun(runIndex, 'Natural A/Q');
   const currentDir = run.direction;
   const reverseDir = currentDir === 'up' ? 'down' : 'up';
-  showModal(
-    'Captain’s Orders',
-    `<p>${cardLabel(card)} represents <b>${VALUE_NAMES[required]}</b>.</p><p>Which direction does the run continue?</p>`,
-    [
-      {label:`Continue ${currentDir.toUpperCase()}`, action:()=>commitKing(runIndex, required, currentDir)},
-      {label:`Reverse ${reverseDir.toUpperCase()}`, action:()=>commitKing(runIndex, required, reverseDir)}
+  openKingDeclaration({
+    runIndex,
+    title: 'Captain’s Orders',
+    body: `<p>${cardLabel(card)} represents <b>${VALUE_NAMES[required]}</b>.</p><p>Which direction does the run continue?</p>`,
+    options: [
+      {value:required, dir:currentDir, label:`Continue ${currentDir.toUpperCase()}`},
+      {value:required, dir:reverseDir, label:`Reverse ${reverseDir.toUpperCase()}`}
     ]
-  );
+  });
 }
 function handleUnsetNaturalKingPlay(runIndex, card) {
   const run = state.runs[runIndex];
   const natural = run && run.cards.length === 1 ? run.cards[0] : null;
   const choices = unsetNaturalKingChoices(run);
   if (!card || card.rank !== 'K' || !choices.length) return flashIllegalRun(runIndex, 'Illegal play');
+  // One legal reading means there is nothing to ask: commit straight away, no pop-up.
   if (choices.length === 1) {
-    commitKing(runIndex, choices[0].kingValue, choices[0].dir);
+    commitKing(runIndex, choices[0].kingValue, choices[0].dir, selected);
     return;
   }
-  showModal(
-    'Set the Course',
-    `<p>${cardLabel(card)} follows ${cardLabel(natural)} as a wildcard.</p><p>What value does the King represent?</p>`,
-    choices.map(choice => ({
-      label:`King as ${VALUE_NAMES[choice.kingValue]} — run ${choice.dir.toUpperCase()}`,
-      action:()=>commitKing(runIndex, choice.kingValue, choice.dir)
+  openKingDeclaration({
+    runIndex,
+    title: 'Set the Course',
+    body: `<p>${cardLabel(card)} follows ${cardLabel(natural)} as a wildcard.</p><p>What value does the King represent?</p>`,
+    options: choices.map(choice => ({
+      value: choice.kingValue,
+      dir: choice.dir,
+      label: `King as ${VALUE_NAMES[choice.kingValue]} — run ${choice.dir.toUpperCase()}`
     }))
-  );
+  });
 }
-function commitKing(runIndex, value, dir) {
+// Record an outstanding King declaration. The source is captured here so the answer
+// no longer depends on `selected` still pointing at the right card when it arrives.
+function openKingDeclaration({runIndex, title, body, options}) {
+  state.pendingDecision = {
+    type: 'king-declaration',
+    player: state.currentPlayer,
+    runIndex,
+    source: selected ? {zone:selected.zone, index:selected.index} : null,
+    title,
+    body,
+    options
+  };
+  // No card moves when the question opens, so there is nothing to tween — and a view
+  // transition's snapshots paint in the browser's top layer, above the modal. Same
+  // guard the Jailbreak splash uses for the same reason.
+  window.suppressCardTransitions = true;
+  try { render(); }
+  finally { window.suppressCardTransitions = false; }
+}
+// The player's answer — a move like any other, checked against the recorded question
+// rather than trusting whichever button happened to be on screen.
+function declareKing(optionIndex) {
+  const pending = state.pendingDecision;
+  if (!pending || pending.type !== 'king-declaration') return;
+  if (pending.player !== state.currentPlayer) return;
+  const choice = pending.options[optionIndex];
+  if (!choice || !pending.source) return;
+  const source = pending.source;
+  state.pendingDecision = null;
+  commitKing(pending.runIndex, choice.value, choice.dir, source);
+}
+function commitKing(runIndex, value, dir, source) {
   hideModal();
   const p = currentPlayer();
   const run = state.runs[runIndex];
-  const sourceWasReleasedKing = selected && selected.zone === 'jailbreak';
+  const sourceWasReleasedKing = source && source.zone === 'jailbreak';
   const previousRunHadKing = run.cards.some(c => c.rank === 'K');
-  Telemetry.noteRunPlay(selected && selected.zone);
-  const king = removeSelectedCard();
+  Telemetry.noteRunPlay(source && source.zone);
+  const king = removeCardFrom(source);
   king.effectiveValue = value;
   king.playedDirection = dir;
   run.cards.push(king);
@@ -3081,6 +3130,7 @@ function failActiveJailbreak() {
   return {count:failedKings.length, penalties};
 }
 function discardSelectedTo(index) {
+  if (decisionPending()) return;
   const p = currentPlayer();
   if (!selected || selected.zone !== 'hand') return alert('Select a card from your hand to discard.');
   const c = p.hand.splice(selected.index,1)[0];
@@ -3139,7 +3189,23 @@ function render() {
   renderBrig();
   renderSelected();
   renderLog();
+  renderPendingDecision();
 }
+// Draw the pop-up from state.pendingDecision. This only ever *shows*: the Round Over,
+// Game Over and Tracker modals own the same backdrop at moments when no decision is
+// pending, so hiding from here would close them.
+function renderPendingDecision() {
+  const pending = state && state.pendingDecision;
+  if (!pending || pending.type !== 'king-declaration') return;
+  showModal(pending.title, pending.body, pending.options.map((opt, i) => ({
+    label: opt.label,
+    action: () => declareKing(i)
+  })));
+}
+// While a declaration is outstanding the board is frozen. The modal backdrop already
+// blocks taps on a single shared screen; this makes the game *state* the thing that
+// says so, which is what a second device would have to ask.
+function decisionPending() { return !!(state && state.pendingDecision); }
 function renderScoreboard() {
   const el = document.getElementById('opponentGoals');
   if (!el) return;
@@ -3225,6 +3291,7 @@ function renderLog() {
   document.getElementById('log').innerHTML = state.log.slice(0,60).map(m=>`<p>${m}</p>`).join('');
 }
 function selectCard(zone,index) {
+  if (decisionPending()) return;
   // Tapping the already-selected card again clears the selection.
   if (selected && selected.zone === zone && selected.index === index) {
     selected = null;
@@ -3331,8 +3398,9 @@ if (setupTrackerBtnEl) setupTrackerBtnEl.onclick = showTelemetry;
 document.querySelectorAll('.buildStamp').forEach(el => { el.textContent = 'Build: ' + APP_BUILD; });
 if (musicToggle) musicToggle.onclick = toggleBackgroundMusic;
 if (entryMusicToggle) entryMusicToggle.onclick = toggleBackgroundMusic;
-document.getElementById('clearSelection').onclick = () => { selected=null; render(); };
+document.getElementById('clearSelection').onclick = () => { if (decisionPending()) return; selected=null; render(); };
 document.getElementById('forceEnd').onclick = () => {
+  if (decisionPending()) return;
   const p = currentPlayer();
   if (p.hand.length > 0) return alert('To end normally, select a hand card and discard it to a port.');
   // Build 14: no longer draws 5 on the way out. The hand panel's "Draw cards" button
