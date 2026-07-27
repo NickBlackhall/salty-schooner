@@ -205,6 +205,45 @@ order of how surgical they are:
 Recommend gathering 2–3 more build-16 games first to confirm the pattern repeats before
 changing a rule — but this single game is strong, clean evidence.
 
+## Nine-game build-16 turn dump (2026-07-22) — two questions answered
+
+A 302-turn CSV across **9 games** (2p/3p/4p, HOLD configs 5/6/7/10) —
+`2026-07-22-turns-build16.csv`. Two findings stand out, both actionable.
+
+### 1. Rotation appears to have neutralised first-player advantage ✓
+
+Inferring each round's starter (turn-1 seat) and winner (the seat that ends the round):
+
+> **The round starter won 8 of 18 completed rounds — 44%.** `P(≥8/18 | 50/50) = 0.76`, i.e.
+> dead-on fair.
+
+Before rotation, Player 1 won 5 of 6 *games* and the concern was a standing seat edge. After
+rotation, across 18 rounds, starting is worth nothing detectable. Small sample still, but this
+is the first real evidence **build 15 did its job.** Keep watching the Tracker's "rounds won by
+whoever started" as more games land, but the early read is: fixed.
+
+### 2. Shrinking the HOLD pile does NOT fix the stall ✗ (rules out a lever)
+
+Nick tried smaller HOLD configs (5, 6, 7) alongside the default 10. If the stall were about
+pile size, small-HOLD games would flow. They don't:
+
+| HOLD size | Dead-turn rate | Turns |
+|---|---|---|
+| 5 | **30%** | 105 |
+| 6 | 20% | 25 |
+| 7 | 18% | 49 |
+| 10 | 27% | 123 |
+
+HOLD-5 games are **not** less stally — the single worst-stalled game in the whole set
+(`gms1luwr2hdut`: 57% dead turns, an 18-turn stall streak) was a HOLD-5 game. Overall **26% of
+all 302 turns were dead** (no run play at all). The stall is independent of pile size, which
+**confirms the fix has to target the board — Kings and empty runs — not the HOLD count.** Good:
+it eliminates the easy knob and points at the King-drain mechanism identified below.
+
+Bonus confirmation of the avalanche: the biggest single turn scales with HOLD (max **22** cards
+at HOLD 10, ~14 at HOLD 5) — bigger piles just make the eventual dump bigger, they don't change
+the stall-then-avalanche shape.
+
 ## The 2026-07-21 iPad game — the "endless round" (IMPORTANT)
 
 Nick's note: *"genuinely the longest and most unenjoyable round I've played so far."* The
