@@ -244,6 +244,14 @@ Bonus confirmation of the avalanche: the biggest single turn scales with HOLD (m
 at HOLD 10, ~14 at HOLD 5) — bigger piles just make the eventual dump bigger, they don't change
 the stall-then-avalanche shape.
 
+### Root cause + the Skip-Bo / Spite & Malice comparison
+
+The full analysis — why this happens (two one-way sinks, Ports and the Brig, against one source,
+Recycle) and why the parent games avoid it (they never remove their **wild cards** from
+circulation, whereas Schooner locks its wild, the King, in the Brig) — is written up in
+`MASTER_PROJECT_BRIEF.md` → **"The Soft Stall — root-cause analysis"**. No rule change has been
+made; that section lists the fix directions to weigh later.
+
 ## The 2026-07-21 iPad game — the "endless round" (IMPORTANT)
 
 Nick's note: *"genuinely the longest and most unenjoyable round I've played so far."* The

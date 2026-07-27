@@ -157,6 +157,74 @@ Issues found:
 - Playtest tracker (added 2026-07-20): the build now records edge-case frequencies to `localStorage` and shows them via MENU > Tracker (counts for games/rounds, King-opener re-deals, runs completed, deck recycles, jailbreaks triggered/succeeded/failed, failed-jailbreak Kings, curse penalty cards, and hard stalls, plus a recent-events log). Fully offline; accumulates across playtests on the device; copy/reset from the same panel. Use it to measure how often the residual stall and other edge cases actually occur in real play.
 - Residual stall is still possible. The recycle pile prevents the most common exhaustion, but the game can still reach a hard stall: if the active player has an empty hand, the deck is empty, and the recycle pile is empty (all remaining cards locked in goal piles, discard piles, incomplete runs, The Brig, and the Locker). The player then cannot draw and cannot discard to end their turn. v26 detects and logs this (`trackNoDrawStall`) but does not resolve it. No automatic recovery exists. Worth deciding on a rule (e.g. recycle discard piles, or a forced end-of-turn) before it bites in a real game.
 
+## The Soft Stall — root-cause analysis (2026-07-22, NO RULE CHANGE YET)
+
+> **Status: findings only.** Nothing below has been implemented. No rule has changed. This
+> section records what the build-16 telemetry and a comparison with the parent games revealed,
+> so the eventual fix (if any) rests on written reasoning rather than memory. Any rule change
+> still requires Nick's explicit approval and its own entry.
+
+### What the data showed
+
+Build 16 added per-turn telemetry (HOLD size per player, dead turns, empty runs, Brig size).
+Across a 9-game / 302-turn dump (2026-07-22, in `docs/playtest-data/`):
+
+- **The round is "stall, then avalanche."** ~26% of all turns were *dead* (no run play at all).
+  Rounds sat frozen — one game had **11 consecutive dead turns** with both HOLD piles stuck at
+  10/10 — then one player cleared their whole pile in a single 20+ card turn.
+- **Shrinking the HOLD pile does NOT help.** HOLD-5 games ran *30%* dead vs 27% at HOLD 10, and
+  the single worst-stalled game in the set was a HOLD-5 game. **Pile size is not the lever.**
+- **The stall breaks on a King.** Frozen boards unlocked only when a King finally reached play
+  and a Jailbreak fired. This is not idle-time contamination — the dead turns are seconds apart.
+
+### Root cause: two one-way sinks vs one source
+
+Within a round, cards flow out of circulation faster than they flow back:
+
+- **Sink 1 — Ports.** Every turn ends with a discard to a Port, and Port cards never return to
+  the deck or recycle (only each Port's *top* is playable). Circulation shrinks every turn.
+- **Sink 2 — The Brig.** Completed-run Kings go to the Brig and only escape via a Jailbreak,
+  which itself can only fire when a King is *played*. Fewer circulating Kings → fewer Jailbreaks
+  → the drain feeds itself.
+- **Only source — Recycle**, which refills the deck only from *completed-run non-King cards*. It
+  never reclaims Ports, and it never releases the Brig.
+
+The shuffle/deck code itself is correct (see the audit above) — this is a card-*economy* issue,
+not a bug.
+
+### Why Skip-Bo and Spite & Malice don't lock up (the key comparison)
+
+Those parent games have the **same** Port-style discard sink and the **same** "reshuffle
+completed center piles" recycle. They run for years without hard-locking. The difference is
+**wild cards**:
+
+- Skip-Bo ships ~18 wilds in 162 cards (~11%); Spite & Malice makes Kings (and often Jokers)
+  wild. In both, **wilds circulate freely forever** — drawn, played, discarded, recycled.
+- An empty foundation needs a 1/Ace, just like an empty Schooner run needs A/Q — but there is
+  always a wild floating around to start or continue it. The wild is the pressure-release valve.
+- Discard piles there are *offense*: players build descending sequences and chain them off,
+  actively draining the pile. That only works because foundations stay reachable — i.e. because
+  wilds are available.
+
+**Schooner's Brig is the divergence.** It takes the one card that prevents lockup — the King,
+its wild — and turns it into a scarce, hoardable, drainable asset. As a round wears on the
+effective circulating-wild density falls toward zero, while the parent games hold ~11%. That
+single choice is the difference between "occasionally slow" and "genuinely stalled," and it is
+exactly consistent with the data: King availability mattered, HOLD size did not.
+
+### Fix directions to weigh later (none chosen, none implemented)
+
+All aim to keep Kings closer to an always-available wild without discarding the Brig drama:
+
+1. Completed-run Kings go to **recycle** (back into the deck) instead of always to the Brig.
+2. The Brig **periodically releases** a King on its own, not only via a played-King Jailbreak.
+3. Seed a small number of **true wilds** (e.g. Jokers) that never enter the Brig — closest to
+   the Skip-Bo model.
+4. (Targets the other sink) let buried **Port** cards recycle as a last resort.
+
+Recommendation before touching anything: gather a few more build-16 games to confirm the
+pattern holds, then pick one lever and change only that, measuring dead-turn rate before/after.
+
 ## Confirmed Playtest Behavior
 
 - Forced Jailbreak triggers when The Brig is occupied and the first King is played into a new run.
@@ -172,7 +240,7 @@ Issues found:
 - Does Curse of the Crown create runaway losses for a player who is already behind?
 - Does first-player position create a meaningful advantage?
 - Do players intentionally manage discard piles, or do turns still feel mostly driven by luck?
-- Does completing a run with several Kings create satisfying tension or excessive Brig buildup?
+- Does completing a run with several Kings create satisfying tension or excessive Brig buildup? **(Update 2026-07-22: build-16 telemetry links Brig buildup directly to the soft stall — see "The Soft Stall — root-cause analysis" above. No rule change yet.)**
 - Deliberate stalling / lock-out (raised by Nick, 2026-07-20): a player can intentionally hoard a needed number card (never discarding it) to purposely jam the game — a real tactic Nick used as a kid. This is the *intentional* cousin of the residual hard stall already tracked (see "Card Supply, Shuffle, and Deck Exhaustion" and `trackNoDrawStall`). Candidate rules to consider once Tracker data is in: a forced-discard/forced-progress rule, a turn limit on holding a playable card, or the last-resort recycle. Not urgent — watch first.
 - Discard-pile visibility (raised by Nick, 2026-07-20): in a physical game each player's discard (Port) piles are visible to opponents; the current build shows only the active player's ports. Possible future feature: let a player peek at an opponent's discard piles (e.g. tap that opponent's goal-pile tile to reveal their ports). Affects the multiplayer secret-vs-shared split — see `docs/RULES_VS_LOOKS_MAP.md`: hands and goal-pile contents are secret; ports are *currently* not shown to others but are the natural first candidate to make shared/peekable.
 
