@@ -1,5 +1,11 @@
 # Playtest data
 
+> **⭐ Headline finding (2026-07-22):** the first build-16 turn log **confirms the soft stall**.
+> In a normal-looking game the loser's HOLD pile sat frozen at 10 for up to **11 consecutive
+> dead turns**, then one player cleared their whole pile in a single 20+ card combo turn. The
+> "endless round" is not an outlier — it is the game's core dynamic showing through. See
+> "The build-16 turn log confirms the soft stall" below.
+
 Tracker exports, kept here because the in-game Tracker cannot survive on its own.
 
 It lives in `localStorage`, which means the record is per-device *and* per-URL. Phone,
@@ -26,6 +32,7 @@ several devices into one record works by importing each in turn.
 | `2026-07-21-phone-tracker-export.json` | 4 (all completed) | Phone. Its `since` is 2026-07-21, confirming a build drop reset it. Updated later the same day with 3 further games (`recent` trimmed; superset of the earlier 1-game version, see git history). |
 | `2026-07-21-ipad-tracker-export.json` | 1 (in progress) | iPad. **The "endless round" game — see the section below.** Record is `current`, not yet in `games`. |
 | `2026-07-21-1648-tracker-export.json` | 1 (completed) | Another fresh record (`since` 16:48). **The last pre-build-15 game** — closes the "P1 always starts" baseline. |
+| `2026-07-22-game1-build16.json.md` | 1 (completed) | **First build-16 game with a full turn log.** Confirms the soft stall — see the headline finding above. (Raw JSON is large; the pointer file notes how to re-export.) |
 
 ## Read-out as of 2026-07-21 (4 games, 2 completed, 8 rounds)
 
@@ -119,6 +126,14 @@ If that settles well above 50% even with rotation, the race dynamic itself favou
 starter and rotation alone is not the fix. Pre-build-15 games have no round log and are
 excluded, so the figure reads `—` until new games accumulate.
 
+**First build-16 data point:** in game `gmrve2zsob29s` the round starter won **3 of 4**
+rounds (R1–R3 the starter won; R4 the starter lost). The rotation worked as intended —
+each player started twice — yet the starter still won most rounds, and both round-2 (P2
+started and won) and the wide margins fit the "starter gets the avalanche" reading. One
+game is not a verdict, but it is the first hint that **rotation balances *who* gets the
+edge without removing the edge itself.** Watch whether "rounds won by whoever started"
+stays well above 50% as more games land.
+
 ## Other observations from the 2026-07-21 phone games
 
 - **The clinch notice fired twice**, both with 1 round left, and both games were ended early.
@@ -136,6 +151,59 @@ excluded, so the figure reads `—` until new games accumulate.
 - **Score margins span 1 to 15** (1, 4, 9, 10, 12, 15). Rounds are winner-take-most because
   the round loser keeps their whole remaining HOLD pile, but games are not foregone
   conclusions.
+
+## The build-16 turn log confirms the soft stall (2026-07-22, IMPORTANT)
+
+The first game played on build 16 (`gmrve2zsob29s`, 2 players, 4 rounds, P1 won 20–38) carried
+a full 75-turn `turnLog`. It reads as an ordinary game — 12 runs completed, 7 Jailbreaks, no
+recycles, no hard stalls — but the per-turn HOLD sizes expose the dynamic the counters hid.
+
+Winner's HOLD pile size, turn by turn (`X` = stuck at 10, the starting size):
+
+| Round | Turns | Dead turns | Longest stall | Winner's HOLD path |
+|---|---|---|---|---|
+| 1 | 17 | 0 | 5 | `7 7 6 6 6 6 6 6 6 6 6 6 6 6 1 1 0` |
+| 2 | 25 | 2 | 9 | `X X X X X X X X X X X X X X X X X X X X X 9 9 7 7` (P1 lost; **frozen at 10 for 21 turns**) |
+| 3 | 13 | 5 | 9 | `X X X X X X X X X X X X 0` (**10 → 0 in one turn**) |
+| 4 | 20 | **11** | **14** | `X X X X X X X X X X X X X X X 8 8 6 6 0` |
+
+Across the game: **75 turns, 18 dead (24%), longest stall 14.** And the finish of every round
+is a single explosive turn — **13, 16, 21, 22** cards played at once. Round 4 is the clearest:
+**11 consecutive fully-dead turns** (both players stuck at 10/10, no play possible), then a
+Jailbreak at turn 15 unlocks the board and P1 dumps all 10 HOLD cards by turn 20.
+
+### What this proves
+
+The round is not a steady race — it is **stall, then avalanche.** Nobody can make progress for
+long stretches, then the board unlocks and one player chains their entire pile in one turn. The
+loser is left holding most of theirs (P2 finished rounds with 3, then won R2, then 9, then 8).
+That is the wide-margin, winner-take-most pattern seen in every game — and now the *mechanism*
+is visible, not inferred.
+
+**The stall breaks on a King.** In round 4 the board sat with 1 King locked in the Brig and a
+mostly-empty run set (empty runs = 1, needing an A/Q) for 11 turns. It only moved when a player
+finally played a natural King to a run, triggering the Jailbreak. This is the King-drain
+hypothesis holding up: Kings are the unlock, they concentrate in the Brig, and a Jailbreak can
+only fire when a King is *played* — so the board stays frozen until one happens to reach a hand.
+
+This is **not** contaminated by idle time (the earlier iPad caveat) — the dead turns here are
+seconds apart, not hours. The stall is structural, not a "we put it down" artifact.
+
+### Design implication (for Nick — no code yet)
+
+The lever is the **stall between avalanches**, and it points at the Kings. Candidates, in rough
+order of how surgical they are:
+
+1. **Make Kings reach hands more often** — e.g. a completed run's King goes to the recycle pile
+   (and back into the deck) instead of always to the Brig, or the Brig periodically releases a
+   King without requiring a play. Directly attacks the drain.
+2. **Let empty runs accept more than A/Q** — widening restart options shortens the dead
+   stretches. Changes run rules, so a bigger call.
+3. **A turn/stall cap that forces something** — e.g. after N dead turns, a card is freed. Treats
+   the symptom, not the cause.
+
+Recommend gathering 2–3 more build-16 games first to confirm the pattern repeats before
+changing a rule — but this single game is strong, clean evidence.
 
 ## The 2026-07-21 iPad game — the "endless round" (IMPORTANT)
 
