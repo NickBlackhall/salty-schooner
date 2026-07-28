@@ -231,6 +231,11 @@ function render(view) {
   // game UI against it would throw on view.yourHand.map(...). Show a holding
   // screen instead; your seat (name, resume token) is untouched by a reset.
   if (view.status === 'LOBBY') {
+    // Drop any held selection. Card ids come from a uid counter in the engine
+    // that restarts at 1 on a cold function instance, so a card dealt after the
+    // reset can carry the same id as the one selected before it — a stale
+    // `selected` would then match the wrong card by id in the next game.
+    selected = null;
     document.getElementById('gameUi').classList.add('hidden');
     document.getElementById('choiceBar').classList.add('hidden');
     const wait = document.getElementById('waitPanel');
