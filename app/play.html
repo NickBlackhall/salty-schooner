@@ -18,6 +18,8 @@
   .cardRow { display:flex; flex-wrap:wrap; gap:6px; }
   .card { display:inline-flex; align-items:center; justify-content:center; background:#fdf6e3; color:#222; border-radius:8px; padding:10px 6px; min-width:2.4em; font-weight:800; font-size:1.05rem; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
   .card.red { color:#b9331f; }
+  .card.king { background:#f3e2b0; box-shadow: inset 0 0 0 2px #c9a227; position:relative; padding-right:22px; }
+  .asBadge { position:absolute; right:2px; top:50%; transform:translateY(-50%); background:#c9a227; color:#25190a; border-radius:4px; font-size:10px; padding:1px 3px; font-weight:800; }
   .card.selected { outline: 3px solid #6fe38a; transform: translateY(-4px); }
   .card.slot { cursor:pointer; }
   .handRow, .portsGrid { display:flex; flex-wrap:wrap; gap:8px; }
@@ -54,7 +56,7 @@
   </section>
 
   <section>
-    <h3>Ports (tap to discard selected hand card)</h3>
+    <h3>Ports — tap to discard, or tap a card to pick it up</h3>
     <div class="portsGrid" id="portsGrid"></div>
   </section>
 
@@ -81,9 +83,10 @@
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
 let creds = roomId ? Persist.loadPlayer(roomId) : null;
-let selected = null; // {cardId, card}
+let selected = null; // {zone, card, index}
 let lastView = null;
 let pollTimer = null;
+let lastAnnouncedStatus = null;
 
 if (!roomId || !creds) {
   document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
@@ -98,17 +101,37 @@ function showToast(msg) {
   setTimeout(() => t.classList.add('hidden'), 2200);
 }
 
+// A King played as a wildcard must still READ as a King. Showing only its
+// effective value ("7♠") hides the King-on-King restriction and makes a legal
+// board look like an illegal one. Mirrors renderCard() in app/index.html.
 function cardHtml(c, extraClass) {
   if (!c) return '';
   const red = c.suit === '♥' || c.suit === '♦';
-  const label = c.effectiveValue ? (Engine.VALUE_NAMES[c.effectiveValue] + c.suit) : (c.rank + c.suit);
-  return `<span class="card ${red ? 'red' : ''} ${extraClass || ''}">${label}</span>`;
+  const wild = c.rank === 'K' && c.effectiveValue;
+  const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
+  const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${c.suit}${as}</span>`;
 }
 
 function selectCard(zone, card, index) {
   if (!lastView.isYourTurn) return;
+  // Tapping the selected card again clears it. Without this you cannot get from
+  // "hand card selected" back to "nothing selected", which is the state a Port
+  // pickup requires.
+  if (selected && selected.card.id === card.id) { selected = null; render(lastView); return; }
   selected = { zone, card, index };
   render(lastView);
+}
+
+// Mirrors window.portTap() in app/index.html: a Port tile is both the discard
+// target AND the way to pick a card back out of a Port to play it to a Run.
+function portTap(portIndex) {
+  if (!lastView.isYourTurn) return;
+  if (selected && selected.zone === 'hand') return discardTo(portIndex);
+  const pile = lastView.yourPorts[portIndex] || [];
+  const top = pile[pile.length - 1];
+  if (top) return selectCard('discard', top, portIndex);
+  showToast('Select a hand card first to discard here.');
 }
 
 function legalRunIndexes(card) {
@@ -219,10 +242,11 @@ function render(view) {
 
   document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
     const top = pile[pile.length-1];
-    return `<div class="port" data-port="${i}">${top ? cardHtml(top) : '<span class="meta">Port '+(i+1)+'</span>'}<div class="count">${pile.length}</div></div>`;
+    const sel = selected && selected.zone === 'discard' && selected.index === i;
+    return `<div class="port" data-port="${i}">${top ? cardHtml(top, sel ? 'selected' : '') : '<span class="meta">Port '+(i+1)+'</span>'}<div class="count">${pile.length}</div></div>`;
   }).join('');
   document.querySelectorAll('#portsGrid .port').forEach(el => {
-    el.addEventListener('click', () => discardTo(Number(el.dataset.port)));
+    el.addEventListener('click', () => portTap(Number(el.dataset.port)));
   });
 
   document.getElementById('holdCard').innerHTML = (() => {
@@ -248,10 +272,12 @@ function render(view) {
     });
   });
 
-  if (view.status === 'ROUND_RESULTS') {
-    showToast('Round over — waiting on the host.');
-  } else if (view.status === 'GAME_RESULTS') {
-    showToast('Game over — check the host screen for final scores.');
+  // Only announce on the transition — render() runs on every poll, so an
+  // unguarded toast here re-fires roughly once a second.
+  if (view.status !== lastAnnouncedStatus) {
+    if (view.status === 'ROUND_RESULTS') showToast('Round over — waiting on the host.');
+    else if (view.status === 'GAME_RESULTS') showToast('Game over — check the host screen for final scores.');
+    lastAnnouncedStatus = view.status;
   }
 }
 

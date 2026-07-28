@@ -25,6 +25,8 @@
   .seat .name { font-weight:700; font-size:1.15rem; }
   .card { display:inline-block; background:#fdf6e3; color:#222; border-radius:6px; padding:4px 8px; margin:2px; font-weight:700; min-width:1.4em; text-align:center; }
   .card.red { color:#b9331f; }
+  .card.king { background:#f3e2b0; box-shadow: inset 0 0 0 2px #c9a227; position:relative; padding-right:22px; }
+  .asBadge { position:absolute; right:3px; top:50%; transform:translateY(-50%); background:#c9a227; color:#25190a; border-radius:4px; font-size:10px; padding:1px 3px; font-weight:800; }
   .runsRow { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
   .run { background:#0d2c3d; border:2px solid #24586f; border-radius:12px; padding:12px; min-width:160px; min-height:70px; }
   .brigBox { background:#3a1d1d; border-radius:12px; padding:14px; margin-bottom:20px; }
@@ -80,11 +82,16 @@
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
 <script>
+// A King played as a wildcard must still READ as a King. Showing only its
+// effective value ("7♠") hides the King-on-King restriction and makes a legal
+// board look like an illegal one. Mirrors renderCard() in app/index.html.
 const cardHtml = (c) => {
   if (!c) return '';
   const red = c.suit === '♥' || c.suit === '♦';
-  const label = c.effectiveValue ? (Engine.VALUE_NAMES[c.effectiveValue] + c.suit) : (c.rank + c.suit);
-  return `<span class="card ${red ? 'red' : ''}">${label}</span>`;
+  const wild = c.rank === 'K' && c.effectiveValue;
+  const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
+  const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''}">${c.rank}${c.suit}${as}</span>`;
 };
 
 let roomId = null, hostToken = null, pollTimer = null;
