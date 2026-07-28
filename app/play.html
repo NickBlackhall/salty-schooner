@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Salty Schooner — Play</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; background:#0c2436; color:#f4ecd8; padding-bottom: 30px; }
+  .bar { position:sticky; top:0; background:#0a1e2c; padding:10px 14px; font-weight:700; z-index:5; display:flex; justify-content:space-between; align-items:center; }
+  .bar.myTurn { background:#3f3212; color:#ffe28a; }
+  section { padding: 12px 14px; }
+  h3 { margin: 6px 0; font-size: .95rem; color:#9fb8c8; text-transform:uppercase; letter-spacing:.08em; }
+  .runsGrid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .run { background:#123449; border:2px solid #24586f; border-radius:12px; padding:8px; min-height:56px; }
+  .run.legal { border-color:#c9a227; box-shadow: 0 0 0 2px rgba(201,162,39,.4) inset; }
+  .cardRow { display:flex; flex-wrap:wrap; gap:6px; }
+  .card { display:inline-flex; align-items:center; justify-content:center; background:#fdf6e3; color:#222; border-radius:8px; padding:10px 6px; min-width:2.4em; font-weight:800; font-size:1.05rem; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
+  .card.red { color:#b9331f; }
+  .card.selected { outline: 3px solid #6fe38a; transform: translateY(-4px); }
+  .card.slot { cursor:pointer; }
+  .handRow, .portsGrid { display:flex; flex-wrap:wrap; gap:8px; }
+  .portsGrid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
+  .port { background:#123449; border-radius:10px; padding:8px; text-align:center; min-height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .port .count { font-size:.75rem; color:#8aa4b2; margin-top:4px; }
+  .holdRow { display:flex; align-items:center; gap:12px; }
+  button { font-size:1rem; padding:12px 18px; border-radius:10px; border:none; background:#c9a227; color:#25190a; font-weight:700; }
+  button.wide { width:100%; }
+  .choiceBar { position:fixed; left:0; right:0; bottom:0; background:#0a1e2c; padding:14px; box-shadow: 0 -4px 14px rgba(0,0,0,.4); display:flex; gap:10px; flex-wrap:wrap; z-index:10; }
+  .toast { position:fixed; top:60px; left:50%; transform:translateX(-50%); background:#7a2323; color:#fff; padding:10px 18px; border-radius:10px; z-index:20; }
+  .hidden { display:none; }
+  .center { text-align:center; padding: 40px 20px; }
+  .meta { color:#8aa4b2; }
+</style>
+</head>
+<body>
+<div id="waitPanel" class="center">
+  <p>Loading your seat…</p>
+</div>
+
+<div id="gameUi" class="hidden">
+  <div class="bar" id="turnBar">Waiting…</div>
+
+  <section>
+    <h3>Runs</h3>
+    <div class="runsGrid" id="runsGrid"></div>
+  </section>
+
+  <section>
+    <h3>Your Hand</h3>
+    <div class="handRow" id="handRow"></div>
+    <button id="drawBtn" class="wide hidden" style="margin-top:10px;">Draw 5 cards</button>
+  </section>
+
+  <section>
+    <h3>Ports (tap to discard selected hand card)</h3>
+    <div class="portsGrid" id="portsGrid"></div>
+  </section>
+
+  <section class="holdRow">
+    <div>
+      <h3>Your HOLD</h3>
+      <div id="holdCard"></div>
+    </div>
+    <div class="meta" id="holdCount"></div>
+  </section>
+
+  <section>
+    <h3>The Brig</h3>
+    <div id="brigStrip" class="cardRow"></div>
+  </section>
+</div>
+
+<div id="choiceBar" class="choiceBar hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/shared/api.js"></script>
+<script src="/shared/engine.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+let roomId = params.get('room') || Persist.lastRoom();
+let creds = roomId ? Persist.loadPlayer(roomId) : null;
+let selected = null; // {cardId, card}
+let lastView = null;
+let pollTimer = null;
+
+if (!roomId || !creds) {
+  document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
+} else {
+  startPolling();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 2200);
+}
+
+function cardHtml(c, extraClass) {
+  if (!c) return '';
+  const red = c.suit === '♥' || c.suit === '♦';
+  const label = c.effectiveValue ? (Engine.VALUE_NAMES[c.effectiveValue] + c.suit) : (c.rank + c.suit);
+  return `<span class="card ${red ? 'red' : ''} ${extraClass || ''}">${label}</span>`;
+}
+
+function selectCard(zone, card, index) {
+  if (!lastView.isYourTurn) return;
+  selected = { zone, card, index };
+  render(lastView);
+}
+
+function legalRunIndexes(card) {
+  if (!lastView) return [];
+  return lastView.runs.map((r,i)=>i).filter(i => Engine.canPlayCardOnRun(card, lastView.runs[i]));
+}
+
+async function attemptPlay(runIndex) {
+  if (!selected) return;
+  const card = selected.card;
+  const run = lastView.runs[runIndex];
+  if (!Engine.canPlayCardOnRun(card, run)) { showToast('Illegal play.'); return; }
+  if (card.rank === 'K') {
+    let choices;
+    if (!run.direction) {
+      choices = Engine.unsetNaturalKingChoices(run).map(c => ({ label: `King as ${Engine.VALUE_NAMES[c.kingValue]} — ${c.dir.toUpperCase()}`, value: c.kingValue, dir: c.dir }));
+    } else {
+      const required = Engine.kingRequiredValue(run);
+      choices = ['up','down'].map(dir => ({ label: `Continue ${dir.toUpperCase()} as ${Engine.VALUE_NAMES[required]}`, value: required, dir }));
+    }
+    showChoiceBar(choices, (choice) => sendPlay(runIndex, { value: choice.value, dir: choice.dir }));
+    return;
+  }
+  sendPlay(runIndex, undefined);
+}
+
+function showChoiceBar(choices, onPick) {
+  const bar = document.getElementById('choiceBar');
+  bar.innerHTML = '';
+  choices.forEach(c => {
+    const b = document.createElement('button');
+    b.textContent = c.label;
+    b.onclick = () => { bar.classList.add('hidden'); onPick(c); };
+    bar.appendChild(b);
+  });
+  bar.classList.remove('hidden');
+}
+
+async function sendPlay(runIndex, kingChoice) {
+  try {
+    const res = await Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'PLAY_CARD', cardId: selected.card.id, runIndex, kingChoice },
+      expectedVersion: lastView.stateVersion
+    });
+    selected = null;
+    applyView(res.view);
+  } catch (e) {
+    showToast(e.message);
+    selected = null;
+    render(lastView);
+  }
+}
+
+async function discardTo(portIndex) {
+  if (!selected || selected.zone !== 'hand') { showToast('Select a card from your hand first.'); return; }
+  try {
+    const res = await Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'DISCARD_TO_PORT', cardId: selected.card.id, portIndex },
+      expectedVersion: lastView.stateVersion
+    });
+    selected = null;
+    applyView(res.view);
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+document.getElementById('drawBtn').addEventListener('click', async () => {
+  try {
+    const res = await Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'DRAW_HAND' },
+      expectedVersion: lastView.stateVersion
+    });
+    applyView(res.view);
+  } catch (e) { showToast(e.message); }
+});
+
+function render(view) {
+  document.getElementById('waitPanel').classList.add('hidden');
+  document.getElementById('gameUi').classList.remove('hidden');
+
+  const bar = document.getElementById('turnBar');
+  bar.textContent = view.isYourTurn ? "YOUR TURN" : `${view.currentPlayerName}'s turn`;
+  bar.classList.toggle('myTurn', view.isYourTurn);
+
+  document.getElementById('runsGrid').innerHTML = view.runs.map((r,i) => {
+    const legal = selected && Engine.canPlayCardOnRun(selected.card, r);
+    return `<div class="run ${legal ? 'legal':''}" data-run="${i}"><div class="meta">Run ${i+1} ${r.direction?('('+r.direction+')'):''}</div><div class="cardRow">${r.cards.map(c=>cardHtml(c)).join('') || '<span class="meta">A or Q</span>'}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#runsGrid .run').forEach(el => {
+    el.addEventListener('click', () => attemptPlay(Number(el.dataset.run)));
+  });
+
+  document.getElementById('handRow').innerHTML = view.yourHand.map(c => {
+    const sel = selected && selected.zone === 'hand' && selected.card.id === c.id;
+    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}${c.suit}</span>`;
+  }).join('') || '<span class="meta">Empty</span>';
+  document.querySelectorAll('#handRow .card').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = view.yourHand.find(c => c.id === el.dataset.id);
+      selectCard('hand', c);
+    });
+  });
+  document.getElementById('drawBtn').classList.toggle('hidden', !(view.isYourTurn && view.yourHand.length === 0));
+
+  document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
+    const top = pile[pile.length-1];
+    return `<div class="port" data-port="${i}">${top ? cardHtml(top) : '<span class="meta">Port '+(i+1)+'</span>'}<div class="count">${pile.length}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#portsGrid .port').forEach(el => {
+    el.addEventListener('click', () => discardTo(Number(el.dataset.port)));
+  });
+
+  document.getElementById('holdCard').innerHTML = (() => {
+    if (!view.yourGoalTop) return '<span class="meta">Cleared!</span>';
+    const sel = selected && selected.zone === 'goal';
+    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}${view.yourGoalTop.suit}</span>`;
+  })();
+  const holdTop = document.getElementById('holdTop');
+  if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
+  document.getElementById('holdCount').textContent = view.yourGoalCount + ' cards left';
+
+  const b = view.brig;
+  document.getElementById('brigStrip').innerHTML = b.active
+    ? b.releasedKings.map((c,i) => {
+        const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
+        return `<span class="card slot ${sel?'selected':''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+      }).join('') + ' <span class="meta">JAILBREAK — play these!</span>'
+    : (b.waitingKings.map(c=>cardHtml(c)).join('') || '<span class="meta">Empty</span>');
+  document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);
+      selectCard('jailbreak', c);
+    });
+  });
+
+  if (view.status === 'ROUND_RESULTS') {
+    showToast('Round over — waiting on the host.');
+  } else if (view.status === 'GAME_RESULTS') {
+    showToast('Game over — check the host screen for final scores.');
+  }
+}
+
+function applyView(view) {
+  lastView = view;
+  render(view);
+}
+
+async function poll() {
+  try {
+    const view = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
+    applyView(view);
+  } catch (e) {
+    console.error(e);
+  }
+}
+function startPolling() {
+  clearInterval(pollTimer);
+  poll();
+  pollTimer = setInterval(poll, 800);
+}
+</script>
+</body>
+</html>

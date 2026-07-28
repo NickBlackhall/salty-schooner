@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — Host</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; background:#0c2436; color:#f4ecd8; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 2.2rem; margin: 0 0 4px; }
+  .sub { color:#9fb8c8; margin-bottom: 24px; }
+  .panel { background:#123449; border-radius: 14px; padding: 24px; margin-bottom:20px; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+  label { display:block; margin: 10px 0 4px; color:#c9d9e2; }
+  input[type=number] { width: 100px; padding:6px 8px; border-radius:6px; border:1px solid #345; background:#0c2436; color:#fff; }
+  button { font-size: 1.05rem; padding: 12px 22px; border-radius: 10px; border: none; background:#c9a227; color:#25190a; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.secondary { background:#345066; color:#fff; }
+  .roomCode { font-size: 4.5rem; letter-spacing: .25em; font-weight:800; text-align:center; color:#ffe28a; margin: 12px 0; }
+  .playerList { display:flex; flex-wrap:wrap; gap:12px; margin-top: 16px; }
+  .playerChip { background:#1c4a63; padding: 10px 18px; border-radius: 999px; font-size:1.1rem; }
+  .scoreboard { display:flex; flex-wrap:wrap; gap:16px; margin-bottom: 20px; }
+  .seat { background:#1c4a63; border-radius:12px; padding:14px 18px; min-width:150px; }
+  .seat.turn { outline: 3px solid #ffe28a; }
+  .seat .name { font-weight:700; font-size:1.15rem; }
+  .card { display:inline-block; background:#fdf6e3; color:#222; border-radius:6px; padding:4px 8px; margin:2px; font-weight:700; min-width:1.4em; text-align:center; }
+  .card.red { color:#b9331f; }
+  .runsRow { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
+  .run { background:#0d2c3d; border:2px solid #24586f; border-radius:12px; padding:12px; min-width:160px; min-height:70px; }
+  .brigBox { background:#3a1d1d; border-radius:12px; padding:14px; margin-bottom:20px; }
+  .log { font-size:.9rem; color:#a9c2cf; max-height:140px; overflow-y:auto; }
+  .hidden { display:none; }
+  .meta { color:#8aa4b2; }
+  .center { text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏴‍☠️ Salty Schooner</h1>
+  <div class="sub">Host screen — shared, public information only</div>
+
+  <div id="setupPanel" class="panel">
+    <h2>Start a new room</h2>
+    <label>Rounds <input id="roundsInput" type="number" min="1" max="10" value="4"></label>
+    <label>HOLD cards per player <input id="holdInput" type="number" min="5" max="20" value="10"></label>
+    <p><button id="createBtn">Create Room</button></p>
+  </div>
+
+  <div id="lobbyPanel" class="panel hidden">
+    <h2>Waiting for players</h2>
+    <div class="roomCode" id="roomCodeDisplay"></div>
+    <p class="center meta">Players: open <b id="joinUrlText"></b> and enter this code.</p>
+    <div class="playerList" id="playerList"></div>
+    <p class="center" style="margin-top:20px;"><button id="startBtn" disabled>Start Game</button></p>
+  </div>
+
+  <div id="gamePanel" class="hidden">
+    <div class="panel">
+      <div id="turnBanner" style="font-size:1.3rem;font-weight:700;"></div>
+      <div class="meta" id="roundMeta"></div>
+    </div>
+    <div class="scoreboard" id="scoreboard"></div>
+    <div class="panel">
+      <h3 style="margin-top:0;">Runs</h3>
+      <div class="runsRow" id="runsRow"></div>
+    </div>
+    <div class="panel brigBox">
+      <h3 style="margin-top:0;">The Brig</h3>
+      <div id="brigContent"></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">Log</h3>
+      <div class="log" id="logBox"></div>
+    </div>
+  </div>
+
+  <div id="resultsPanel" class="panel hidden center"></div>
+</div>
+
+<script src="/shared/api.js"></script>
+<script src="/shared/engine.js"></script>
+<script>
+const cardHtml = (c) => {
+  if (!c) return '';
+  const red = c.suit === '♥' || c.suit === '♦';
+  const label = c.effectiveValue ? (Engine.VALUE_NAMES[c.effectiveValue] + c.suit) : (c.rank + c.suit);
+  return `<span class="card ${red ? 'red' : ''}">${label}</span>`;
+};
+
+let roomId = null, hostToken = null, pollTimer = null;
+
+function showPanel(id) {
+  ['setupPanel','lobbyPanel','gamePanel','resultsPanel'].forEach(p => {
+    document.getElementById(p).classList.toggle('hidden', p !== id);
+  });
+}
+
+document.getElementById('joinUrlText').textContent = location.origin + '/join';
+
+document.getElementById('createBtn').addEventListener('click', async () => {
+  const rounds = Number(document.getElementById('roundsInput').value);
+  const holdCards = Number(document.getElementById('holdInput').value);
+  const res = await Api.createRoom({ rounds, holdCards });
+  roomId = res.roomId; hostToken = res.hostResumeToken;
+  Persist.saveHost(roomId, hostToken);
+  document.getElementById('roomCodeDisplay').textContent = res.roomCode;
+  showPanel('lobbyPanel');
+  startPolling();
+});
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  await Api.startGame(roomId, hostToken);
+});
+
+function renderLobby(view) {
+  document.getElementById('roomCodeDisplay').textContent = view.roomCode;
+  const list = document.getElementById('playerList');
+  list.innerHTML = view.players.map(p => `<div class="playerChip">${p.name}</div>`).join('') || '<span class="meta">Nobody yet…</span>';
+  document.getElementById('startBtn').disabled = view.players.length < 2;
+}
+
+function renderGame(view) {
+  document.getElementById('turnBanner').textContent = `${view.currentPlayerName}'s turn`;
+  document.getElementById('roundMeta').textContent = `Round ${view.round} / ${view.maxRounds} · Draw deck: ${view.deckCount} · Recycle: ${view.recycleCount}`;
+  document.getElementById('scoreboard').innerHTML = view.players.map(p => `
+    <div class="seat ${p.seat === view.currentSeat ? 'turn' : ''}">
+      <div class="name">${p.name}</div>
+      <div>${cardHtml(p.goalTop)} <span class="meta">${p.goalCount} in HOLD</span></div>
+      <div class="meta">Total: ${p.total}</div>
+    </div>`).join('');
+  document.getElementById('runsRow').innerHTML = view.runs.map((r,i) => `
+    <div class="run">
+      <div class="meta">Run ${i+1} ${r.direction ? '('+r.direction+')' : ''}</div>
+      <div>${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q only</span>'}</div>
+    </div>`).join('');
+  const b = view.brig;
+  document.getElementById('brigContent').innerHTML = b.active
+    ? `<b>JAILBREAK ACTIVE</b> — released: ${b.releasedKings.map(cardHtml).join('')}`
+    : `Waiting Kings: ${b.waitingKings.map(cardHtml).join('') || '<span class="meta">none</span>'}`;
+  document.getElementById('logBox').innerHTML = view.log.map(l => `<div>${l}</div>`).join('');
+
+  if (view.status === 'ROUND_RESULTS' || view.status === 'GAME_RESULTS') {
+    showPanel('resultsPanel');
+    const panel = document.getElementById('resultsPanel');
+    if (view.status === 'GAME_RESULTS') {
+      const sorted = [...view.players].sort((a,b)=>a.total-b.total);
+      panel.innerHTML = `<h2>Game Over — ${sorted[0].name} wins!</h2>` +
+        sorted.map(p => `<div>${p.name}: ${p.total}</div>`).join('');
+    } else {
+      panel.innerHTML = `<h2>Round ${view.round} complete</h2>` +
+        view.players.map(p => `<div>${p.name}: +${p.roundScore} (${p.total} total)</div>`).join('') +
+        (view.pendingClinch ? `<p><b>${view.pendingClinch}</b> has clinched the game.</p>
+          <button id="endNowBtn">End game now — ${view.pendingClinch} wins</button>
+          <button class="secondary" id="keepPlayingBtn">Keep playing</button>` :
+          `<p><button id="nextRoundBtn">Start Next Round</button></p>`);
+      const advance = (endNow) => Api.submitAction({ roomId, actorType:'host', token:hostToken, action:{type:'ADVANCE_ROUND', endNow}, expectedVersion: view.stateVersion });
+      const next = document.getElementById('nextRoundBtn'); if (next) next.onclick = () => advance(false);
+      const end = document.getElementById('endNowBtn'); if (end) end.onclick = () => advance(true);
+      const keep = document.getElementById('keepPlayingBtn'); if (keep) keep.onclick = () => advance(false);
+    }
+  } else {
+    showPanel('gamePanel');
+  }
+}
+
+async function poll() {
+  try {
+    const view = await Api.getHostState(roomId, hostToken);
+    if (view.status === 'LOBBY') { showPanel('lobbyPanel'); renderLobby(view); }
+    else renderGame(view);
+  } catch (e) {
+    console.error(e);
+  }
+}
+function startPolling() {
+  clearInterval(pollTimer);
+  poll();
+  pollTimer = setInterval(poll, 900);
+}
+
+// Resume an in-progress room on refresh.
+(function tryResume() {
+  const last = Persist.lastRoom();
+  if (!last) return;
+  const token = Persist.loadHost(last);
+  if (!token) return;
+  roomId = last; hostToken = token;
+  startPolling();
+})();
+</script>
+</body>
+</html>

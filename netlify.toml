@@ -1,0 +1,26 @@
+[build]
+  publish = "app"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/host"
+  to = "/host.html"
+  status = 200
+
+[[redirects]]
+  from = "/join"
+  to = "/join.html"
+  status = 200
+
+[[redirects]]
+  from = "/play"
+  to = "/play.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

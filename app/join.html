@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — Join</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; background:#0c2436; color:#f4ecd8; display:flex; min-height:100vh; align-items:center; justify-content:center; }
+  .panel { background:#123449; border-radius: 14px; padding: 28px; width: min(360px, 90vw); box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+  h1 { font-size:1.6rem; margin:0 0 18px; text-align:center; }
+  label { display:block; margin: 14px 0 6px; color:#c9d9e2; }
+  input { width:100%; box-sizing:border-box; padding:12px; font-size:1.4rem; border-radius:8px; border:1px solid #345; background:#0c2436; color:#fff; text-transform:uppercase; letter-spacing:.15em; text-align:center; }
+  input#nameInput { text-transform:none; letter-spacing:normal; font-size:1.1rem; }
+  button { width:100%; margin-top:20px; font-size:1.1rem; padding:14px; border-radius:10px; border:none; background:#c9a227; color:#25190a; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  .error { color:#ff8a7a; margin-top:10px; text-align:center; min-height:1.2em; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>🏴‍☠️ Join a game</h1>
+  <label>Room code</label>
+  <input id="codeInput" maxlength="4" autocapitalize="characters" placeholder="ABCD">
+  <label>Your name</label>
+  <input id="nameInput" maxlength="24" placeholder="Captain...">
+  <button id="joinBtn">Join</button>
+  <div class="error" id="errorBox"></div>
+</div>
+<script src="/shared/api.js"></script>
+<script>
+document.getElementById('joinBtn').addEventListener('click', async () => {
+  const roomCode = document.getElementById('codeInput').value.trim().toUpperCase();
+  const playerName = document.getElementById('nameInput').value.trim();
+  const err = document.getElementById('errorBox');
+  err.textContent = '';
+  if (!roomCode || !playerName) { err.textContent = 'Enter both a room code and your name.'; return; }
+  try {
+    const res = await Api.joinRoom(roomCode, playerName);
+    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat);
+    location.href = '/play?room=' + res.roomId;
+  } catch (e) {
+    err.textContent = e.message;
+  }
+});
+</script>
+</body>
+</html>

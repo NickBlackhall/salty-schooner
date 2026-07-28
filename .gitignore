@@ -3,3 +3,9 @@ salty-schooner-app.zip
 
 # Local Netlify folder
 .netlify
+
+# Node dependencies for the Netlify Functions backend
+node_modules
+
+# Netlify Edge Functions cache (Deno)
+deno.lock
