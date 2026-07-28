@@ -23,6 +23,7 @@ const Api = (() => {
     createRoom: (config) => post('create-room', config),
     joinRoom: (roomCode, playerName) => post('join-room', { roomCode, playerName }),
     startGame: (roomId, hostResumeToken) => post('start-game', { roomId, hostResumeToken }),
+    resetGame: (roomId, hostResumeToken) => post('reset-game', { roomId, hostResumeToken }),
     submitAction: (payload) => post('submit-action', payload),
     getHostState: (roomId, token) => get('get-state', { roomId, actorType: 'host', token }),
     getPlayerState: (roomId, playerId, token) => get('get-state', { roomId, actorType: 'player', playerId, token })

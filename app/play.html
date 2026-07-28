@@ -226,6 +226,18 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
 });
 
 function render(view) {
+  // The host can reset a game back to LOBBY at any time. That response has no
+  // hand/HOLD/Ports (getLobbyView, not getPlayerView) — rendering the normal
+  // game UI against it would throw on view.yourHand.map(...). Show a holding
+  // screen instead; your seat (name, resume token) is untouched by a reset.
+  if (view.status === 'LOBBY') {
+    document.getElementById('gameUi').classList.add('hidden');
+    document.getElementById('choiceBar').classList.add('hidden');
+    const wait = document.getElementById('waitPanel');
+    wait.classList.remove('hidden');
+    wait.innerHTML = '<p>Game was reset.</p><p>Waiting for the host to start a new round — you’re still in the room.</p>';
+    return;
+  }
   document.getElementById('waitPanel').classList.add('hidden');
   document.getElementById('gameUi').classList.remove('hidden');
 

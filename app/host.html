@@ -39,7 +39,9 @@
 <body>
 <div class="wrap">
   <h1>🏴‍☠️ Salty Schooner</h1>
-  <div class="sub">Host screen — shared, public information only</div>
+  <div class="sub">Host screen — shared, public information only
+    <button id="resetBtn" class="secondary hidden" style="margin-left:14px;padding:4px 12px;font-size:.85rem;">Reset Game</button>
+  </div>
 
   <div id="setupPanel" class="panel">
     <h2>Start a new room</h2>
@@ -111,12 +113,22 @@ document.getElementById('createBtn').addEventListener('click', async () => {
   roomId = res.roomId; hostToken = res.hostResumeToken;
   Persist.saveHost(roomId, hostToken);
   document.getElementById('roomCodeDisplay').textContent = res.roomCode;
+  document.getElementById('resetBtn').classList.remove('hidden');
   showPanel('lobbyPanel');
   startPolling();
 });
 
 document.getElementById('startBtn').addEventListener('click', async () => {
   await Api.startGame(roomId, hostToken);
+});
+
+// Wipes game progress and returns to the lobby, keeping the same room code
+// and the same seated players (their tokens are untouched) — nobody rejoins.
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  if (!roomId) return;
+  if (!confirm('Reset this game for everyone? Current progress will be lost. Players stay in the room and do not need to rejoin.')) return;
+  await Api.resetGame(roomId, hostToken);
+  poll();
 });
 
 function renderLobby(view) {
@@ -192,6 +204,7 @@ function startPolling() {
   const token = Persist.loadHost(last);
   if (!token) return;
   roomId = last; hostToken = token;
+  document.getElementById('resetBtn').classList.remove('hidden');
   startPolling();
 })();
 </script>
