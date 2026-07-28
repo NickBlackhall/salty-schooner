@@ -83,6 +83,19 @@
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
 let creds = roomId ? Persist.loadPlayer(roomId) : null;
+
+// Rejoin link: ?room=..&pid=..&tok=.. restores a seat on a device that no longer
+// has its saved credentials — private tab, cleared storage, or a different
+// browser than the one that joined. Once seats are dealt, /join can't help:
+// the room is no longer in LOBBY, so this is the only way back in.
+const urlPid = params.get('pid');
+const urlTok = params.get('tok');
+if (roomId && urlPid && urlTok) {
+  creds = { playerId: urlPid, resumeToken: urlTok };
+  Persist.savePlayer(roomId, urlPid, urlTok, null);
+  // Drop the token out of the address bar (and browser history) now that it's saved.
+  if (history.replaceState) history.replaceState(null, '', '/play?room=' + roomId);
+}
 let selected = null; // {zone, card, index}
 let lastView = null;
 let pollTimer = null;
