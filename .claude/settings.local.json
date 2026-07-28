@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -oiE 'v?26\\\\.[0-9]+|version[^,;]{0,40}' app/index.html)"
+    ]
+  }
+}
