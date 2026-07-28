@@ -26,6 +26,9 @@
   <input id="nameInput" maxlength="24" placeholder="Captain...">
   <button id="joinBtn">Join</button>
   <div class="error" id="errorBox"></div>
+  <p style="color:#8aa4b2;font-size:.85rem;text-align:center;margin-top:14px;">
+    Knocked out of a game? Enter the same room code and the <b>exact same name</b> to get your seat back.
+  </p>
 </div>
 <script src="/shared/api.js"></script>
 <script>
@@ -37,8 +40,10 @@ document.getElementById('joinBtn').addEventListener('click', async () => {
   if (!roomCode || !playerName) { err.textContent = 'Enter both a room code and your name.'; return; }
   try {
     const res = await Api.joinRoom(roomCode, playerName);
-    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat);
-    location.href = '/play?room=' + res.roomId;
+    // Keep the name so a browser holding several seats can label them, and pin
+    // the seat in the URL so /play never has to guess which one this tab is.
+    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat, playerName);
+    location.href = '/play?room=' + res.roomId + '&pid=' + res.playerId;
   } catch (e) {
     err.textContent = e.message;
   }

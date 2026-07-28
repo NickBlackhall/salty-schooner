@@ -82,17 +82,16 @@
 <script>
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
-let creds = roomId ? Persist.loadPlayer(roomId) : null;
-
-// Rejoin link: ?room=..&pid=..&tok=.. restores a seat on a device that no longer
-// has its saved credentials — private tab, cleared storage, or a different
-// browser than the one that joined. Once seats are dealt, /join can't help:
-// the room is no longer in LOBBY, so this is the only way back in.
 const urlPid = params.get('pid');
 const urlTok = params.get('tok');
+let creds = roomId ? Persist.loadPlayer(roomId, urlPid) : null;
+
+// Rejoin link: ?room=..&pid=..&tok=.. restores a seat on a device that no longer
+// has its saved credentials. Still supported, but rejoining by name at /join is
+// now the easier route for most cases.
 if (roomId && urlPid && urlTok) {
   creds = { playerId: urlPid, resumeToken: urlTok };
-  Persist.savePlayer(roomId, urlPid, urlTok, null);
+  Persist.savePlayer(roomId, urlPid, urlTok, null, null);
   // Drop the token out of the address bar (and browser history) now that it's saved.
   if (history.replaceState) history.replaceState(null, '', '/play?room=' + roomId);
 }
@@ -101,10 +100,34 @@ let lastView = null;
 let pollTimer = null;
 let lastAnnouncedStatus = null;
 
-if (!roomId || !creds) {
+// One browser can now hold several seats (playing two sides yourself). With more
+// than one saved and no ?pid= to disambiguate, ask rather than guess — silently
+// resuming as the wrong player is worse than one extra tap.
+function showSeatPicker(list) {
+  const wait = document.getElementById('waitPanel');
+  wait.innerHTML = '<p>Which seat is this?</p><div id="seatPicks"></div>';
+  const box = document.getElementById('seatPicks');
+  list.forEach(p => {
+    const b = document.createElement('button');
+    b.style.cssText = 'display:block;width:100%;max-width:320px;margin:8px auto;';
+    b.textContent = p.name ? `${p.name} (seat ${p.seat + 1})` : `Seat ${p.seat + 1}`;
+    b.onclick = () => {
+      creds = p;
+      if (history.replaceState) history.replaceState(null, '', '/play?room=' + roomId + '&pid=' + p.playerId);
+      startPolling();
+    };
+    box.appendChild(b);
+  });
+}
+
+if (!roomId) {
   document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
-} else {
+} else if (creds) {
   startPolling();
+} else {
+  const saved = Persist.loadPlayers(roomId);
+  if (saved.length > 1) showSeatPicker(saved);
+  else document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
 }
 
 function showToast(msg) {
