@@ -26,6 +26,7 @@ const Api = (() => {
     resetGame: (roomId, hostResumeToken) => post('reset-game', { roomId, hostResumeToken }),
     submitAction: (payload) => post('submit-action', payload),
     getHostState: (roomId, token) => get('get-state', { roomId, actorType: 'host', token }),
+    getPublicState: (roomCode) => get('get-public-state', { code: roomCode }),
     getPlayerState: (roomId, playerId, token) => get('get-state', { roomId, actorType: 'player', playerId, token })
   };
 })();

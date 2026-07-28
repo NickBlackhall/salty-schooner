@@ -7,6 +7,13 @@ async function loadRoom(roomId) {
   return data;
 }
 
+async function loadRoomByCode(roomCode) {
+  const supabase = getClient();
+  const { data, error } = await supabase.from('rooms').select('*').eq('room_code', String(roomCode).trim().toUpperCase()).single();
+  if (error || !data) return null;
+  return data;
+}
+
 async function loadPlayers(roomId) {
   const supabase = getClient();
   const { data, error } = await supabase.from('players').select('*').eq('room_id', roomId).order('seat_number', { ascending: true });
@@ -29,4 +36,4 @@ function verifyPlayer(player, token) {
   return !!player && !!token && player.resume_token === token;
 }
 
-module.exports = { loadRoom, loadPlayers, verifyHost, findPlayer, verifyPlayer };
+module.exports = { loadRoom, loadRoomByCode, loadPlayers, verifyHost, findPlayer, verifyPlayer };

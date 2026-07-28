@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — TV</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Segoe UI', system-ui, sans-serif; background:#0c2436; color:#f4ecd8;
+         padding: clamp(12px, 2vw, 32px); overflow-x:hidden; }
+  .hidden { display:none !important; }
+  .meta { color:#8aa4b2; }
+
+  /* ---- code entry (shown once, then never again on this screen) ---- */
+  #codeEntry { min-height:90vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; }
+  #codeEntry h1 { font-size:clamp(2rem,5vw,4rem); margin:0; }
+  #codeInput { font-size:clamp(2rem,6vw,4.5rem); width:min(90vw,7em); text-align:center; letter-spacing:.25em;
+               text-transform:uppercase; padding:.2em; border-radius:12px; border:2px solid #345; background:#0a1e2c; color:#ffe28a; }
+  button { font-size:clamp(1rem,2vw,1.4rem); padding:.6em 1.4em; border-radius:12px; border:none;
+           background:#c9a227; color:#25190a; font-weight:800; cursor:pointer; }
+  .err { color:#ff8a7a; min-height:1.4em; font-size:clamp(1rem,2vw,1.3rem); }
+
+  /* ---- lobby ---- */
+  #lobby { text-align:center; }
+  .bigCode { font-size:clamp(4rem,16vw,11rem); font-weight:900; letter-spacing:.15em; color:#ffe28a; line-height:1; margin:.1em 0; }
+  .joinAt { font-size:clamp(1.1rem,3vw,2.2rem); color:#c9d9e2; }
+  .joinAt b { color:#fff; }
+  .lobbyPlayers { display:flex; flex-wrap:wrap; gap:clamp(8px,1.5vw,18px); justify-content:center; margin-top:clamp(16px,3vw,36px); }
+  .chip { background:#1c4a63; border-radius:999px; padding:clamp(8px,1.2vw,16px) clamp(18px,2.5vw,34px); font-size:clamp(1.1rem,2.6vw,2rem); font-weight:700; }
+
+  /* ---- game ---- */
+  .turnBanner { text-align:center; font-size:clamp(1.6rem,5vw,3.6rem); font-weight:900; color:#ffe28a; line-height:1.1; }
+  .roundLine { text-align:center; font-size:clamp(.9rem,1.8vw,1.4rem); color:#9fb8c8; margin-bottom:clamp(10px,2vw,22px); }
+  .seats { display:flex; flex-wrap:wrap; gap:clamp(8px,1.5vw,20px); justify-content:center; margin-bottom:clamp(12px,2.5vw,28px); }
+  .seat { background:#123449; border-radius:16px; padding:clamp(10px,1.5vw,20px) clamp(14px,2vw,26px); min-width:clamp(130px,16vw,230px); text-align:center; }
+  .seat.turn { outline:4px solid #ffe28a; background:#1a4460; }
+  .seat .nm { font-size:clamp(1.1rem,2.4vw,1.9rem); font-weight:800; }
+  .seat .sc { font-size:clamp(.8rem,1.5vw,1.15rem); color:#9fb8c8; }
+  .runsRow { display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.4vw,18px); margin-bottom:clamp(12px,2vw,24px); }
+  .run { background:#0d2c3d; border:2px solid #24586f; border-radius:16px; padding:clamp(8px,1.2vw,16px); min-height:clamp(74px,10vw,140px); }
+  .runLbl { font-size:clamp(.75rem,1.4vw,1.1rem); color:#8aa4b2; margin-bottom:.3em; }
+  .cardRow { display:flex; flex-wrap:wrap; gap:clamp(3px,.5vw,7px); }
+  .card { display:inline-flex; align-items:center; justify-content:center; background:#fdf6e3; color:#222;
+          border-radius:8px; padding:clamp(5px,.8vw,11px) clamp(4px,.6vw,8px); font-weight:900;
+          font-size:clamp(.95rem,1.9vw,1.6rem); min-width:1.9em; position:relative; }
+  .card.red { color:#b9331f; }
+  .card.king { background:#f3e2b0; box-shadow:inset 0 0 0 3px #c9a227; padding-right:clamp(18px,2.4vw,30px); }
+  .asBadge { position:absolute; right:2px; top:50%; transform:translateY(-50%); background:#c9a227; color:#25190a;
+             border-radius:5px; font-size:clamp(.55rem,1.05vw,.85rem); padding:1px 3px; font-weight:900; }
+  .brigBar { background:#3a1d1d; border-radius:16px; padding:clamp(10px,1.5vw,20px); margin-bottom:clamp(10px,2vw,20px); }
+  .brigBar.active { background:#6b2020; outline:3px solid #ff9a5a; }
+  .brigTitle { font-size:clamp(.9rem,1.8vw,1.4rem); font-weight:800; margin-bottom:.35em; }
+  .logBox { font-size:clamp(.8rem,1.5vw,1.15rem); color:#a9c2cf; line-height:1.5; }
+  .results { text-align:center; }
+  .results h2 { font-size:clamp(1.8rem,5vw,3.4rem); margin:.2em 0; }
+  .results .row { font-size:clamp(1.1rem,2.6vw,2rem); margin:.15em 0; }
+  .banner { text-align:center; font-size:clamp(1rem,2.2vw,1.6rem); color:#ffd08a; margin-bottom:.6em; }
+</style>
+</head>
+<body>
+
+<div id="codeEntry">
+  <h1>🏴‍☠️ Salty Schooner</h1>
+  <div class="meta" style="font-size:clamp(1rem,2vw,1.4rem);">Enter the room code shown on the host's device</div>
+  <input id="codeInput" maxlength="4" autocapitalize="characters" placeholder="ABCD" autofocus>
+  <button id="watchBtn">Show Game</button>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="lobby" class="hidden">
+  <div class="joinAt">Join at <b id="joinUrl"></b></div>
+  <div class="bigCode" id="lobbyCode"></div>
+  <div class="joinAt meta">Waiting for the host to start…</div>
+  <div class="lobbyPlayers" id="lobbyPlayers"></div>
+</div>
+
+<div id="game" class="hidden">
+  <div class="turnBanner" id="turnBanner"></div>
+  <div class="roundLine" id="roundLine"></div>
+  <div class="seats" id="seats"></div>
+  <div class="runsRow" id="runsRow"></div>
+  <div class="brigBar" id="brigBar">
+    <div class="brigTitle" id="brigTitle">The Brig</div>
+    <div class="cardRow" id="brigCards"></div>
+  </div>
+  <div class="logBox" id="logBox"></div>
+</div>
+
+<div id="results" class="hidden results"></div>
+
+<script src="/shared/api.js"></script>
+<script src="/shared/engine.js"></script>
+<script>
+// Display-only screen. It never sends an action and holds no token — it just
+// polls the public board by room code. All controls stay on the host device.
+const CODE_KEY = 'salty-tv-code';
+let roomCode = null;
+let pollTimer = null;
+
+function show(id) {
+  ['codeEntry','lobby','game','results'].forEach(p => document.getElementById(p).classList.toggle('hidden', p !== id));
+}
+
+function cardHtml(c) {
+  if (!c) return '';
+  const red = c.suit === '♥' || c.suit === '♦';
+  const wild = c.rank === 'K' && c.effectiveValue;
+  const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
+  const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''}">${c.rank}${c.suit}${as}</span>`;
+}
+
+document.getElementById('joinUrl').textContent = location.host + '/join';
+
+function start(code) {
+  roomCode = code;
+  localStorage.setItem(CODE_KEY, code);
+  clearInterval(pollTimer);
+  poll();
+  pollTimer = setInterval(poll, 1000);
+}
+
+document.getElementById('watchBtn').addEventListener('click', async () => {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const err = document.getElementById('err');
+  err.textContent = '';
+  if (!code) { err.textContent = 'Enter the room code.'; return; }
+  try {
+    await Api.getPublicState(code);   // verify before committing the screen to it
+    start(code);
+  } catch (e) {
+    err.textContent = e.message;
+  }
+});
+document.getElementById('codeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('watchBtn').click();
+});
+
+function renderLobby(v) {
+  show('lobby');
+  document.getElementById('lobbyCode').textContent = v.roomCode;
+  document.getElementById('lobbyPlayers').innerHTML =
+    v.players.map(p => `<div class="chip">${p.name}</div>`).join('')
+    || '<div class="chip meta">Nobody yet…</div>';
+}
+
+function renderGame(v) {
+  show('game');
+  document.getElementById('turnBanner').textContent = `${v.currentPlayerName}'s turn`;
+  document.getElementById('roundLine').textContent =
+    `Round ${v.round} of ${v.maxRounds}  ·  Draw deck ${v.deckCount}  ·  Recycle ${v.recycleCount}  ·  Room ${v.roomCode}`;
+
+  document.getElementById('seats').innerHTML = v.players.map(p => `
+    <div class="seat ${p.seat === v.currentSeat ? 'turn' : ''}">
+      <div class="nm">${p.name}</div>
+      <div>${cardHtml(p.goalTop)}</div>
+      <div class="sc">${p.goalCount} in HOLD · ${p.total} pts</div>
+    </div>`).join('');
+
+  document.getElementById('runsRow').innerHTML = v.runs.map((r,i) => `
+    <div class="run">
+      <div class="runLbl">Run ${i+1}${r.direction ? ' · ' + r.direction : ''}</div>
+      <div class="cardRow">${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q</span>'}</div>
+    </div>`).join('');
+
+  const b = v.brig;
+  const bar = document.getElementById('brigBar');
+  bar.classList.toggle('active', b.active);
+  document.getElementById('brigTitle').textContent = b.active
+    ? `⚔ JAILBREAK — ${b.releasedKings.length} King${b.releasedKings.length === 1 ? '' : 's'} loose!`
+    : 'The Brig';
+  document.getElementById('brigCards').innerHTML =
+    (b.active ? b.releasedKings : b.waitingKings).map(cardHtml).join('') || '<span class="meta">Empty</span>';
+
+  document.getElementById('logBox').innerHTML = v.log.slice(0,5).map(l => `<div>${l}</div>`).join('');
+}
+
+function renderResults(v) {
+  show('results');
+  const sorted = [...v.players].sort((a,b) => a.total - b.total);
+  const panel = document.getElementById('results');
+  if (v.status === 'GAME_RESULTS') {
+    panel.innerHTML = `<h2>🏆 ${sorted[0].name} wins!</h2>`
+      + sorted.map(p => `<div class="row">${p.name} — ${p.total}</div>`).join('')
+      + (v.endedEarly ? '<div class="banner">Ended early — already decided.</div>' : '');
+  } else {
+    panel.innerHTML = `<h2>Round ${v.round} complete</h2>`
+      + v.players.map(p => `<div class="row">${p.name}: +${p.roundScore} (${p.total} total)</div>`).join('')
+      + (v.pendingClinch ? `<div class="banner">${v.pendingClinch} has clinched the game.</div>` : '')
+      + '<div class="banner meta">Waiting for the host…</div>';
+  }
+}
+
+async function poll() {
+  try {
+    const v = await Api.getPublicState(roomCode);
+    if (v.status === 'LOBBY') renderLobby(v);
+    else if (v.status === 'ROUND_RESULTS' || v.status === 'GAME_RESULTS') renderResults(v);
+    else renderGame(v);
+  } catch (e) {
+    // A deleted/expired room shouldn't strand the screen — fall back to entry.
+    if (e.status === 404) {
+      clearInterval(pollTimer);
+      localStorage.removeItem(CODE_KEY);
+      show('codeEntry');
+      document.getElementById('err').textContent = 'That room is no longer available.';
+    }
+  }
+}
+
+// ?code=ABCD for a bookmarkable TV link; otherwise resume the last code so a
+// TV that reboots comes straight back to the game.
+(function boot() {
+  const urlCode = new URLSearchParams(location.search).get('code');
+  const code = (urlCode || localStorage.getItem(CODE_KEY) || '').trim().toUpperCase();
+  if (code) start(code);
+})();
+</script>
+</body>
+</html>

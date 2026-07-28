@@ -54,6 +54,7 @@
     <h2>Waiting for players</h2>
     <div class="roomCode" id="roomCodeDisplay"></div>
     <p class="center meta">Players: open <b id="joinUrlText"></b> and enter this code.</p>
+    <p class="center meta">Showing the board on a TV? Open <b id="tvUrlText"></b> there — no sign-in, display only.</p>
     <div class="playerList" id="playerList"></div>
     <p class="center" style="margin-top:20px;"><button id="startBtn" disabled>Start Game</button></p>
   </div>
@@ -105,6 +106,7 @@ function showPanel(id) {
 }
 
 document.getElementById('joinUrlText').textContent = location.origin + '/join';
+document.getElementById('tvUrlText').textContent = location.host + '/tv';
 
 document.getElementById('createBtn').addEventListener('click', async () => {
   const rounds = Number(document.getElementById('roundsInput').value);
