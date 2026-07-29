@@ -58,7 +58,8 @@
                      border-top:1px solid var(--gold); box-shadow:0 -4px 18px rgba(0,0,0,.55);
                      padding:14px; overflow-y:auto; }
   .portFanOverlay h3 { margin-top:0; }
-  .portFanRow { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .portFanRow { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; align-items:flex-start; }
+  .portFanCell { display:flex; flex-direction:column; align-items:center; }
   /* The last card in a pile is the only one that's actually playable — mark it
      so the fan answers "which one can I use" not just "what's buried here". */
   .portFanRow .card.top { outline:2px solid var(--gold); box-shadow:0 0 10px rgba(201,162,39,.6); }
@@ -208,18 +209,27 @@ function cardHtml(c, extraClass) {
 // Read-only: tapping a card inside the fan does nothing, same as hot-seat.
 // Only the top (last) card is actually playable, so it gets marked.
 function togglePortFan(i) {
+  // Refuse while a King direction question is up — it occupies the same corner
+  // of the screen and must be answered first.
+  if (choiceBarOpen()) { showToast('Answer the King first.'); return; }
   fannedPort = (fannedPort === i) ? null : i;
   renderPortFan();
 }
 function renderPortFan() {
   const overlay = document.getElementById('portFanOverlay');
-  if (fannedPort === null || !lastView) { overlay.classList.add('hidden'); return; }
+  // yourPorts is absent from a LOBBY view, so guard on it rather than on lastView
+  // alone — a host reset can swap the view out while the fan is open.
+  if (fannedPort === null || !lastView || !lastView.yourPorts) {
+    fannedPort = null;
+    overlay.classList.add('hidden');
+    return;
+  }
   const pile = lastView.yourPorts[fannedPort] || [];
   if (pile.length === 0) { fannedPort = null; overlay.classList.add('hidden'); return; }
   document.getElementById('portFanTitle').textContent = `Port ${fannedPort + 1} (${pile.length} card${pile.length === 1 ? '' : 's'})`;
   document.getElementById('portFanRow').innerHTML = pile.map((c, idx) => {
     const isTop = idx === pile.length - 1;
-    return `<span>${cardHtml(c, isTop ? 'top' : '')}${isTop ? '<div class="portFanTopLabel">TOP</div>' : ''}</span>`;
+    return `<div class="portFanCell">${cardHtml(c, isTop ? 'top' : '')}${isTop ? '<div class="portFanTopLabel">TOP</div>' : ''}</div>`;
   }).join('');
   overlay.classList.remove('hidden');
 }
@@ -227,6 +237,9 @@ document.getElementById('portFanClose').addEventListener('click', () => { fanned
 
 function selectCard(zone, card, index) {
   if (!lastView.isYourTurn) return;
+  // Picking a different card abandons any King direction question still on
+  // screen — that question belongs to the card you were playing a moment ago.
+  hideChoiceBar();
   // Tapping the selected card again clears it. Without this you cannot get from
   // "hand card selected" back to "nothing selected", which is the state a Port
   // pickup requires.
@@ -264,13 +277,26 @@ async function attemptPlay(runIndex) {
       const required = Engine.kingRequiredValue(run);
       choices = ['up','down'].map(dir => ({ label: `Continue ${dir.toUpperCase()} as ${Engine.VALUE_NAMES[required]}`, value: required, dir }));
     }
-    showChoiceBar(choices, (choice) => sendPlay(runIndex, { value: choice.value, dir: choice.dir }));
+    // Capture the card id NOW. Previously sendPlay() read `selected` at the
+    // moment a choice was tapped, so changing selection while the question was
+    // on screen answered it with the wrong card — committing a King and then
+    // touching a hand card played the hand card instead, King untouched.
+    showChoiceBar(choices, (choice) => sendPlay(card.id, runIndex, { value: choice.value, dir: choice.dir }));
     return;
   }
-  sendPlay(runIndex, undefined);
+  sendPlay(card.id, runIndex, undefined);
 }
 
+function hideChoiceBar() {
+  document.getElementById('choiceBar').classList.add('hidden');
+}
+function choiceBarOpen() {
+  return !document.getElementById('choiceBar').classList.contains('hidden');
+}
 function showChoiceBar(choices, onPick) {
+  // A pending King question and the Port fan are both fixed to the bottom of the
+  // screen; the fan sits above and would bury the question. Close it.
+  fannedPort = null; renderPortFan();
   const bar = document.getElementById('choiceBar');
   bar.innerHTML = '';
   choices.forEach(c => {
@@ -282,11 +308,11 @@ function showChoiceBar(choices, onPick) {
   bar.classList.remove('hidden');
 }
 
-async function sendPlay(runIndex, kingChoice) {
+async function sendPlay(cardId, runIndex, kingChoice) {
   try {
     const res = await Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
-      action: { type: 'PLAY_CARD', cardId: selected.card.id, runIndex, kingChoice },
+      action: { type: 'PLAY_CARD', cardId, runIndex, kingChoice },
       expectedVersion: lastView.stateVersion
     });
     selected = null;
@@ -336,7 +362,10 @@ function render(view) {
     // `selected` would then match the wrong card by id in the next game.
     selected = null;
     document.getElementById('gameUi').classList.add('hidden');
-    document.getElementById('choiceBar').classList.add('hidden');
+    hideChoiceBar();
+    // The fan is a fixed overlay outside gameUi, so hiding gameUi doesn't take it
+    // down — without this it floats over the reset screen showing a dead game's cards.
+    fannedPort = null; renderPortFan();
     const wait = document.getElementById('waitPanel');
     wait.classList.remove('hidden');
     wait.innerHTML = '<p>Game was reset.</p><p>Waiting for the host to start a new round — you’re still in the room.</p>';
@@ -423,6 +452,16 @@ function render(view) {
 }
 
 function applyView(view) {
+  // Drop a view that is older than what we already show. A poll GET issued just
+  // before an action's POST commits will answer with pre-action state and arrive
+  // afterwards, briefly reverting the board — your card visibly jumps back into
+  // your hand. Only compare when both sides carry a version: a LOBBY view (host
+  // reset) has none and must always be allowed through.
+  if (lastView && typeof lastView.stateVersion === 'number'
+      && typeof view.stateVersion === 'number'
+      && view.stateVersion < lastView.stateVersion) {
+    return;
+  }
   lastView = view;
   render(view);
 }
