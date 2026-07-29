@@ -1,10 +1,16 @@
-// Salty Schooner rules engine — ported from app/index.html (v26 · build 16).
+// Salty Schooner rules engine.
 //
-// This is the same game logic as the hot-seat build, with every DOM/render/audio/
-// modal call stripped out and every modal-driven choice (King direction/value)
-// turned into an explicit action parameter instead. Do not change any rule here
-// without updating app/index.html to match, and vice versa — the hot-seat build
-// remains the source of truth for what "correct" looks like (see AGENTS.md).
+// THE RULES LIVE IN docs/RULES.md — that document is authoritative, not this
+// file and not app/index.html. If this code and that document disagree, this
+// code is wrong. Never change a rule here without an approved change recorded
+// in the RULES.md change log (§13).
+//
+// Originally ported from app/index.html (v26 · build 16) with every DOM/render/
+// audio/modal call stripped out, and every modal-driven choice (King direction
+// and value) turned into an explicit action parameter. app/index.html is now
+// FROZEN at v26.16 and deliberately differs on hand refill — do not resync to it.
+//
+// Every function here is pure/state-in-state-out. No DOM, no globals besides `uid`.
 //
 // Every function here is pure/state-in-state-out. No DOM, no globals besides `uid`.
 
