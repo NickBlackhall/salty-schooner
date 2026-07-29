@@ -134,6 +134,7 @@
 
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
+<script src="/shared/sfx.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
@@ -243,8 +244,9 @@ function selectCard(zone, card, index) {
   // Tapping the selected card again clears it. Without this you cannot get from
   // "hand card selected" back to "nothing selected", which is the state a Port
   // pickup requires.
-  if (selected && selected.card.id === card.id) { selected = null; render(lastView); return; }
+  if (selected && selected.card.id === card.id) { selected = null; Sfx.play('deselect'); render(lastView); return; }
   selected = { zone, card, index };
+  Sfx.play('select');
   render(lastView);
 }
 
@@ -268,7 +270,7 @@ async function attemptPlay(runIndex) {
   if (!selected) return;
   const card = selected.card;
   const run = lastView.runs[runIndex];
-  if (!Engine.canPlayCardOnRun(card, run)) { showToast('Illegal play.'); return; }
+  if (!Engine.canPlayCardOnRun(card, run)) { Sfx.play('illegal'); showToast('Illegal play.'); return; }
   if (card.rank === 'K') {
     let choices;
     if (!run.direction) {
@@ -316,8 +318,10 @@ async function sendPlay(cardId, runIndex, kingChoice) {
       expectedVersion: lastView.stateVersion
     });
     selected = null;
+    Sfx.play('place');
     applyView(res.view);
   } catch (e) {
+    Sfx.play('illegal');
     showToast(e.message);
     selected = null;
     render(lastView);
@@ -325,7 +329,7 @@ async function sendPlay(cardId, runIndex, kingChoice) {
 }
 
 async function discardTo(portIndex) {
-  if (!selected || selected.zone !== 'hand') { showToast('Select a card from your hand first.'); return; }
+  if (!selected || selected.zone !== 'hand') { Sfx.play('illegal'); showToast('Select a card from your hand first.'); return; }
   try {
     const res = await Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
@@ -333,8 +337,10 @@ async function discardTo(portIndex) {
       expectedVersion: lastView.stateVersion
     });
     selected = null;
+    Sfx.play('discard');
     applyView(res.view);
   } catch (e) {
+    Sfx.play('illegal');
     showToast(e.message);
   }
 }
@@ -346,8 +352,9 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
       action: { type: 'DRAW_HAND' },
       expectedVersion: lastView.stateVersion
     });
+    Sfx.play('ui');
     applyView(res.view);
-  } catch (e) { showToast(e.message); }
+  } catch (e) { Sfx.play('illegal'); showToast(e.message); }
 });
 
 function render(view) {
