@@ -1,0 +1,139 @@
+/* Salty Schooner — shared visual language for the multiplayer screens.
+ *
+ * Lifted from app/index.html (the hot-seat build) so /tv, /play, /host and
+ * /join read as the same game. Tokens and art are copied deliberately rather
+ * than re-invented: the assets already ship in app/assets/ and are served from
+ * this same site, so nothing new has to be produced or uploaded.
+ *
+ * Layout is NOT shared. Hot-seat is one landscape screen showing everything;
+ * multiplayer splits a large public board from a small private hand, and
+ * copying its arrangement would undo the point. Same look, different shape.
+ *
+ * One file so the screens cannot drift apart — that has already gone wrong
+ * twice on this project (the King renderer, the room status names).
+ */
+
+:root {
+  --gold:     #c9a227;
+  --gold-lt:  #f0d089;
+  --wood:     rgba(46,27,15,.88);
+  --parch:    rgba(238,226,196,.95);
+  --teal:     rgba(14,58,62,.85);
+  --navy:     #07151d;
+  --ink:      #f7e4b2;
+  --serif:    "Cinzel", "Trajan Pro", Georgia, serif;
+  --sans:     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html, body {
+  margin: 0;
+  background: var(--navy);
+  color: var(--ink);
+  font-family: var(--sans);
+  overflow-x: hidden;
+}
+
+/* The board photo, dimmed so cards and text stay legible on top of it.
+ *
+ * Painted by a fixed pseudo-element rather than `background-attachment: fixed`
+ * on the body. Two reasons: iOS Safari handles fixed background attachment
+ * badly (it can judder or drop out entirely while scrolling, and an iPad is a
+ * target device here), and a body background only paints as tall as the body
+ * box, so a short page like the host setup screen showed a hard cut-off with
+ * bare navy underneath. A fixed layer always covers the viewport.
+ */
+.saltyBoard::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: #0b2b33;
+  background-image:
+    /* Same dimming the hot-seat build uses over this photo. */
+    linear-gradient(rgba(4,16,22,.42), rgba(4,16,22,.62)),
+    url("/assets/board-bg.webp");
+  background-size: cover;
+  background-position: center;
+}
+
+h1, h2, h3, .serif { font-family: var(--serif); color: var(--gold-lt); letter-spacing: .02em; }
+
+/* Panels use the painted frame as a border-image, same as the hot-seat build. */
+.panelFramed {
+  border: 26px solid transparent;
+  border-image: url("/assets/frame-generic.png") 90 fill / 26px / 0 round;
+  background: transparent;
+}
+.panelPlain {
+  background: var(--wood);
+  border: 1px solid rgba(201,162,39,.45);
+  border-radius: 14px;
+}
+
+/* ---- cards ---------------------------------------------------------------
+ * 5:7 cream faces, matching the hot-seat build. A King played as a wildcard
+ * keeps its real rank and gets a gold ring plus a corner badge showing what it
+ * stands for — never rendered as the value alone, which previously made a
+ * King-on-King refusal look like a broken rule.
+ */
+.card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fffdf7;
+  color: #222;
+  border: 1px solid #9ca3af;
+  border-radius: 6px;
+  font-weight: 800;
+  font-family: var(--sans);
+  position: relative;
+  box-shadow: 0 2px 5px rgba(0,0,0,.45);
+}
+.card.red { color: #b9331f; }
+.card.king {
+  background: #f7ecc8;
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 2px var(--gold), 0 2px 5px rgba(0,0,0,.45);
+}
+.asBadge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  background: var(--gold);
+  color: #25190a;
+  border-radius: 4px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 1px 3px;
+  font-family: var(--sans);
+}
+
+/* ---- buttons ---- */
+button.salty {
+  font-family: var(--serif);
+  font-weight: 700;
+  color: #25190a;
+  background: linear-gradient(#f0d089, #c9a227);
+  border: 1px solid #8a6c15;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #6f5510, 0 3px 8px rgba(0,0,0,.4);
+}
+button.salty:active { transform: translateY(1px); box-shadow: 0 1px 0 #6f5510; }
+button.salty:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+button.saltySecondary {
+  background: rgba(20,12,7,.92);
+  color: var(--gold-lt);
+  border: 1px solid #c99a43;
+}
+
+/* ---- room code ---- */
+.roomCodeBig {
+  font-family: var(--serif);
+  font-weight: 700;
+  color: var(--gold-lt);
+  letter-spacing: .18em;
+  text-shadow: 0 3px 10px rgba(0,0,0,.6);
+}
+
+.meta { color: rgba(240,208,137,.72); }
