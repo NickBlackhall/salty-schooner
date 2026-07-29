@@ -43,7 +43,7 @@ function createMatchState(names, requestedConfig = {}) {
     currentPlayer: 0,
     deck: [], runs: [], brig: [], recycle: [],
     jailbreak: { active: false, kings: [], initialCount: 0 },
-    stalls: [], pendingWinner: null, handEmptyNoted: false, log: [],
+    stalls: [], pendingWinner: null, handEmptyNoted: false, drawQuota: 0, log: [],
     version: 'v26-configurable-match',
     status: 'IN_ROUND',
     endedEarly: false,
@@ -86,9 +86,12 @@ function drawCard(state) {
   if (state.deck.length === 0) return null;
   return state.deck.pop();
 }
-function drawTo(state, player, n) {
+// Draw exactly n cards (not "fill up to n"). The distinction matters for the
+// start-of-turn top-off: a quota of 1 draws one card even if the hand has since
+// shrunk to 3, so it lands on 4 rather than refilling to 5.
+function drawN(state, player, n) {
   let drawn = 0;
-  while (player.hand.length < n) {
+  for (let i = 0; i < n; i++) {
     const card = drawCard(state);
     if (!card) break;
     player.hand.push(card);
@@ -98,6 +101,50 @@ function drawTo(state, player, n) {
   return drawn;
 }
 function currentPlayer(state) { return state.players[state.currentPlayer]; }
+
+const HAND_LIMIT = 5;
+
+// ---- Hand refill (rule change, 2026-07-29, approved by Nick Blackhall) -------
+//
+// WAS: every turn ended with an unconditional refill to 5. Two problems showed
+// up in play. First, scoring is HOLD + hand, so every player who did not win the
+// round scored their HOLD plus exactly 5 — a flat penalty they never chose, and
+// a scoring term that was constant for everyone but the winner. Second, drawing
+// at the END of a turn claims cards out of the shared deck that then sit dead in
+// that player's hand through everyone else's turns.
+//
+// NOW: nothing is drawn automatically. A player may draw when either holds:
+//
+//   1. Start-of-turn quota — HAND_LIMIT minus the hand size at the moment the
+//      turn began, computed once in beginTurn() and never recalculated. Spending
+//      it is optional and can happen at any point in the turn, but playing cards
+//      first does not enlarge it: start with 4, play one, and the quota is still
+//      1, landing on 4 — not 5.
+//   2. Empty hand — any time the hand hits exactly 0, mid-turn, draw up to 5.
+//      Repeatable, since a long turn can empty the hand more than once.
+//
+// Where both could apply the empty-hand draw wins (up to 5 beats any leftover
+// quota) and the quota is cleared, so there is no double-dip.
+//
+// This is the same principle as the build-14 note in app/index.html — "refilling
+// mid-turn is the player's call" — extended to close the turn-end loophole that
+// reintroduced the forced refill.
+//
+// NOTE: app/index.html (hot-seat) still has the old turn-end refill. The two
+// builds now differ on this rule deliberately; do not "fix" one to match the
+// other without checking which behaviour is wanted.
+function beginTurn(state) {
+  state.drawQuota = Math.max(0, HAND_LIMIT - currentPlayer(state).hand.length);
+}
+
+// How many cards the seat may draw right now: 0 hides the draw control.
+function drawEligibility(state, seat) {
+  if (state.status !== 'IN_ROUND' || state.currentPlayer !== seat) return 0;
+  const p = state.players[seat];
+  if (!p) return 0;
+  if (p.hand.length === 0) return HAND_LIMIT;
+  return state.drawQuota || 0;
+}
 
 function runLastValue(run) {
   const c = topCard(run.cards);
@@ -198,6 +245,9 @@ function dealRound(state) {
   }
   state.currentPlayer = (state.round - 1) % state.players.length;
   state.status = 'IN_ROUND';
+  // Everyone was just dealt a full hand, so the opening quota works out to 0 —
+  // no special case needed, the formula covers it.
+  beginTurn(state);
   const starter = currentPlayer(state);
   log(state, `Round ${state.round} started. ${starter.name} goes first. The Brig begins with 1 King.`);
 }
@@ -257,6 +307,7 @@ function turnSnapshot(state) {
 }
 function nextTurn(state) {
   state.currentPlayer = (state.currentPlayer + 1) % state.players.length;
+  beginTurn(state);
 }
 
 class RuleError extends Error {}
@@ -384,8 +435,16 @@ function applyDrawHand(state, action) {
   if (state.status !== 'IN_ROUND') throw new RuleError('No round is in progress.');
   if (action.playerIndex !== state.currentPlayer) throw new RuleError('It is not your turn.');
   const p = currentPlayer(state);
-  if (p.hand.length > 0) throw new RuleError('Your hand is not empty.');
-  const drawn = drawTo(state, p, 5);
+
+  // Empty hand outranks the start-of-turn quota — up to 5 beats whatever is
+  // left of it — so the quota is consumed rather than granted on top.
+  const emptyHand = p.hand.length === 0;
+  const want = emptyHand ? HAND_LIMIT : (state.drawQuota || 0);
+  if (want <= 0) throw new RuleError('You have no cards to draw right now.');
+
+  const drawn = drawN(state, p, want);
+  state.drawQuota = 0;
+
   const events = [];
   if (drawn === 0) {
     log(state, `${p.name} tried to draw, but the draw deck and recycle pile are both empty.`);
@@ -446,8 +505,8 @@ function applyDiscardToPort(state, action) {
     endRound(state, p, events);
     return events;
   }
-  const drawn = drawTo(state, p, 5);
-  void drawn;
+  // No refill here any more — see the hand-refill note above. The next player's
+  // quota is set by nextTurn(), and this player draws on their own turn.
   nextTurn(state);
   events.push({ type: 'TURN_ENDED', nextPlayer: state.currentPlayer });
   return events;
@@ -460,7 +519,7 @@ const Engine = {
   createMatchState, dealRound, advanceRound,
   currentPlayer, topCard, cardLabel,
   nextValuesForRun, kingRequiredValue, unsetNaturalKingChoices, canPlayCardOnRun,
-  turnSnapshot,
+  turnSnapshot, drawEligibility, HAND_LIMIT,
   applyPlayCard, applyDrawHand, applyDiscardToPort
 };
 

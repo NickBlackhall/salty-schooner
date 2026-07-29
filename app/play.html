@@ -4,40 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Salty Schooner — Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
 <style>
+  /* Controller styling only. Element ids, the .card/.run/.port classes and the
+     data-id/data-run/data-port/data-jb attributes are load-bearing — the tap
+     handlers select on them. Restyle them; do not rename or re-nest them. */
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; background:#0c2436; color:#f4ecd8; padding-bottom: 30px; }
-  .bar { position:sticky; top:0; background:#0a1e2c; padding:10px 14px; font-weight:700; z-index:5; display:flex; justify-content:space-between; align-items:center; }
-  .bar.myTurn { background:#3f3212; color:#ffe28a; }
+  body { padding-bottom: 30px; }
+  .bar { position:sticky; top:0; z-index:5; display:flex; justify-content:space-between; align-items:center;
+         font-family:var(--serif); font-size:1.05rem; padding:11px 14px; color:var(--gold-lt);
+         background:linear-gradient(rgba(10,20,26,.92), rgba(10,20,26,.86)), url("/assets/tex-wood.webp") center / 340px;
+         border-bottom:1px solid rgba(201,162,39,.45); }
+  .bar.myTurn { color:#2a1e05; border-bottom-color:var(--gold);
+                background:linear-gradient(#f0d089, #c9a227); text-shadow:none; }
   section { padding: 12px 14px; }
-  h3 { margin: 6px 0; font-size: .95rem; color:#9fb8c8; text-transform:uppercase; letter-spacing:.08em; }
+  h3 { margin:6px 0; font-family:var(--serif); font-size:.9rem; color:var(--gold-lt);
+       text-transform:uppercase; letter-spacing:.1em; font-weight:600; }
   .runsGrid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-  .run { background:#123449; border:2px solid #24586f; border-radius:12px; padding:8px; min-height:56px; }
-  .run.legal { border-color:#c9a227; box-shadow: 0 0 0 2px rgba(201,162,39,.4) inset; }
+  .run { background:var(--teal); border:1px solid rgba(201,162,39,.35); border-radius:12px; padding:8px; min-height:64px; }
+  /* A run the selected card can legally go to. This is the main affordance on
+     a phone, so it stays loud. */
+  .run.legal { border-color:var(--gold); box-shadow:0 0 0 2px rgba(201,162,39,.55) inset, 0 0 16px rgba(201,162,39,.35); }
   .cardRow { display:flex; flex-wrap:wrap; gap:6px; }
-  .card { display:inline-flex; align-items:center; justify-content:center; background:#fdf6e3; color:#222; border-radius:8px; padding:10px 6px; min-width:2.4em; font-weight:800; font-size:1.05rem; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
-  .card.red { color:#b9331f; }
-  .card.king { background:#f3e2b0; box-shadow: inset 0 0 0 2px #c9a227; position:relative; padding-right:22px; }
-  .asBadge { position:absolute; right:2px; top:50%; transform:translateY(-50%); background:#c9a227; color:#25190a; border-radius:4px; font-size:10px; padding:1px 3px; font-weight:800; }
-  .card.selected { outline: 3px solid #6fe38a; transform: translateY(-4px); }
+
+  /* 5:7 faces like the hot-seat build, sized up for thumbs. */
+  .card { width:44px; aspect-ratio:5/7; font-size:1.05rem; }
+  .handRow .card, #holdTop { width:52px; font-size:1.15rem; }
+  .asBadge { font-size:9px; }
+  .card.selected { outline:3px solid var(--gold-lt); outline-offset:1px; transform:translateY(-5px);
+                   box-shadow:0 0 14px rgba(240,208,137,.8), 0 6px 10px rgba(0,0,0,.5); }
   .card.slot { cursor:pointer; }
-  .handRow, .portsGrid { display:flex; flex-wrap:wrap; gap:8px; }
+
+  .handRow { display:flex; flex-wrap:wrap; gap:8px; }
   .portsGrid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
-  .port { background:#123449; border-radius:10px; padding:8px; text-align:center; min-height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-  .port .count { font-size:.75rem; color:#8aa4b2; margin-top:4px; }
+  .port { background:var(--wood); border:1px solid rgba(201,162,39,.3); border-radius:10px; padding:8px;
+          text-align:center; min-height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .port .count { font-size:.72rem; color:rgba(240,208,137,.7); margin-top:4px; }
   .holdRow { display:flex; align-items:center; gap:12px; }
-  button { font-size:1rem; padding:12px 18px; border-radius:10px; border:none; background:#c9a227; color:#25190a; font-weight:700; }
+
+  /* The hand sits on wood, as it does in the hot-seat build. */
+  #handSection { background:linear-gradient(rgba(20,12,7,.55), rgba(20,12,7,.55)), url("/assets/tex-wood.webp") center / 340px;
+                 border-top:1px solid rgba(201,162,39,.28); border-bottom:1px solid rgba(201,162,39,.28); }
+
+  button { font-size:1rem; padding:12px 18px; border-radius:10px; border:none;
+           font-family:var(--serif); font-weight:700; color:#25190a;
+           background:linear-gradient(#f0d089, #c9a227); box-shadow:0 2px 0 #6f5510; }
+  button:active { transform:translateY(1px); box-shadow:0 1px 0 #6f5510; }
   button.wide { width:100%; }
-  .choiceBar { position:fixed; left:0; right:0; bottom:0; background:#0a1e2c; padding:14px; box-shadow: 0 -4px 14px rgba(0,0,0,.4); display:flex; gap:10px; flex-wrap:wrap; z-index:10; }
-  .toast { position:fixed; top:60px; left:50%; transform:translateX(-50%); background:#7a2323; color:#fff; padding:10px 18px; border-radius:10px; z-index:20; }
+  .choiceBar { position:fixed; left:0; right:0; bottom:0; padding:14px; display:flex; gap:10px; flex-wrap:wrap; z-index:10;
+               background:linear-gradient(rgba(10,20,26,.96), rgba(10,20,26,.99));
+               border-top:1px solid var(--gold); box-shadow:0 -4px 18px rgba(0,0,0,.55); }
+  .toast { position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#7a2323; color:#fff;
+           padding:10px 18px; border-radius:10px; z-index:20; border:1px solid #c9a227; }
   .hidden { display:none; }
-  .center { text-align:center; padding: 40px 20px; }
-  .meta { color:#8aa4b2; }
+  .center { text-align:center; padding:40px 20px; }
+  #waitPanel .logo { width:min(70vw,320px); display:block; margin:0 auto 18px; }
 </style>
 </head>
-<body>
+<body class="saltyBoard">
 <div id="waitPanel" class="center">
+  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
   <p>Loading your seat…</p>
 </div>
 
@@ -49,7 +79,7 @@
     <div class="runsGrid" id="runsGrid"></div>
   </section>
 
-  <section>
+  <section id="handSection">
     <h3>Your Hand</h3>
     <div class="handRow" id="handRow"></div>
     <button id="drawBtn" class="wide hidden" style="margin-top:10px;">Draw 5 cards</button>
@@ -291,7 +321,14 @@ function render(view) {
       selectCard('hand', c);
     });
   });
-  document.getElementById('drawBtn').classList.toggle('hidden', !(view.isYourTurn && view.yourHand.length === 0));
+  // Drawing is always a choice now. The server decides eligibility (start-of-turn
+  // quota, or a refill because the hand is empty) and sends the count; 0 hides it.
+  const drawBtn = document.getElementById('drawBtn');
+  const drawable = view.yourDrawCount || 0;
+  drawBtn.classList.toggle('hidden', !(view.isYourTurn && drawable > 0));
+  drawBtn.textContent = view.yourHand.length === 0
+    ? 'Draw up to ' + drawable + ' cards'
+    : 'Draw ' + drawable + ' card' + (drawable === 1 ? '' : 's');
 
   document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
     const top = pile[pile.length-1];

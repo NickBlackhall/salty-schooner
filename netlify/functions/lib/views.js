@@ -56,6 +56,9 @@ function getPlayerView(room, state, seat) {
   view.yourGoalTop = engine.topCard(me.goal) || null;
   view.yourGoalCount = me.goal.length;
   view.yourPorts = me.discards;
+  // 0 means the draw control stays hidden. Non-zero is either the start-of-turn
+  // quota or a full refill because the hand is empty — the phone phrases it.
+  view.yourDrawCount = engine.drawEligibility(state, seat);
   return view;
 }
 
