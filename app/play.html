@@ -42,8 +42,27 @@
   .handRow { display:flex; flex-wrap:wrap; gap:8px; }
   .portsGrid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
   .port { background:var(--wood); border:1px solid rgba(201,162,39,.3); border-radius:10px; padding:8px;
-          text-align:center; min-height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+          text-align:center; min-height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          position:relative; }
   .port .count { font-size:.72rem; color:rgba(240,208,137,.7); margin-top:4px; }
+  /* Tap the count to fan the whole pile open — matches togglePortFan() in the
+     hot-seat build. Separate hit target from the port tile itself (stopPropagation
+     in the handler), since tapping the tile plays/discards. */
+  .portBadge { position:absolute; top:-6px; right:-6px; background:var(--gold); color:#25190a;
+               border-radius:999px; min-width:20px; height:20px; padding:0 5px; font-size:.72rem;
+               font-weight:800; display:flex; align-items:center; justify-content:center;
+               box-shadow:0 1px 4px rgba(0,0,0,.5); cursor:pointer; }
+
+  .portFanOverlay { position:fixed; left:0; right:0; bottom:0; z-index:15; max-height:70vh;
+                     background:linear-gradient(rgba(10,20,26,.97), rgba(10,20,26,.99));
+                     border-top:1px solid var(--gold); box-shadow:0 -4px 18px rgba(0,0,0,.55);
+                     padding:14px; overflow-y:auto; }
+  .portFanOverlay h3 { margin-top:0; }
+  .portFanRow { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  /* The last card in a pile is the only one that's actually playable — mark it
+     so the fan answers "which one can I use" not just "what's buried here". */
+  .portFanRow .card.top { outline:2px solid var(--gold); box-shadow:0 0 10px rgba(201,162,39,.6); }
+  .portFanTopLabel { font-size:9px; text-align:center; color:var(--gold-lt); margin-top:2px; }
   .holdRow { display:flex; align-items:center; gap:12px; }
 
   /* The hand sits on wood, as it does in the hot-seat build. */
@@ -106,6 +125,11 @@
 
 <div id="choiceBar" class="choiceBar hidden"></div>
 <div id="toast" class="toast hidden"></div>
+<div id="portFanOverlay" class="portFanOverlay hidden">
+  <h3 id="portFanTitle">Port</h3>
+  <div class="portFanRow" id="portFanRow"></div>
+  <button class="wide" id="portFanClose">Close</button>
+</div>
 
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
@@ -127,6 +151,7 @@ if (roomId && urlPid && urlTok) {
 }
 let selected = null; // {zone, card, index}
 let lastView = null;
+let fannedPort = null; // index of the Port currently spread open, or null
 let pollTimer = null;
 let lastAnnouncedStatus = null;
 
@@ -178,6 +203,27 @@ function cardHtml(c, extraClass) {
   const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
   return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${c.suit}${as}</span>`;
 }
+
+// Spreads a whole Port pile open — mirrors togglePortFan() in app/index.html.
+// Read-only: tapping a card inside the fan does nothing, same as hot-seat.
+// Only the top (last) card is actually playable, so it gets marked.
+function togglePortFan(i) {
+  fannedPort = (fannedPort === i) ? null : i;
+  renderPortFan();
+}
+function renderPortFan() {
+  const overlay = document.getElementById('portFanOverlay');
+  if (fannedPort === null || !lastView) { overlay.classList.add('hidden'); return; }
+  const pile = lastView.yourPorts[fannedPort] || [];
+  if (pile.length === 0) { fannedPort = null; overlay.classList.add('hidden'); return; }
+  document.getElementById('portFanTitle').textContent = `Port ${fannedPort + 1} (${pile.length} card${pile.length === 1 ? '' : 's'})`;
+  document.getElementById('portFanRow').innerHTML = pile.map((c, idx) => {
+    const isTop = idx === pile.length - 1;
+    return `<span>${cardHtml(c, isTop ? 'top' : '')}${isTop ? '<div class="portFanTopLabel">TOP</div>' : ''}</span>`;
+  }).join('');
+  overlay.classList.remove('hidden');
+}
+document.getElementById('portFanClose').addEventListener('click', () => { fannedPort = null; renderPortFan(); });
 
 function selectCard(zone, card, index) {
   if (!lastView.isYourTurn) return;
@@ -333,11 +379,16 @@ function render(view) {
   document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
     const top = pile[pile.length-1];
     const sel = selected && selected.zone === 'discard' && selected.index === i;
-    return `<div class="port" data-port="${i}">${top ? cardHtml(top, sel ? 'selected' : '') : '<span class="meta">Port '+(i+1)+'</span>'}<div class="count">${pile.length}</div></div>`;
+    const badge = pile.length > 0 ? `<span class="portBadge" data-fan="${i}">${pile.length}</span>` : '';
+    return `<div class="port" data-port="${i}">${top ? cardHtml(top, sel ? 'selected' : '') : '<span class="meta">Port '+(i+1)+'</span>'}${badge}<div class="count">${pile.length}</div></div>`;
   }).join('');
   document.querySelectorAll('#portsGrid .port').forEach(el => {
     el.addEventListener('click', () => portTap(Number(el.dataset.port)));
   });
+  document.querySelectorAll('#portsGrid .portBadge').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); togglePortFan(Number(el.dataset.fan)); });
+  });
+  renderPortFan();
 
   document.getElementById('holdCard').innerHTML = (() => {
     if (!view.yourGoalTop) return '<span class="meta">Cleared!</span>';
