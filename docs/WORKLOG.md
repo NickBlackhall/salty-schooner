@@ -4,16 +4,47 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-07-21 (Claude / Opus) — build 16, per-turn telemetry (Tier 1).
+Last updated: 2026-07-30 (Claude) — multiplayer prototype built; see entry 15.
 
 ---
 
+## ⚠ READ FIRST — two things changed structurally
+
+1. **`docs/RULES.md` is now the rules authority**, not `app/index.html` and not
+   `reference/`. It is NOT yet ratified by Nick — three items are flagged `⚑`
+   for his review. `AGENTS.md`'s authority order was corrected: it previously
+   pointed at `reference/`, whose only prototype is **v11**, which the
+   multiplayer roadmap explicitly calls historical. Following the old list would
+   have led an agent to "correct" the game *backwards*.
+2. **`app/index.html` (hot-seat) is FROZEN at v26.16 by Nick's decision
+   (2026-07-29)** and now **deliberately differs on hand refill** — see entry 15.
+   Do not resync the multiplayer engine to match it on that rule.
+
 ## Current state
 
-- **Canonical build:** `app/index.html` (v26 "Tappable Runs", internal version `v26-configurable-match`) plus `app/assets/`. This is the single source of truth, on `main`.
-- **Repo:** github.com/NickBlackhall/salty-schooner, branch `main` (pushed).
-- **Older prototype:** archived at `reference/salty_schooner_v11_ipad_fit.html` (do not treat as authoritative).
-- **Deploy:** Nick deploys manually to **Netlify Drop** (a throwaway site, separate from his usual Netlify site) from a zip. The "usual" live Netlify site may be an OLDER build until Nick re-drops the current one.
+- **Two apps in one repo, both on `main`'s successor branch `multiplayer-prototype`:**
+  - **Hot-seat:** `app/index.html` (v26 "Tappable Runs") + `app/assets/`. Frozen.
+    Tagged `v26.16-hotseat-baseline`.
+  - **Multiplayer:** `/host`, `/join`, `/play`, `/tv` + `netlify/functions/`.
+    Shared TV screen with private phone controllers, server-authoritative.
+- **Repo:** github.com/NickBlackhall/salty-schooner. Active branch
+  **`multiplayer-prototype`** (pushed). `main` still holds the hot-seat baseline.
+- **Rules engine:** `netlify/functions/lib/engine.js`, ported from
+  `app/index.html`. `app/shared/engine.js` is a **byte-identical copy** served to
+  browsers for legality hints — keep the two in sync (`cp` after any edit).
+- **Backend:** Supabase project **BMG Social** (`qbkcnjlshkckpkoiavje`), schema
+  `salty_schooner`, tables `rooms` + `players`. Not the paused "Make it terrible"
+  project. Service-role key is set as a Netlify env var.
+- **Deploy:** now `netlify deploy` from the repo (site `salty-schooner`,
+  salty-schooner.netlify.app). The old Netlify Drop zip workflow below applies to
+  the **hot-seat** build only.
+- **⚠ PRODUCTION IS STALE (verified 2026-07-30).** Live production has the reset
+  button, rejoin-by-name and `/tv`, but **NOT** the styling pass, the hand-refill
+  rule change, the Port fan, four controller bug fixes, or sound. All of that has
+  only ever gone to **draft** URLs pending Nick's review — deliberately, so an
+  unreviewed visual pass could not wreck a live session. **Promote with
+  `netlify deploy --prod --build` when Nick approves.** Until then the live URL is
+  missing the refill fix, which is a real scoring correction.
 
 ## Single-source-of-truth rule (important)
 
@@ -114,3 +145,75 @@ Note on process: earlier, a King-opener issue in the v11 file was fixed but then
 - Rules are protected: don't change game rules/scoring/King/Jailbreak/etc. without Nick's explicit approval, and document any change in the brief.
 - After editing `app/`, run `./build-drop-zip.sh` so the drop zip stays current.
 - Append your changes to the Change history above so the next collaborator can follow.
+
+### 2026-07-27 → 2026-07-30 (Claude) — branch `multiplayer-prototype`
+
+15. `Jackbox-style multiplayer prototype` — the roadmap in
+    `docs/SALTY_SCHOONER_MULTIPLAYER_ROADMAP.md` (recovered from an unpushed
+    Codespace) is now partly built. Deliberately **skipped** the roadmap's Phase 1
+    clean rules-engine extraction: Nick expects rules to change after playtesting,
+    so a pristine architecture would have been redone. Expect rough edges.
+    - **Backend:** five Netlify Functions — `create-room`, `join-room`,
+      `start-game`, `submit-action`, `get-state` — plus `reset-game` and an
+      unauthenticated `get-public-state`. All rules run server-side; clients only
+      *propose* actions. Optimistic concurrency via `state_version`.
+    - **Screens:** `/host` (create room, Start, Next Round, Reset), `/join`,
+      `/play` (private hand), `/tv` (token-free public board by room code).
+    - **`/tv` takes no token deliberately** — `getHostView` is public-only
+      (face-up HOLD tops, counts, runs, Brig, scores, log, deck *count*).
+      Verified on production that it leaks no hands, Ports, goal arrays, deck
+      contents or tokens. **Never point that endpoint at `getPlayerView`.**
+    - **Rejoin is self-service:** entering the same room code and the *exact same
+      name* at `/join` returns that seat's existing credentials. Tradeoff is
+      deliberate and documented in `join-room.js` — code + display name claims a
+      seat, which is fine for one room, wrong for public matchmaking.
+    - **Visual pass:** `app/shared/theme.css` gives all four screens the hot-seat
+      look (board art, Cinzel, gold/wood palette, 5:7 card faces). Layout is
+      deliberately *not* copied — hot-seat is one landscape screen; multiplayer
+      splits public board from private hand.
+    - **Sound:** `app/shared/sfx.js` is the v28 manager lifted from
+      `app/index.html`. `/tv` carries the shared theatre (Brig burst → Jailbreak
+      art + drums → Curse / Brig-secured stings, auto-dismissing since nobody taps
+      a television) plus a mute button. `/play` gets only local cues for your own
+      taps. Because `get-public-state` is a snapshot with no event stream, `/tv`
+      derives events by **diffing the log**; first poll, window overflow, re-deal
+      and room switch all re-baseline **silently** on purpose — that is not a bug.
+
+16. `Hand refill is always the player's choice` — **rules change, approved by Nick
+    2026-07-29. Multiplayer only; `app/index.html` keeps the old behaviour.**
+    Found in real play: every player who did not win a round scored their HOLD
+    *plus exactly 5*, because the turn ended with an unconditional refill. A
+    penalty nobody chose, and a scoring term identical for everyone but the
+    winner, so it distinguished nothing. Nick also noted it let a player claim
+    deck cards that then sat unusable through everyone else's turns. Replaced with
+    a **start-of-turn quota** (`5 − hand size when the turn began`, computed once,
+    never recalculated upward — start with 4, play one, still draw only 1, landing
+    on 4 not 5) plus the existing **empty-hand draw** (up to 5, repeatable), which
+    supersedes rather than stacks. Opening deal needs no special case: everyone
+    holds 5, so the quota is 0. Extends build 14's "refilling mid-turn is the
+    player's call" to close the turn-end loophole. Full text: `docs/RULES.md` §8.
+
+17. `docs/RULES.md` — the ruleset finally written down, with a change log and a
+    build-conformance table. **Not ratified.** Three `⚑` items need Nick:
+    Run 1's non-Ace/Queen opener, Curse penalties being able to *un-win* a round,
+    and a second Jailbreak being reachable in one turn. Also found: **the clinch
+    check is provably unsound** — it assumes a max round score of `holdCards + 5`,
+    but Curse penalties grow HOLD past its starting size (demonstrated: 19 against
+    an assumed ceiling of 15), so the game can offer to end early claiming someone
+    is "mathematically uncatchable" when they are not. Unfixed, needs Nick's call.
+
+18. `Controller fixes` — Port fan added to `/play` (tap the count badge to spread a
+    pile open; hot-seat has this, the phone did not, and Nick confirmed skilled
+    play depends on deliberately layering Ports). Then four bugs found reviewing
+    it, two of them pre-existing: a fixed overlay surviving a host reset (the same
+    omission made twice — **any new fixed overlay must be torn down in
+    `render()`'s LOBBY branch**); the fan burying the King direction question; and
+    worst, **`sendPlay()` read `selected` at the moment a choice was tapped rather
+    than when the King was committed**, so committing a King then touching a hand
+    card played the hand card instead. Also, an in-flight poll could overwrite a
+    fresher post-action view, making a played card visibly jump back to hand —
+    `applyView()` now drops stale views, while always letting version-less LOBBY
+    views through so host resets still reach phones.
+
+**Note on the build-stamp convention:** entries 15–18 change only the multiplayer
+app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
