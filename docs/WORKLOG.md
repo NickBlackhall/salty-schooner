@@ -4,9 +4,41 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-07-30 (Claude) — multiplayer prototype built; see entry 15.
+Last updated: 2026-07-30 (Claude) — site is PAUSED, see entry 19 before doing anything.
 
 ---
+
+## 🔴 READ FIRST — the live site is PAUSED right now (2026-07-30)
+
+**salty-schooner.netlify.app returns HTTP 503 on every route, including the
+functions.** Netlify paused the project for exceeding the Free-tier function
+quota (125,000 requests/billing-period). Confirmed via the project's own
+Function settings page: **191,384 / 125,000 — 66,384 over.** Billing period is
+Jul 1 → Aug 1, so it should lift on its own around Aug 1; upgrading the plan
+would restore it sooner but that is Nick's call, not a technical one.
+
+**Root cause:** two Browser-pane test tabs (Claude's, not Nick's) were left
+open against deployed URLs — one draft `/host`, one production `/play` — each
+polling roughly once a second, for about two days. That alone plausibly
+accounts for the overage. Full writeup, including a wrong intermediate
+diagnosis that was corrected against the actual dashboard numbers: entry 19
+below.
+
+**Before touching this project again:**
+1. Check whether the site is back (`curl -o /dev/null -w '%{http_code}' https://salty-schooner.netlify.app/play` — 200 means it's up, 503 means still paused).
+2. **The moment it's back, deploy production BEFORE opening any client page.**
+   Production is still running the OLD flat-polling code (`/play` 800ms, `/host`
+   900ms, `/tv` 1000ms, no pause-when-hidden). The fix has been on `main`
+   since commit `272bf99` but never promoted:
+   ```
+   cd ~/repos/salty-schooner && netlify deploy --prod --build
+   ```
+   Opening old production `/play` even once, before that deploy, restarts the
+   same problem that just got the site paused.
+3. Close any Salty Schooner browser tabs — yours or an agent's — pointed at a
+   deployed URL before ending a session. See `[[browser-tabs-cost-real-money]]`
+   in Claude's memory. `localhost`/`file://` tabs are free; `*.netlify.app`
+   tabs are not, and keep polling indefinitely if left open.
 
 ## ⚠ READ FIRST — two things changed structurally
 
@@ -217,3 +249,51 @@ Note on process: earlier, a King-opener issue in the v11 file was fixed but then
 
 **Note on the build-stamp convention:** entries 15–18 change only the multiplayer
 app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
+
+19. `Adaptive polling` + `usage incident writeup` — **the site got paused for
+    exceeding Netlify's Free-tier function quota.** Full account:
+    - Every screen polled on a flat `setInterval` with no regard for tab
+      visibility (`/play` 800ms, `/host` 900ms, `/tv` 1000ms). Two Browser-pane
+      test tabs — one draft `/host`, one production `/play` — were left open
+      against deployed URLs for roughly two days, polling the whole time.
+    - Netlify's dashboard (Function settings → Usage) showed the real number:
+      **191,384 / 125,000 requests for Jul 1 – Aug 1, 66,384 over.** The
+      project auto-paused; every route including functions now 503s.
+    - **A wrong turn worth recording so it isn't repeated:** mid-diagnosis,
+      Claude checked a DIFFERENT site's usage panel (Make It Terrible, which
+      read 3,458/125,000) and concluded from that mismatch that the whole
+      original diagnosis had been wrong by ~100x. It hadn't — **the usage
+      counter is per-site**, not account-wide, and the actually-relevant
+      number (Salty Schooner's own panel) confirmed the original theory. Two
+      lesson: verify against the dashboard before revising a theory, and when
+      pulling a usage/limits number, make sure it's scoped to the right site.
+    - **Fix:** `app/shared/poller.js`, used by all three screens. (1) Pause
+      entirely while `document.hidden` — a backgrounded tab now makes ZERO
+      requests, which alone prevents this exact incident. (2) Stop completely
+      after 10min (20 on `/tv`) of no state change AND no user interaction;
+      offer a "Resume" tap. (3) Back off the interval when nothing is
+      changing, snap back instantly on any change or interaction. (4) Per-state
+      base rates — a player's OWN turn polls fast (1200ms), a waiting player
+      slow (3500ms), lobby slower still. `/tv`'s backoff ceiling is
+      deliberately lower (4s) than the others so the Jailbreak burst doesn't
+      arrive late.
+    - Measured before/after: hidden tab over 10s, ~12 calls → **0**. Active
+      player's own tab over 16s, 20 calls → 7. Abandoned poller gave up after
+      5 calls where flat polling would have made 23.
+    - **This is mitigation, not the fix.** Even with adaptive polling, a real
+      2-hour 4-player session is an estimated ~18,000 invocations — roughly
+      **7 sessions/month before hitting the same 125,000 cap again.** The
+      actual fix is moving reads to **Supabase Realtime** (already paid for),
+      which would drop a session to roughly the number of moves played —
+      a few hundred. Not started. This is now the top priority, ahead of
+      styling polish or the host-as-a-seat rework, because it is a recurring
+      cost problem, not a one-off. See `[[salty-schooner-multiplayer]]` in
+      Claude's memory for the full technical framing (targeted subscriptions,
+      not Make It Terrible's broad `event:'*'` pattern, which has its own
+      known bug that Nick is fixing separately in that repo).
+    - **Deploy status:** the fix is committed and pushed (`272bf99`,
+      `main`/`multiplayer-prototype`) but was NEVER promoted to production —
+      the site got paused before that could happen. Production is still
+      running the old flat-polling code as of this writing. See the READ FIRST
+      section at the top of this file for the exact sequencing needed once the
+      site comes back.
