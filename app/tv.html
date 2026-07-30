@@ -155,12 +155,12 @@
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
 <script src="/shared/sfx.js"></script>
+<script src="/shared/poller.js"></script>
 <script>
 // Display-only screen. It never sends an action and holds no token — it just
 // polls the public board by room code. All controls stay on the host device.
 const CODE_KEY = 'salty-tv-code';
 let roomCode = null;
-let pollTimer = null;
 
 function show(id) {
   ['codeEntry','lobby','game','results'].forEach(p => document.getElementById(p).classList.toggle('hidden', p !== id));
@@ -259,15 +259,30 @@ muteBtn.addEventListener('click', () => {
   muteBtn.textContent = 'Sound: ' + (Sfx.isEnabled() ? 'on' : 'off');
 });
 
+function showTvPaused() {
+  show('codeEntry');
+  document.getElementById('err').textContent = 'Paused — nothing happened for a while. Enter the code to resume.';
+}
+
+// The TV is a display, so 2s is imperceptible. Its backoff ceiling is deliberately
+// LOWER than the other screens': the Jailbreak burst is the moment everyone looks
+// up for, and a long backoff would make it arrive late.
+const poller = createPoller({
+  poll,
+  intervalFor: () => 2000,
+  maxInterval: 4000,
+  idleStopMs: 20 * 60 * 1000,
+  onIdleStop: showTvPaused
+});
+
 function start(code) {
   roomCode = code;
   localStorage.setItem(CODE_KEY, code);
   // Pointing the screen at a different room must baseline the log afresh, or the
   // first poll is diffed against the previous room's history.
   lastTopLogLine = null;
-  clearInterval(pollTimer);
-  poll();
-  pollTimer = setInterval(poll, 1000);
+  poller.stop();
+  poller.start();
 }
 
 document.getElementById('watchBtn').addEventListener('click', async () => {
@@ -357,10 +372,15 @@ async function poll() {
       // Render first so the Brig element exists for the burst animation.
       reactToLog(v.log);
     }
+    // Signature for the poller. LOBBY carries no stateVersion, so fold in the
+    // player count or the lobby would look static as people join and back off.
+    return v.status === 'LOBBY'
+      ? 'LOBBY:' + (v.players ? v.players.length : 0)
+      : v.status + ':' + v.stateVersion;
   } catch (e) {
     // A deleted/expired room shouldn't strand the screen — fall back to entry.
     if (e.status === 404) {
-      clearInterval(pollTimer);
+      poller.stop();
       localStorage.removeItem(CODE_KEY);
       show('codeEntry');
       document.getElementById('err').textContent = 'That room is no longer available.';

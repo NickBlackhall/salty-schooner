@@ -135,6 +135,7 @@
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
 <script src="/shared/sfx.js"></script>
+<script src="/shared/poller.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
@@ -154,8 +155,26 @@ if (roomId && urlPid && urlTok) {
 let selected = null; // {zone, card, index}
 let lastView = null;
 let fannedPort = null; // index of the Port currently spread open, or null
-let pollTimer = null;
 let lastAnnouncedStatus = null;
+
+// Declared BEFORE the boot block below, which calls startPolling(): `const` is
+// not hoisted, so defining the poller further down would put it in the temporal
+// dead zone and throw on load. (poll/showPausedPanel are function declarations,
+// so referencing them here is fine.)
+//
+// Rates are per-state on purpose: only the player actually taking a turn needs to
+// feel instant. Waiting players were the bulk of the old invocation cost.
+const poller = createPoller({
+  poll,
+  intervalFor: () => {
+    if (!lastView) return 1200;
+    if (lastView.status === 'LOBBY') return 3000;       // waiting for the host to start
+    return lastView.isYourTurn ? 1200 : 3500;           // your turn vs watching
+  },
+  maxInterval: 10000,
+  idleStopMs: 10 * 60 * 1000,
+  onIdleStop: showPausedPanel
+});
 
 // One browser can now hold several seats (playing two sides yourself). With more
 // than one saved and no ?pid= to disambiguate, ask rather than guess — silently
@@ -320,6 +339,7 @@ async function sendPlay(cardId, runIndex, kingChoice) {
     selected = null;
     Sfx.play('place');
     applyView(res.view);
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
     Sfx.play('illegal');
     showToast(e.message);
@@ -339,6 +359,7 @@ async function discardTo(portIndex) {
     selected = null;
     Sfx.play('discard');
     applyView(res.view);
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
     Sfx.play('illegal');
     showToast(e.message);
@@ -354,6 +375,7 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
     });
     Sfx.play('ui');
     applyView(res.view);
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) { Sfx.play('illegal'); showToast(e.message); }
 });
 
@@ -477,14 +499,32 @@ async function poll() {
   try {
     const view = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
     applyView(view);
+    // Signature the poller compares to decide whether anything actually moved.
+    // LOBBY views carry no stateVersion, hence the status fallback.
+    return (view.status || '') + ':' + (view.stateVersion == null ? '' : view.stateVersion);
   } catch (e) {
     console.error(e);
+    return 'error';
   }
 }
+
+function showPausedPanel() {
+  const wait = document.getElementById('waitPanel');
+  document.getElementById('gameUi').classList.add('hidden');
+  hideChoiceBar();
+  fannedPort = null; renderPortFan();
+  wait.classList.remove('hidden');
+  wait.innerHTML = '<p>Paused — this tab went quiet for a while.</p>'
+    + '<p class="meta">Stopped checking for updates so it isn’t running in the background.</p>'
+    + '<button id="resumeBtn" style="margin-top:14px;">Resume game</button>';
+  document.getElementById('resumeBtn').addEventListener('click', () => {
+    wait.classList.add('hidden');
+    poller.start();
+  });
+}
+
 function startPolling() {
-  clearInterval(pollTimer);
-  poll();
-  pollTimer = setInterval(poll, 800);
+  poller.start();
 }
 </script>
 </body>

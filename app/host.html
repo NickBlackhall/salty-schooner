@@ -92,6 +92,7 @@
 
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
+<script src="/shared/poller.js"></script>
 <script>
 // A King played as a wildcard must still READ as a King. Showing only its
 // effective value ("7♠") hides the King-on-King restriction and makes a legal
@@ -105,7 +106,7 @@ const cardHtml = (c) => {
   return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''}">${c.rank}${c.suit}${as}</span>`;
 };
 
-let roomId = null, hostToken = null, pollTimer = null;
+let roomId = null, hostToken = null;
 
 function showPanel(id) {
   ['setupPanel','lobbyPanel','gamePanel','resultsPanel'].forEach(p => {
@@ -130,6 +131,7 @@ document.getElementById('createBtn').addEventListener('click', async () => {
 
 document.getElementById('startBtn').addEventListener('click', async () => {
   await Api.startGame(roomId, hostToken);
+  poller.kick();
 });
 
 // Wipes game progress and returns to the lobby, keeping the same room code
@@ -138,7 +140,7 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   if (!roomId) return;
   if (!confirm('Reset this game for everyone? Current progress will be lost. Players stay in the room and do not need to rejoin.')) return;
   await Api.resetGame(roomId, hostToken);
-  poll();
+  poller.kick();
 });
 
 function renderLobby(view) {
@@ -182,7 +184,7 @@ function renderGame(view) {
           <button id="endNowBtn">End game now — ${view.pendingClinch} wins</button>
           <button class="secondary" id="keepPlayingBtn">Keep playing</button>` :
           `<p><button id="nextRoundBtn">Start Next Round</button></p>`);
-      const advance = (endNow) => Api.submitAction({ roomId, actorType:'host', token:hostToken, action:{type:'ADVANCE_ROUND', endNow}, expectedVersion: view.stateVersion });
+      const advance = (endNow) => Api.submitAction({ roomId, actorType:'host', token:hostToken, action:{type:'ADVANCE_ROUND', endNow}, expectedVersion: view.stateVersion }).then(() => poller.kick());
       const next = document.getElementById('nextRoundBtn'); if (next) next.onclick = () => advance(false);
       const end = document.getElementById('endNowBtn'); if (end) end.onclick = () => advance(true);
       const keep = document.getElementById('keepPlayingBtn'); if (keep) keep.onclick = () => advance(false);
@@ -192,19 +194,47 @@ function renderGame(view) {
   }
 }
 
+let lastHostStatus = null;
+
 async function poll() {
   try {
     const view = await Api.getHostState(roomId, hostToken);
+    lastHostStatus = view.status;
     if (view.status === 'LOBBY') { showPanel('lobbyPanel'); renderLobby(view); }
     else renderGame(view);
+    // Signature for the poller. LOBBY has no stateVersion, so fold in the player
+    // count — otherwise the lobby would look unchanged as people join and back off.
+    return view.status === 'LOBBY'
+      ? 'LOBBY:' + (view.players ? view.players.length : 0)
+      : view.status + ':' + view.stateVersion;
   } catch (e) {
     console.error(e);
+    return 'error';
   }
 }
+
+function showHostPaused() {
+  const panel = document.getElementById('resultsPanel');
+  ['setupPanel','lobbyPanel','gamePanel'].forEach(p => document.getElementById(p).classList.add('hidden'));
+  panel.classList.remove('hidden');
+  panel.innerHTML = '<h2>Paused</h2>'
+    + '<p class="meta">This screen went quiet for a while, so it stopped checking for updates.</p>'
+    + '<p><button id="hostResumeBtn">Resume</button></p>';
+  document.getElementById('hostResumeBtn').addEventListener('click', () => poller.start());
+}
+
+// The host screen mostly watches. Only the lobby needs to feel live (players
+// appearing as they join); once play starts the host just advances rounds.
+const poller = createPoller({
+  poll,
+  intervalFor: () => (lastHostStatus === 'LOBBY' ? 2000 : 3000),
+  maxInterval: 12000,
+  idleStopMs: 10 * 60 * 1000,
+  onIdleStop: showHostPaused
+});
+
 function startPolling() {
-  clearInterval(pollTimer);
-  poll();
-  pollTimer = setInterval(poll, 900);
+  poller.start();
 }
 
 // Resume an in-progress room on refresh.
