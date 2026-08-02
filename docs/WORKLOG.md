@@ -4,8 +4,8 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-01 (Claude) — site is BACK UP and the polling fix is now
-live in production. See entry 20; the quota risk is reduced, not eliminated.
+Last updated: 2026-08-01 (Claude) — site is BACK UP; polling fix live, Realtime
+doorbell built and committed but NOT deployed. See entries 20-21.
 
 ---
 
@@ -26,10 +26,14 @@ fan and the four controller fixes (entry 18), and sound all went live in the
 same deploy. Production and `multiplayer-prototype` now match. The "production
 is stale" warning that used to live here no longer applies.
 
-**The underlying cost problem is NOT solved.** Adaptive polling is mitigation:
-a real 2-hour 4-player session is still an estimated ~18,000 invocations, i.e.
-roughly **7 sessions/month before hitting the same 125,000 cap.** Moving reads
-to **Supabase Realtime** remains the top priority — see entry 19.
+**The cost problem is now addressed in code but NOT YET DEPLOYED.** Entry 21
+replaces polling with a Supabase Realtime doorbell (committed `ef864d0`,
+verified on localhost). Until it is promoted, production is still on adaptive
+polling at ~18,000 invocations per 2-hour session — about 7 sessions/month.
+**Promote it:**
+```
+cd ~/repos/salty-schooner && netlify deploy --prod --build
+```
 
 **Still do this every session:**
 - Close any Salty Schooner browser tabs — yours or an agent's — pointed at a
@@ -64,8 +68,12 @@ to **Supabase Realtime** remains the top priority — see entry 19.
   `app/index.html`. `app/shared/engine.js` is a **byte-identical copy** served to
   browsers for legality hints — keep the two in sync (`cp` after any edit).
 - **Backend:** Supabase project **BMG Social** (`qbkcnjlshkckpkoiavje`), schema
-  `salty_schooner`, tables `rooms` + `players`. Not the paused "Make it terrible"
-  project. Service-role key is set as a Netlify env var.
+  `salty_schooner`, tables `rooms` + `players` + `room_pulse`. Not the paused
+  "Make it terrible" project. Service-role key is set as a Netlify env var.
+  - `rooms` and `players` are **unreachable** with the publishable key that now
+    ships to browsers — no table grant AND RLS with no policies. `room_pulse` is
+    the one deliberately-readable table and holds nothing secret (entry 21).
+    Keep it that way: it is what stops every player reading every hand.
 - **Deploy:** now `netlify deploy` from the repo (site `salty-schooner`,
   salty-schooner.netlify.app). The old Netlify Drop zip workflow below applies to
   the **hot-seat** build only.
@@ -321,4 +329,66 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
     HTML routing 404. **Restating the thing most likely to be forgotten: this
     lowers the burn rate, it does not fix it.** ~18,000 invocations per 2-hour
     session ≈ 7 sessions/month against the same cap. Supabase Realtime is still
-    the actual fix and is still not started.
+    the actual fix and is still not started. **→ Built in entry 21.**
+
+21. `Supabase Realtime doorbell replaces polling` — **the actual fix for the
+    invocation problem.** Committed `ef864d0`; **verified on localhost but NOT
+    yet deployed** (the production promote needs Nick to run it).
+
+    **The trap, first, because it is the whole reason this is shaped the way it
+    is.** The obvious implementation is to subscribe clients to the `rooms`
+    table. That would have been a serious leak: Realtime hands every subscriber
+    the entire changed row, and `rooms.current_game_state` is one jsonb blob
+    holding every hand, every goal pile, the Ports and the deck order — plus
+    `host_resume_token`. Any player could have read every other player's cards
+    from devtools, silently undoing the `getHostView`/`getPlayerView` split that
+    `get-public-state.js` is so careful about. **Never subscribe a client to
+    `rooms` or `players`.**
+
+    **So Realtime is a doorbell, not a delivery truck.** New table
+    `salty_schooner.room_pulse` carries only `room_id`, `room_code`,
+    `state_version`, `status`, `updated_at` — nothing secret. Clients subscribe
+    there; on a bump they re-fetch through `get-state`, which still checks a
+    token and filters per seat. The server remains the only thing that can see a
+    hand. **Invariant: never add a column to `room_pulse` that an unauthenticated
+    stranger should not read.** `room_code` is on it deliberately, because `/tv`
+    is token-free and addressed by code — that avoided widening the public view
+    to expose `room_id`.
+
+    **Security verified rather than assumed.** The publishable key now ships to
+    browsers, so the boundary was tested three ways: REST calls with that key
+    against `rooms` and `players` both return `permission denied`, the same two
+    checks run from inside a live subscriber, and the delivered payload was
+    inspected to confirm it contains only the five non-secret columns. Two
+    independent layers hold it: no table grant to `anon`, AND RLS enabled with
+    zero policies. `alter default privileges` was also set so a future table in
+    this schema is denied by default rather than opened by accident.
+
+    **Measured on localhost, not estimated.** `/tv` idle for 25s: **12 fetches →
+    1**. One state change produces **exactly one** fetch. End-to-end latency
+    server-write → browser-receive was **~122ms** (an earlier 2275ms reading was
+    a measurement artifact — `now()` returns *transaction* start time, so a
+    batched `pg_sleep` test backdated its own timestamps; `clock_timestamp()`
+    gives the true figure). All four server paths ring the bell: create, join,
+    start, and every action.
+
+    **Failure degrades, it does not freeze.** Killing the socket returned the
+    poller to ~3s — i.e. a phone that loses Realtime behaves exactly as it did
+    before this change. `isLive()` is the single switch each screen uses to pick
+    between the 45s safety net and the old fast rates, and `poller.wake()` was
+    added so a doorbell arriving *after* the idle stop restarts the screen rather
+    than stranding it behind a "Resume" button. The vendored bundle simply being
+    absent is also a supported state, not a crash.
+
+    **Player-visible effect, all improvement:** a waiting player used to see
+    moves up to 3.5s late, backing off to 10s; that is now sub-second. No rules,
+    screens or controls changed.
+
+    **Also fixed a latent poller bug** this change would have tripped: when
+    `intervalFor()` exceeds `maxInterval`, `Math.min` made "backing off" speed
+    polling *up* — the 45s safety-net rate would have been clamped back to 10s on
+    every quiet game, quietly eating most of the saving.
+
+    `app/shared/vendor/supabase.js` is the official UMD build (v2.110.9) copied
+    from `node_modules`, served as a static asset — deliberately not a CDN, so
+    the game has no third-party runtime dependency.
