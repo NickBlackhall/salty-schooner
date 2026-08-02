@@ -100,6 +100,32 @@ exports.handler = async (event) => {
     return ok({ rooms: withPlayers });
   }
 
+  // Delete one room, leaving the rest alone. The full reset below is the "back
+  // to 1" button; this is the one you actually reach for, because the normal
+  // situation is one room you care about and one you don't — testing while a
+  // real game is live, or clearing last week's clutter without touching
+  // tonight's. It also fixes the specific annoyance of /host auto-resuming a
+  // stale room: delete that room and the next visit starts clean.
+  if (body.action === 'delete-room') {
+    const code = String(body.roomCode || '').trim().toUpperCase();
+    if (!code) return badRequest('A room code is required.');
+
+    const { data: room } = await supabase
+      .from('rooms').select('room_id, room_code').eq('room_code', code).single();
+    if (!room) return badRequest(`No room with code ${code}.`);
+
+    // Players first — their foreign key to rooms is not ON DELETE CASCADE.
+    // room_pulse is cascaded and goes with the room.
+    const { error: pErr } = await supabase.from('players').delete().eq('room_id', room.room_id);
+    if (pErr) return serverError('Deleting that room\'s players failed: ' + pErr.message);
+
+    const { error: rErr } = await supabase.from('rooms').delete().eq('room_id', room.room_id);
+    if (rErr) return serverError('Deleting that room failed: ' + rErr.message);
+
+    console.log(`[admin] deleted room ${code}`);
+    return ok({ ok: true, deleted: code });
+  }
+
   if (body.action === 'nuke') {
     // Second gate, deliberately not the PIN again: the PIN proves who you are,
     // this proves you meant it. Destructive and unrecoverable — any game in

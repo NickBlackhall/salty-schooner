@@ -203,6 +203,15 @@ Note on process: earlier, a King-opener issue in the v11 file was fixed but then
       (confirming the `room_pulse` cascade), then everything was restored and
       re-verified. Deleting players before rooms matters — that foreign key is
       not `ON DELETE CASCADE`.
+    - **Per-room delete added the same session** (`action: 'delete-room'`), and it
+      is the one actually reached for: the normal situation is one room you care
+      about and one you do not. Proven by this very session — the full nuke could
+      not be used to tidy up test rooms while Nick's games were live, which is
+      exactly the gap. Verified to remove only the named room, leave the other
+      three untouched, and leave no orphaned pulse or player rows. Bad code,
+      missing code and wrong PIN are all refused. The row button is two-step
+      (tap arms it, tap again deletes, self-disarms after 5s) rather than
+      confirm-word — worth guarding against a stray tap, not worth typing for.
 
 ## For ChatGPT / Codex working in this space
 

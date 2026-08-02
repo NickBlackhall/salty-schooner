@@ -29,6 +29,7 @@
              border-bottom: 1px solid rgba(201,162,39,.18); font-size: .92rem; flex-wrap: wrap; }
   .roomRow:last-child { border-bottom: none; }
   .code { font-family: var(--serif); font-size: 1.15rem; color: var(--gold-lt); letter-spacing: .08em; }
+  .rowDel { font-size: .82rem; padding: 7px 12px; }
   .meta { color: #8aa4b2; font-size: .84rem; }
   .hidden { display: none; }
   .warn { color: #f0b0b0; font-size: .88rem; line-height: 1.5; }
@@ -101,11 +102,46 @@ function renderRooms(rooms) {
         <span class="code">${r.room_code}</span>
         <div class="meta">${r.players.length ? r.players.join(', ') : 'nobody seated'}</div>
       </div>
-      <div style="text-align:right;">
-        <div>${r.status}</div>
-        <div class="meta">v${r.state_version} · created ${ago(r.created_at)}</div>
+      <div style="text-align:right;display:flex;align-items:center;gap:14px;">
+        <div>
+          <div>${r.status}</div>
+          <div class="meta">v${r.state_version} · created ${ago(r.created_at)}</div>
+        </div>
+        <button class="rowDel" data-code="${r.room_code}">Delete</button>
       </div>
     </div>`).join('');
+
+  // Two-step rather than a confirm dialog: the first tap arms the button, the
+  // second deletes, and it disarms itself after 5s. Deleting one room is not
+  // worth typing a word for, but it is worth not doing by a stray tap.
+  box.querySelectorAll('.rowDel').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.dataset.armed !== 'yes') {
+        btn.dataset.armed = 'yes';
+        btn.textContent = 'Sure?';
+        btn.classList.add('danger');
+        setTimeout(() => {
+          if (!btn.isConnected || btn.dataset.armed !== 'yes') return;
+          btn.dataset.armed = '';
+          btn.textContent = 'Delete';
+          btn.classList.remove('danger');
+        }, 5000);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await callAdmin({ action: 'delete-room', roomCode: btn.dataset.code });
+        loadRooms();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+        btn.dataset.armed = '';
+        btn.classList.remove('danger');
+        msg('nukeMsg', e.message, 'err');
+      }
+    });
+  });
 }
 
 async function loadRooms() {
