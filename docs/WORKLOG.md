@@ -89,6 +89,20 @@ starting.
 **Start the next session by re-reading this section, then re-ask the two open
 questions (max-players cap, telemetry scope) before writing any code.**
 
+**Progress, 2026-08-02 (resumed session): hot-seat has its own URL.**
+`/hotseat` now serves it (redirect in `netlify.toml`, same pattern as `/host`
+`/join` `/play` `/tv`). **Deliberately did not rename `app/index.html`** —
+that path is required verbatim by `build-drop-zip.sh` (the separate Netlify
+Drop workflow) and referenced by path in half a dozen docs; renaming would
+have meant updating all of that for a routing change that doesn't need it.
+**Root `/` still serves hot-seat too, for now** — Netlify's default-file
+behaviour, unchanged — because there is nothing built yet to put there.
+**Do not remove that until the new splash/menu shell actually exists**;
+pulling it before then would 404 the site's front door with nothing to show.
+Verified locally via `netlify dev`: `/hotseat` serves the hot-seat title,
+`/` still does too, and `/host` `/join` `/play` `/tv` `/admin` are unaffected.
+**Not yet deployed** — needs `netlify deploy --prod --build`.
+
 ## 🟡 READ FIRST — site restored, adaptive polling deployed (2026-08-01)
 
 **The site is serving again** (billing period rolled over Aug 1 and Netlify

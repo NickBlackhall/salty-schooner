@@ -31,6 +31,19 @@
   status = 200
 
 [[redirects]]
+  # Hot-seat's own address, same pattern as /host /join /play /tv. The file
+  # stays app/index.html — renaming it would ripple into build-drop-zip.sh
+  # (which requires index.html at that exact spot for the separate Netlify
+  # Drop workflow) and several docs that reference it by path. "/" still
+  # serves index.html too, via Netlify's default-file behaviour, until the
+  # new splash/menu shell (docs/WORKLOG.md, "host-as-a-seat + game shell")
+  # actually exists to take root's place — don't remove that without
+  # something ready to serve there instead.
+  from = "/hotseat"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
