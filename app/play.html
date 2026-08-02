@@ -102,7 +102,7 @@
   <section id="handSection">
     <h3>Your Hand</h3>
     <div class="handRow" id="handRow"></div>
-    <button id="drawBtn" class="wide hidden" style="margin-top:10px;">Draw 5 cards</button>
+    <button id="drawBtn" class="wide hidden" style="margin-top:10px;">Draw cards</button>
   </section>
 
   <section>
@@ -453,9 +453,11 @@ function render(view) {
   const drawBtn = document.getElementById('drawBtn');
   const drawable = view.yourDrawCount || 0;
   drawBtn.classList.toggle('hidden', !(view.isYourTurn && drawable > 0));
-  drawBtn.textContent = view.yourHand.length === 0
-    ? 'Draw up to ' + drawable + ' cards'
-    : 'Draw ' + drawable + ' card' + (drawable === 1 ? '' : 's');
+  // Deliberately no number: how many you are owed depends on the start-of-turn
+  // quota and whether the hand has been cleared, and a label stating a count is
+  // one more thing that can drift out of step with what the server deals. The
+  // server decides the amount; the button just offers the choice.
+  drawBtn.textContent = 'Draw cards';
 
   document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
     const top = pile[pile.length-1];

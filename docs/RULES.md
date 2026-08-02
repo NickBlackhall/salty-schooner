@@ -2,7 +2,7 @@
 
 **Status:** authoritative. This document is the source of truth for game rules.
 **Baseline:** v26 · build 16 ("v26.16"), plus the changes in §13.
-**Last updated:** 2026-07-29
+**Last updated:** 2026-08-02
 
 When this document and any build disagree, **this document wins** and the build
 is wrong. Neither `app/index.html` nor `netlify/functions/lib/engine.js` is the
@@ -154,14 +154,28 @@ it.
 > Start your turn with 4 cards → allowance is 1. Play a card, down to 3. The
 > allowance is **still 1**: drawing brings you to 4, not 5.
 
-**2. Empty hand.** Any time your hand reaches zero, you may draw up to 5. This
-is repeatable — a long turn can empty your hand more than once.
+**2. Cleared hand.** When your hand reaches zero **and your allowance is already
+spent**, you earn a fresh hand of 5. This is repeatable — a long turn can clear
+your hand more than once.
 
-If your hand empties before you spend the top-off, the empty-hand draw replaces
-it rather than stacking with it. **Maximum hand size is 5 at all times.**
+The "allowance already spent" condition is the part most easily got wrong.
+Clearing your hand does **not** upgrade an outstanding allowance:
+
+> Start your turn with 3 cards → allowance is 2. Play all 3. Your hand is empty,
+> but you are still owed only **2**, not 5. Draw those 2 and play them as well —
+> *now* your hand is clear with nothing outstanding, so you draw a fresh 5.
+
+A fresh hand is therefore earned by playing out everything you were entitled to
+(3 + 2 = five cards, in that example), not by declining to draw at the right
+moment. **Maximum hand size is 5 at all times.**
 
 On the opening deal everyone holds 5, so the first turn of a round has an
-allowance of zero.
+allowance of zero — and a player who plays all five clears their hand with
+nothing outstanding, so they earn a fresh 5.
+
+Ending your turn requires discarding a card from hand, so the next turn's
+allowance follows automatically: discard down to 1 card and you begin your next
+turn owed 4.
 
 ## 9. Ports
 
@@ -220,13 +234,42 @@ the *end* of their turn, where they sat unusable through everyone else's turns.
 This extends the existing build-14 principle ("refilling mid-turn is the player's
 call") to close the turn-end loophole that reintroduced a forced refill.
 
+### 2026-08-02 — a cleared hand only pays out once the allowance is spent
+*Approved by Nick Blackhall. Multiplayer builds only.*
+
+**Was:** an empty hand granted a fresh 5 outright, whatever was left of the
+start-of-turn allowance.
+
+**Now:** §8 — a cleared hand earns 5 only when the allowance is already spent.
+Clear it with 2 still outstanding and you are owed those 2, not 5.
+
+**Why:** the old wording made "empty your hand before you draw" a dominant line
+with no cost attached:
+
+| Holding 3 (allowance 2) | Cards played | Ended up with |
+|---|---|---|
+| draw the 2 first, then play 3 | 3 | a hand of 2 |
+| play all 3 first, then draw | 3 | a hand of **5** |
+
+Identical play, but declining to draw first paid five cards instead of two, so
+there was never a reason to draw before emptying your hand — a trick that
+rewarded knowing it rather than playing well. A fresh hand is now earned by
+playing out everything you were entitled to.
+
+**Known tradeoff, accepted:** this is harsher on a bad draw. Clear your hand,
+take your 2, and if both are unplayable the turn ends there — where the old rule
+handed you 5 to hunt through.
+
+**Found by:** real play, and raised by Nick as a discrepancy with how the table
+version was being played.
+
 ## 14. Build conformance
 
 | Build | Conforms to | Notes |
 |---|---|---|
 | `netlify/functions/lib/engine.js` (multiplayer) | All of §1–§12 | Current. |
 | `app/shared/engine.js` | — | Byte-identical copy of the above, served to browsers for legality hints. **Keep in sync.** |
-| `app/index.html` (hot-seat) | §1–§12 **except §8** | **Frozen at v26.16 by decision, 2026-07-29.** Still auto-refills to 5 at end of turn. This is deliberate, not drift — do not "resync" the engine to match it. |
+| `app/index.html` (hot-seat) | §1–§12 **except §8** | **Frozen at v26.16 by decision, 2026-07-29.** Still auto-refills to 5 at end of turn, and has neither the 2026-07-29 nor the 2026-08-02 change. The gap is now two rule changes wide. Deliberate, not drift — do not "resync" the engine to match it. |
 
 ## 15. Non-rules implementation notes
 

@@ -392,3 +392,34 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
     `app/shared/vendor/supabase.js` is the official UMD build (v2.110.9) copied
     from `node_modules`, served as a static asset — deliberately not a CDN, so
     the game has no third-party runtime dependency.
+
+22. `A cleared hand pays out only once the allowance is spent` — **rules change,
+    approved by Nick 2026-08-02. Multiplayer only.** Raised by Nick from real
+    play: he expected clearing a hand of 3 to still owe him only the 2 he started
+    the turn entitled to, not a fresh 5.
+    - **Was:** `drawEligibility` returned `HAND_LIMIT` for *any* empty hand,
+      whatever was left of the start-of-turn quota. **Now:** the fresh 5 requires
+      `hand.length === 0 && quota === 0`.
+    - **Why it was worth changing, beyond matching intent:** the old rule made
+      "empty your hand before you draw" strictly dominant. Holding 3 with a quota
+      of 2, playing all three then drawing paid **5 cards**, while drawing first
+      then playing the same three left you holding **2** — identical play, double
+      the reward for knowing the trick. That is a tax on not knowing it, not a
+      decision.
+    - **Accepted tradeoff:** harsher on a bad draw. Clear your hand, take your 2,
+      and if both are dead the turn ends there where the old rule gave you 5 to
+      hunt through. Nick was told this before approving.
+    - **Does not create a stall:** §7 requires ending a turn by discarding from
+      hand, and every empty-hand case still yields *something* to draw (the quota
+      if outstanding, otherwise a fresh 5), so a player can always reach a
+      discard. The pre-existing deck+recycle exhaustion stall is unaffected.
+    - `applyDrawHand` now calls `drawEligibility` instead of recomputing the rule,
+      so the number on the phone and the number dealt cannot drift apart.
+    - The draw button lost its count and just reads **"Draw cards"** (Nick's
+      call): the amount is a function of quota-and-clearedness, and a label
+      stating a number is one more thing that can lie.
+    - Verified by `scripts/test-draw-rule.js` — 22 assertions covering Nick's
+      exact scenario step by step, clearing a full hand, the old behaviour being
+      gone, the promised-vs-dealt count matching, and no double-dip. All pass.
+    - `docs/RULES.md` §8 rewritten, §13 change log and §14 conformance table
+      updated. **The hot-seat build is now two rule changes behind, deliberately.**

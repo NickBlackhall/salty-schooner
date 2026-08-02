@@ -126,11 +126,25 @@ const HAND_LIMIT = 5;
 //      it is optional and can happen at any point in the turn, but playing cards
 //      first does not enlarge it: start with 4, play one, and the quota is still
 //      1, landing on 4 — not 5.
-//   2. Empty hand — any time the hand hits exactly 0, mid-turn, draw up to 5.
-//      Repeatable, since a long turn can empty the hand more than once.
+//   2. Cleared hand — the hand hits exactly 0 AND the quota is already spent,
+//      which earns a fresh HAND_LIMIT. Repeatable, since a long turn can clear
+//      the hand more than once.
 //
-// Where both could apply the empty-hand draw wins (up to 5 beats any leftover
-// quota) and the quota is cleared, so there is no double-dip.
+// The "quota already spent" half of (2) is the rule change of 2026-08-02,
+// approved by Nick Blackhall. Previously an empty hand granted 5 outright, even
+// with the quota untouched — which made "dump your hand before you draw" a
+// dominant line with no tradeoff:
+//
+//     hold 3 (quota 2) -> play all 3 -> hand empty -> draw 5     [old: 5 cards]
+//     hold 3 (quota 2) -> draw 2 -> play 3         -> hand of 2  [old: 2 cards]
+//
+// Same three cards played, but declining to draw first paid five cards instead
+// of two, so there was never a reason not to empty the hand first. Now the same
+// opening yields the 2 that were owed; the fresh 5 arrives only after those 2
+// are also played, i.e. it is earned by playing out everything you were
+// entitled to. Consequence to keep in mind: this is harsher on a bad draw —
+// clear your hand, take your 2, and if both are dead the turn ends there, where
+// the old rule handed you 5 to hunt through.
 //
 // This is the same principle as the build-14 note in app/index.html — "refilling
 // mid-turn is the player's call" — extended to close the turn-end loophole that
@@ -143,13 +157,19 @@ function beginTurn(state) {
   state.drawQuota = Math.max(0, HAND_LIMIT - currentPlayer(state).hand.length);
 }
 
-// How many cards the seat may draw right now: 0 hides the draw control.
+// How many cards the seat may draw right now: 0 hides the draw control. This is
+// the single source of truth — views.js sends it to the phone as yourDrawCount,
+// and applyDrawHand() draws exactly this many, so the button and the deal can
+// never disagree.
 function drawEligibility(state, seat) {
   if (state.status !== 'IN_ROUND' || state.currentPlayer !== seat) return 0;
   const p = state.players[seat];
   if (!p) return 0;
-  if (p.hand.length === 0) return HAND_LIMIT;
-  return state.drawQuota || 0;
+  const quota = state.drawQuota || 0;
+  // A cleared hand earns a fresh hand only once the start-of-turn quota is
+  // spent; while any of it is outstanding, that is all the player is owed.
+  if (p.hand.length === 0 && quota === 0) return HAND_LIMIT;
+  return quota;
 }
 
 function runLastValue(run) {
@@ -442,10 +462,10 @@ function applyDrawHand(state, action) {
   if (action.playerIndex !== state.currentPlayer) throw new RuleError('It is not your turn.');
   const p = currentPlayer(state);
 
-  // Empty hand outranks the start-of-turn quota — up to 5 beats whatever is
-  // left of it — so the quota is consumed rather than granted on top.
-  const emptyHand = p.hand.length === 0;
-  const want = emptyHand ? HAND_LIMIT : (state.drawQuota || 0);
+  // Ask the same function the phone's button asked, rather than recomputing the
+  // rule here — two copies of this logic would eventually disagree, and the one
+  // the player can see is not the one that deals the cards.
+  const want = drawEligibility(state, action.playerIndex);
   if (want <= 0) throw new RuleError('You have no cards to draw right now.');
 
   const drawn = drawN(state, p, want);
