@@ -1,6 +1,7 @@
 const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, serverError } = require('./lib/http');
 const { loadRoom, verifyHost } = require('./lib/access');
+const { bumpPulse } = require('./lib/pulse');
 
 // Wipes game progress and returns the room to LOBBY, keeping the same room
 // code and the same seated players (their tokens are untouched), so nobody
@@ -29,6 +30,8 @@ exports.handler = async (event) => {
     .single();
   if (error) return serverError(error.message);
   if (!updated) return serverError('Reset did not apply.');
+
+  await bumpPulse(room.room_id, updated.state_version, 'LOBBY', room.room_code);
 
   return ok({ ok: true, stateVersion: updated.state_version });
 };

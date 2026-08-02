@@ -2,6 +2,7 @@ const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, conflict, serverError } = require('./lib/http');
 const { loadRoom, findPlayer, verifyHost, verifyPlayer } = require('./lib/access');
 const { getHostView, getPlayerView } = require('./lib/views');
+const { bumpPulse } = require('./lib/pulse');
 const engine = require('./lib/engine');
 
 const PLAYER_ACTIONS = new Set(['PLAY_CARD', 'DRAW_HAND', 'DISCARD_TO_PORT']);
@@ -62,6 +63,12 @@ exports.handler = async (event) => {
     .select('room_id')
     .single();
   if (error || !updated) return conflict('Someone else already acted — refresh and try again.');
+
+  // Ring the doorbell only after the authoritative write has landed, so nobody
+  // is ever told to fetch a version that does not exist yet. Awaited rather
+  // than fired-and-forgotten because the Lambda can freeze the moment the
+  // response returns, which would drop an un-awaited write on the floor.
+  await bumpPulse(roomId, newVersion, state.status, room.room_code);
 
   const freshRoom = { ...room, status: state.status, state_version: newVersion };
   const view = actorType === 'host' ? getHostView(freshRoom, state) : getPlayerView(freshRoom, state, seat);

@@ -136,6 +136,8 @@
 <script src="/shared/engine.js"></script>
 <script src="/shared/sfx.js"></script>
 <script src="/shared/poller.js"></script>
+<script src="/shared/vendor/supabase.js"></script>
+<script src="/shared/realtime.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room') || Persist.lastRoom();
@@ -167,6 +169,11 @@ let lastAnnouncedStatus = null;
 const poller = createPoller({
   poll,
   intervalFor: () => {
+    // With the doorbell connected the server tells us the instant anything
+    // changes, so the timer stops being how we find out and becomes a safety
+    // net for a missed message. This single line is most of the invocation
+    // saving — a waiting player drops from a poll every 3.5s to one every 45s.
+    if (doorbell.isLive()) return 45000;
     if (!lastView) return 1200;
     if (lastView.status === 'LOBBY') return 3000;       // waiting for the host to start
     return lastView.isYourTurn ? 1200 : 3500;           // your turn vs watching
@@ -174,6 +181,22 @@ const poller = createPoller({
   maxInterval: 10000,
   idleStopMs: 10 * 60 * 1000,
   onIdleStop: showPausedPanel
+});
+
+// Declared after the poller because its handler calls poller.wake(); function
+// hoisting does not apply to `const`.
+const doorbell = createDoorbell({
+  roomId: () => roomId,
+  label: 'play',
+  // wake() rather than kick(): the idle stop may already have fired and put up
+  // the paused panel, and a player returning to the table should not have to
+  // find the Resume button before the game starts moving again. No DOM cleanup
+  // here — render() either hides waitPanel outright or rewrites its contents,
+  // so the paused card clears itself on the fetch this triggers.
+  onChange: () => poller.wake(),
+  // Recompute the delay immediately on a connection change, so losing the socket
+  // restores fast polling now rather than after one more 45s wait.
+  onLiveChange: () => poller.kick()
 });
 
 // One browser can now hold several seats (playing two sides yourself). With more
@@ -525,6 +548,7 @@ function showPausedPanel() {
 
 function startPolling() {
   poller.start();
+  doorbell.start();
 }
 </script>
 </body>

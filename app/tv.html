@@ -156,6 +156,8 @@
 <script src="/shared/engine.js"></script>
 <script src="/shared/sfx.js"></script>
 <script src="/shared/poller.js"></script>
+<script src="/shared/vendor/supabase.js"></script>
+<script src="/shared/realtime.js"></script>
 <script>
 // Display-only screen. It never sends an action and holds no token — it just
 // polls the public board by room code. All controls stay on the host device.
@@ -269,10 +271,23 @@ function showTvPaused() {
 // up for, and a long backoff would make it arrive late.
 const poller = createPoller({
   poll,
-  intervalFor: () => 2000,
+  // The low ceiling below existed because /tv derives the Jailbreak burst by
+  // diffing the log, so a long backoff made the moment everyone looks up arrive
+  // late. The doorbell removes that tension entirely: the burst now arrives when
+  // the server says it happened, and the timer is only a safety net.
+  intervalFor: () => (doorbell.isLive() ? 45000 : 2000),
   maxInterval: 4000,
   idleStopMs: 20 * 60 * 1000,
   onIdleStop: showTvPaused
+});
+
+// /tv is token-free and addressed by room CODE, so it subscribes by code too —
+// room_pulse carries it for exactly this reason.
+const doorbell = createDoorbell({
+  roomCode: () => roomCode,
+  label: 'tv',
+  onChange: () => poller.wake(),
+  onLiveChange: () => poller.kick()
 });
 
 function start(code) {
@@ -283,6 +298,10 @@ function start(code) {
   lastTopLogLine = null;
   poller.stop();
   poller.start();
+  // Re-subscribe as well: the channel is filtered to the OLD code and would
+  // otherwise keep listening to a room this screen is no longer showing.
+  doorbell.stop();
+  doorbell.start();
 }
 
 document.getElementById('watchBtn').addEventListener('click', async () => {

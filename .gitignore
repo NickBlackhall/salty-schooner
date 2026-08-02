@@ -9,3 +9,6 @@ node_modules
 
 # Netlify Edge Functions cache (Deno)
 deno.lock
+
+# macOS
+.DS_Store

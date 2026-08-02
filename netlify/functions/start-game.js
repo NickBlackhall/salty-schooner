@@ -1,6 +1,7 @@
 const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, conflict, serverError } = require('./lib/http');
 const { loadRoom, loadPlayers, verifyHost } = require('./lib/access');
+const { bumpPulse } = require('./lib/pulse');
 const engine = require('./lib/engine');
 
 exports.handler = async (event) => {
@@ -27,6 +28,10 @@ exports.handler = async (event) => {
     .eq('room_id', room.room_id)
     .eq('state_version', room.state_version);
   if (error) return serverError(error.message);
+
+  // Start is the one bump every phone is waiting on — without it they sit on
+  // the lobby screen until the safety-net poll fires.
+  await bumpPulse(room.room_id, room.state_version + 1, state.status, room.room_code);
 
   return ok({ ok: true });
 };

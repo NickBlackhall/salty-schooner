@@ -2,6 +2,7 @@ const { getClient } = require('./lib/supabase');
 const { generateToken } = require('./lib/rooms');
 const { ok, badRequest, notFound, conflict, serverError } = require('./lib/http');
 const { loadPlayers } = require('./lib/access');
+const { pulseLobbyChange } = require('./lib/pulse');
 
 const MAX_PLAYERS = 6;
 
@@ -67,6 +68,11 @@ exports.handler = async (event) => {
       .select('player_id')
       .single();
     if (!error) {
+      // A new seat changes the lobby roster on /host and /tv, but nothing here
+      // touches rooms.state_version — the game state is untouched until Start.
+      // Ring the doorbell explicitly, or four people tapping Join would appear
+      // only when the safety-net poll next fired.
+      await pulseLobbyChange(room.room_id, room.state_version, room.room_code);
       return ok({ roomId: room.room_id, roomCode: room.room_code, playerId: player.player_id, seat, resumeToken, rejoined: false });
     }
     if (error.code !== '23505') return serverError(error.message);

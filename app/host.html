@@ -93,6 +93,8 @@
 <script src="/shared/api.js"></script>
 <script src="/shared/engine.js"></script>
 <script src="/shared/poller.js"></script>
+<script src="/shared/vendor/supabase.js"></script>
+<script src="/shared/realtime.js"></script>
 <script>
 // A King played as a wildcard must still READ as a King. Showing only its
 // effective value ("7♠") hides the King-on-King restriction and makes a legal
@@ -227,14 +229,33 @@ function showHostPaused() {
 // appearing as they join); once play starts the host just advances rounds.
 const poller = createPoller({
   poll,
-  intervalFor: () => (lastHostStatus === 'LOBBY' ? 2000 : 3000),
+  // The lobby used to poll at 2s purely so players appeared promptly as they
+  // joined; join-room now rings the doorbell explicitly, so that is covered.
+  intervalFor: () => {
+    if (doorbell.isLive()) return 45000;
+    return lastHostStatus === 'LOBBY' ? 2000 : 3000;
+  },
   maxInterval: 12000,
   idleStopMs: 10 * 60 * 1000,
   onIdleStop: showHostPaused
 });
 
+// roomId is null until create-room returns (or tryResume finds one), so pass a
+// getter rather than the value.
+const doorbell = createDoorbell({
+  roomId: () => roomId,
+  label: 'host',
+  // wake() rather than kick(), so a doorbell arriving after the idle stop has
+  // fired restarts the screen instead of leaving a stale "Paused" card up. No
+  // DOM cleanup needed here: showHostPaused() borrows resultsPanel, and the
+  // render() that follows the next poll calls showPanel() and repopulates it.
+  onChange: () => poller.wake(),
+  onLiveChange: () => poller.kick()
+});
+
 function startPolling() {
   poller.start();
+  doorbell.start();
 }
 
 // Resume an in-progress room on refresh.

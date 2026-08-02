@@ -44,7 +44,13 @@ function createPoller({
     if (unchangedCount < backoffAfter) return base;
     // Grow gently: double once per backoffAfter polls beyond the threshold.
     const steps = Math.floor(unchangedCount / backoffAfter);
-    return Math.min(maxInterval, base * Math.pow(2, steps));
+    // The ceiling must never sit below the base, or "backing off" would speed
+    // polling UP. That is live once Realtime is connected: intervalFor() returns
+    // a slow safety-net rate (30s) that is far above maxInterval (8-10s), and
+    // Math.min alone would silently clamp a quiet game back to 10s polling —
+    // exactly the cost this was meant to remove.
+    const ceiling = Math.max(maxInterval, base);
+    return Math.min(ceiling, base * Math.pow(2, steps));
   }
 
   function schedule() {
@@ -102,6 +108,17 @@ function createPoller({
   }
   function noteInteraction() { lastInteractionAt = Date.now(); }
 
+  // Fetch now whether or not we are currently running. A Realtime doorbell can
+  // ring after the idle stop has already fired — someone wandered back to the
+  // table and played — and kick() alone returns early when stopped, which would
+  // leave the game looking frozen on a screen that had given up. Returns true if
+  // it had to restart, so the page can clear any "paused" panel it is showing.
+  function wake() {
+    if (running) { kick(); return false; }
+    start();
+    return true;
+  }
+
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       clearTimeout(timer);        // stop dead; cost while backgrounded is zero
@@ -114,5 +131,5 @@ function createPoller({
   ['pointerdown', 'keydown'].forEach(ev =>
     document.addEventListener(ev, noteInteraction, { passive: true }));
 
-  return { start, stop, kick, noteInteraction, isRunning: () => running };
+  return { start, stop, kick, wake, noteInteraction, isRunning: () => running };
 }
