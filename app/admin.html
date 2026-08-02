@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  :root { color-scheme: dark; }
+  body { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-family: var(--serif); color: var(--gold-lt); font-size: 1.5rem; }
+  .panel { background: rgba(10,20,26,.72); border: 1px solid rgba(201,162,39,.35);
+           border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+  label { display: block; margin-bottom: 10px; color: var(--gold-lt); font-size: .9rem; }
+  input { width: 100%; padding: 12px; font-size: 1.1rem; border-radius: 8px;
+          border: 1px solid rgba(201,162,39,.45); background: #0d1a21; color: #f2e9d8; }
+  button { font-size: 1rem; padding: 11px 18px; border-radius: 10px; border: none;
+           font-family: var(--serif); font-weight: 700; color: #25190a; cursor: pointer;
+           background: linear-gradient(#f0d089, #c9a227); box-shadow: 0 2px 0 #6f5510; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.danger { background: linear-gradient(#e07a7a, #a52c2c); color: #fff; box-shadow: 0 2px 0 #5e1414; }
+  .msg { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: .92rem; }
+  .msg.err { background: #5c1e1e; border: 1px solid #c46a6a; }
+  .msg.good { background: #1e4a2e; border: 1px solid #5fbf84; }
+  .roomRow { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0;
+             border-bottom: 1px solid rgba(201,162,39,.18); font-size: .92rem; flex-wrap: wrap; }
+  .roomRow:last-child { border-bottom: none; }
+  .code { font-family: var(--serif); font-size: 1.15rem; color: var(--gold-lt); letter-spacing: .08em; }
+  .meta { color: #8aa4b2; font-size: .84rem; }
+  .hidden { display: none; }
+  .warn { color: #f0b0b0; font-size: .88rem; line-height: 1.5; }
+</style>
+</head>
+<body class="saltyBoard">
+
+<h1>Salty Schooner — admin</h1>
+
+<div class="panel" id="pinPanel">
+  <label for="pinInput">Admin PIN</label>
+  <input id="pinInput" type="password" autocomplete="current-password" placeholder="PIN">
+  <p><button id="unlockBtn">Unlock</button></p>
+  <div id="pinMsg"></div>
+</div>
+
+<div class="panel hidden" id="roomsPanel">
+  <h2 style="margin-top:0;font-family:var(--serif);font-size:1.1rem;color:var(--gold-lt);">Live rooms</h2>
+  <div id="roomList"><span class="meta">Loading…</span></div>
+  <p style="margin-top:16px;"><button id="refreshBtn">Refresh</button></p>
+</div>
+
+<div class="panel hidden" id="nukePanel">
+  <h2 style="margin-top:0;font-family:var(--serif);font-size:1.1rem;color:#f0b0b0;">Full reset</h2>
+  <p class="warn">
+    Deletes <b>every</b> room and player, including any game in progress.
+    This cannot be undone. Type <b>NUKE</b> below to enable the button.
+  </p>
+  <input id="confirmInput" placeholder="NUKE" autocapitalize="characters" style="margin-bottom:12px;">
+  <p><button id="nukeBtn" class="danger" disabled>Delete everything</button></p>
+  <div id="nukeMsg"></div>
+</div>
+
+<script>
+// The PIN is kept in sessionStorage, not localStorage, so closing the tab
+// forgets it. It is a convenience for one sitting, not a saved credential.
+const KEY = 'salty-admin-pin';
+let pin = sessionStorage.getItem(KEY) || '';
+
+function show(id, on) { document.getElementById(id).classList.toggle('hidden', !on); }
+function msg(id, text, kind) {
+  document.getElementById(id).innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : '';
+}
+
+async function callAdmin(payload) {
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin, ...payload })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || ('Request failed: ' + res.status));
+  return body;
+}
+
+function ago(iso) {
+  const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return hrs + 'h ago';
+  return Math.round(hrs / 24) + 'd ago';
+}
+
+function renderRooms(rooms) {
+  const box = document.getElementById('roomList');
+  if (!rooms.length) { box.innerHTML = '<span class="meta">No rooms. Database is clean.</span>'; return; }
+  box.innerHTML = rooms.map(r => `
+    <div class="roomRow">
+      <div>
+        <span class="code">${r.room_code}</span>
+        <div class="meta">${r.players.length ? r.players.join(', ') : 'nobody seated'}</div>
+      </div>
+      <div style="text-align:right;">
+        <div>${r.status}</div>
+        <div class="meta">v${r.state_version} · created ${ago(r.created_at)}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function loadRooms() {
+  try {
+    const { rooms } = await callAdmin({ action: 'list' });
+    renderRooms(rooms);
+  } catch (e) {
+    document.getElementById('roomList').innerHTML = `<span class="meta">${e.message}</span>`;
+  }
+}
+
+async function unlock(quiet) {
+  try {
+    const { rooms } = await callAdmin({ action: 'list' });
+    sessionStorage.setItem(KEY, pin);
+    msg('pinMsg', '', '');
+    show('pinPanel', false);
+    show('roomsPanel', true);
+    show('nukePanel', true);
+    renderRooms(rooms);
+  } catch (e) {
+    pin = '';
+    sessionStorage.removeItem(KEY);
+    if (!quiet) msg('pinMsg', e.message, 'err');
+  }
+}
+
+document.getElementById('unlockBtn').addEventListener('click', () => {
+  pin = document.getElementById('pinInput').value.trim();
+  if (!pin) { msg('pinMsg', 'Enter the PIN.', 'err'); return; }
+  unlock(false);
+});
+document.getElementById('pinInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('unlockBtn').click();
+});
+document.getElementById('refreshBtn').addEventListener('click', loadRooms);
+
+// The button stays disabled until the word is typed exactly — no autocorrect
+// near-misses, no muscle-memory Enter on a focused danger button.
+const confirmInput = document.getElementById('confirmInput');
+confirmInput.addEventListener('input', () => {
+  document.getElementById('nukeBtn').disabled = confirmInput.value.trim().toUpperCase() !== 'NUKE';
+});
+
+document.getElementById('nukeBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('nukeBtn');
+  btn.disabled = true;
+  try {
+    const res = await callAdmin({ action: 'nuke', confirm: 'NUKE' });
+    msg('nukeMsg', `Deleted ${res.roomsDeleted} room${res.roomsDeleted === 1 ? '' : 's'}. Everything is back to the start.`, 'good');
+    confirmInput.value = '';
+    loadRooms();
+  } catch (e) {
+    msg('nukeMsg', e.message, 'err');
+    btn.disabled = false;
+  }
+});
+
+// A remembered PIN unlocks silently; a stale one just leaves the prompt up.
+if (pin) unlock(true);
+</script>
+</body>
+</html>

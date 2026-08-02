@@ -178,6 +178,32 @@ See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle
 
 Note on process: earlier, a King-opener issue in the v11 file was fixed but then superseded when v26 became canonical — a reminder to always confirm which build is authoritative before editing.
 
+23. `PIN-gated /admin page` — room list plus a full reset, for the person running
+    the game. Nothing cleaned up rooms before this, so they accumulated silently
+    (three stale ones at the time of writing) and there was no way to see what
+    existed. `/admin` lists every room with its seated players, and offers a
+    reset that deletes all rooms, players and pulse rows.
+    - **The PIN is short and memorable by Nick's explicit choice**, threat model
+      stated as "a mischievous nephew, not a malicious outsider". That is only
+      sound because guessing is rate-limited: `salty_schooner.admin_guard` tracks
+      failures and locks out for 15 minutes after 5 wrong tries, verified to
+      refuse even the correct PIN while locked. **If that lockout is ever
+      removed, the PIN must become a long random secret.** Stored as the
+      `ADMIN_PIN` Netlify env var, compared server-side with
+      `crypto.timingSafeEqual`, never shipped to the browser.
+    - Fails closed: a missing `ADMIN_PIN` disables the endpoint rather than
+      accepting an empty PIN.
+    - Two independent gates on the destructive path — the PIN proves who you
+      are, typing `NUKE` proves you meant it.
+    - `admin_guard` has RLS on with no policies and no grant, like `rooms` and
+      `players`. Only the service role touches it.
+    - **The delete path was tested for real, not just reasoned about:** Nick's
+      three live rooms were copied to backup tables inside Postgres, the nuke was
+      run through the actual HTTP endpoint, all three tables verified empty
+      (confirming the `room_pulse` cascade), then everything was restored and
+      re-verified. Deleting players before rooms matters — that foreign key is
+      not `ON DELETE CASCADE`.
+
 ## For ChatGPT / Codex working in this space
 
 - Authority order (from `AGENTS.md`): `MASTER_PROJECT_BRIEF.md` → newer decisions approved by Nick → newest stable prototype → existing implementation.
