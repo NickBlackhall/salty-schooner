@@ -111,9 +111,13 @@ still **not built**, deliberately deferred to its own stage.
 - **`create-room` seats the host.** Pass `hostName` and it inserts a seat-0
   player row alongside the room, returning `playerId`/`resumeToken`/`seat`
   beside `hostResumeToken`. If seating fails the room is deleted rather than
-  left as a lobby its creator can never join. **`hostName` is optional on
-  purpose** — omit it and you get the old anonymous-host behaviour, which keeps
-  a run-it-but-don't-play-it host possible for one `if`. Not dead code.
+  left as a lobby its creator can never join. **`hostName` is REQUIRED** — a
+  seatless host was kept as an option for about an hour, then removed once it
+  was actually tried end to end: `/play` finds no player credentials and shows
+  "No saved seat found" with polling stopped, so that host held a token for a
+  room they could not see, with no lobby, no code to read out and no Start
+  button. Nick's call to drop it ("I don't see the need"). Every host is a
+  player; there is no other kind. A blank or whitespace name is a 400.
 - **`/host` is now ONLY the create form** (name, rounds, HOLD, max players) and
   redirects to `/play`. The lobby, Start, round controls and Reset all moved to
   `/play`. **This was the whole point:** `/play` already holds the entire

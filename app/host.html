@@ -121,12 +121,8 @@ createBtn.addEventListener('click', async () => {
     // /play reads both — the host token is what makes its host controls appear.
     Persist.saveHost(res.roomId, res.hostResumeToken);
     Persist.saveRoomCode(res.roomId, res.roomCode);
-    if (res.playerId) {
-      Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat, hostName);
-      location.href = '/play?room=' + res.roomId + '&pid=' + res.playerId;
-    } else {
-      location.href = '/play?room=' + res.roomId;
-    }
+    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat, hostName);
+    location.href = '/play?room=' + res.roomId + '&pid=' + res.playerId;
   } catch (e) {
     err.textContent = e.message;
     createBtn.disabled = false;
