@@ -6,8 +6,88 @@ can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF
 
 Last updated: 2026-08-02 (Claude) — site is up, Realtime doorbell IS LIVE in
 production. Entries 22-23 (draw rule, /admin) are committed but NOT deployed.
+**Nothing built yet for the section below — planning only, read before coding.**
 
 ---
+
+## 🔵 NEXT SESSION — host-as-a-seat + game shell (planning only, nothing built)
+
+Nick hit a usage limit mid-discussion, so this is written down before context is
+lost. **No code exists for any of this yet.** Read this whole section before
+starting.
+
+**Confirmed decisions (Nick, 2026-08-02):**
+
+1. **The host is a player, not a separate control panel.** Today `/host` has no
+   hand and never plays — that's the thing being fixed. Borrowing the shape from
+   Nick's other game, Make It Terrible: splash ("tap to continue") → main menu
+   (settings/sound, a link to `/admin`, **Play Now**) → **Play Now** opens a
+   **Create Game / Join Game** choice → Create Game shows the match settings
+   (rounds, HOLD cards per player, **and a new max-players setting**) → creates
+   the room → lobby. Host taps Start, and from that point on the host is an
+   ordinary player on `/play` — same hand, same controls as everyone else —
+   with a small extra: an in-game menu item that jumps to `/admin` (still
+   PIN-gated), so the host keeps a way to manage the room without a second
+   device.
+2. **Root `/` moves.** `app/index.html` (hot-seat, frozen at v26.16) currently
+   occupies the site root. Nick decided **hot-seat should move to its own URL**,
+   since it is no longer the main game — freeing up `/` to become the new
+   splash/menu shell described above. Exact new hot-seat path (`/hotseat`?
+   something else?) was not chosen yet — ask Nick, or propose one and confirm
+   before moving the file, since `docs/RULES.md` §14 and `AGENTS.md`'s authority
+   order both reference `app/index.html` by path and would need updating too.
+3. **QR code is explicitly deferred.** Don't build it. The lobby keeps showing
+   the room code as text for now; `/join` still works exactly as it does today.
+4. **Build in stages, not one pass.** Nick agreed to this explicitly but we ran
+   out of time to fix the exact stage boundaries. Proposed (not yet
+   re-confirmed) split:
+   - **Stage 1 — the functional core:** root becomes the splash→menu→create/join
+     shell; hot-seat moves off root to its own path; host-as-seat on `/play`;
+     max-players becomes a real setting instead of the hardcoded constant in
+     `netlify/functions/join-room.js` (`MAX_PLAYERS = 6`).
+   - **Stage 2 — in-game menu:** the menu itself (doesn't exist on `/play`
+     today), a sound on/off toggle (`/play` has no mute control today — only
+     `/tv` does), the `/admin` shortcut.
+   - **Stage 3 — QR code**, whenever it comes back into scope.
+   - Telemetry appeared in Nick's description of the settings menu
+     ("game telemetry") but **multiplayer has no telemetry system at all today**
+     (hot-seat's `Telemetry` object doesn't extend to `/host`, `/play`, `/tv`,
+     or the functions). This is a real open question, not a small toggle —
+     confirm with Nick whether the menu should (a) have a placeholder entry with
+     no function yet, (b) actually port a telemetry system, which is a
+     meaningfully separate build, or (c) not mention it until built.
+
+**Genuinely open, unanswered — ask before writing code:**
+- **Max-players cap.** Today's hardcoded limit is 6. Raise it, keep it, or make
+  it Nick's call per room within some ceiling? Not decided.
+- **Telemetry scope**, per above.
+- **Exact new path for hot-seat.**
+
+**Facts checked this session, so the next one doesn't have to re-verify:**
+- `app/index.html` is the only thing at the site root right now — there is no
+  existing multiplayer landing page to repurpose. Confirmed by listing
+  `app/*.html`.
+- `/play` has zero menu/settings/sound-toggle UI today — confirmed by grepping
+  `app/play.html` for `menu|settings|hamburger` and `mute|sfxEnabled|sound`
+  (only the `sfx.js` `<script>` tag matched, no actual toggle).
+- `/tv` **already** renders the lobby view (`getLobbyView`) — this was one of
+  Nick's requirements and needs **no new work**.
+- `MAX_PLAYERS = 6` lives in `netlify/functions/join-room.js:7`, a bare
+  constant, not part of `config`/`normalizeMatchConfig`.
+
+**Also on the table from earlier in this session, not yet acted on:**
+- **Couch mode vs. remote mode is a per-device rendering choice, not a
+  server-side concept** — the server already sends every device the same
+  shared-board-plus-private-hand payload; "couch" is a device choosing to hide
+  the shared parts because a `/tv` is carrying them, "remote" is a device
+  showing both. Mixing modes in one room (e.g. Nick's mother, remote, joining a
+  couch game) already works today and needs no code — confirmed during
+  discussion, not yet built as an explicit per-device switch. That switch
+  (host sets the room's default, any player can override their own device) is
+  future work, not part of the three stages above.
+
+**Start the next session by re-reading this section, then re-ask the two open
+questions (max-players cap, telemetry scope) before writing any code.**
 
 ## 🟡 READ FIRST — site restored, adaptive polling deployed (2026-08-01)
 
