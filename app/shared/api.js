@@ -42,12 +42,20 @@ const Persist = {
   hostKey(roomId) { return 'salty-host-' + roomId; },
   playersKey(roomId) { return 'salty-players-' + roomId; },
   legacyPlayerKey(roomId) { return 'salty-player-' + roomId; },
+  codeKey(roomId) { return 'salty-code-' + roomId; },
 
   saveHost(roomId, hostResumeToken) {
     localStorage.setItem('salty-last-room', roomId);
     localStorage.setItem(this.hostKey(roomId), hostResumeToken);
   },
   loadHost(roomId) { return localStorage.getItem(this.hostKey(roomId)); },
+
+  // The room CODE, kept so /host can offer "rejoin ABCD" by name rather than
+  // silently resuming (or worse, silently creating a second room on refresh).
+  // roomId is a uuid nobody recognises; the code is the thing the host read out
+  // to the table and may have written down.
+  saveRoomCode(roomId, code) { if (code) localStorage.setItem(this.codeKey(roomId), code); },
+  loadRoomCode(roomId) { return localStorage.getItem(this.codeKey(roomId)); },
 
   loadPlayers(roomId) {
     let list = [];

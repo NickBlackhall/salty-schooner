@@ -103,6 +103,56 @@ Verified locally via `netlify dev`: `/hotseat` serves the hot-seat title,
 `/` still does too, and `/host` `/join` `/play` `/tv` `/admin` are unaffected.
 **Not yet deployed** — needs `netlify deploy --prod --build`.
 
+**Progress, 2026-08-02: STAGE 1 BUILT — the host is a player.** Nick confirmed
+max players stays capped at 6 ("a lot of people and a long time in between
+turns") and that telemetry is a real feature, not a placeholder — telemetry is
+still **not built**, deliberately deferred to its own stage.
+
+- **`create-room` seats the host.** Pass `hostName` and it inserts a seat-0
+  player row alongside the room, returning `playerId`/`resumeToken`/`seat`
+  beside `hostResumeToken`. If seating fails the room is deleted rather than
+  left as a lobby its creator can never join. **`hostName` is optional on
+  purpose** — omit it and you get the old anonymous-host behaviour, which keeps
+  a run-it-but-don't-play-it host possible for one `if`. Not dead code.
+- **`/host` is now ONLY the create form** (name, rounds, HOLD, max players) and
+  redirects to `/play`. The lobby, Start, round controls and Reset all moved to
+  `/play`. **This was the whole point:** `/play` already holds the entire
+  playing UI — card selection, King direction, Port fan, discard — and copying
+  that onto a second screen would guarantee the two drift apart.
+- **`/host` no longer silently resumes.** It offers "you already have a game
+  going — ABCD — rejoin it" instead, which also stops a refresh quietly minting
+  a second room. Needed a new `Persist.saveRoomCode`/`loadRoomCode`, since
+  `roomId` is a uuid nobody recognises.
+- **`/play` gained a lobby screen and a results screen.** Round results used to
+  be a toast on the phone; everyone now sees the scores, and the host gets
+  Start next round / End game now / Reset in place. Host controls key off
+  holding a host token for that room — **display only, every host action is
+  still re-verified server-side.**
+- **`maxPlayers` is a per-room setting**, replacing the hardcoded
+  `MAX_PLAYERS = 6` in `join-room.js`. Lives in `lib/rooms.js` (capacity, not a
+  game rule) so it stays clear of engine.js's rules-protected `MATCH_LIMITS`.
+  Old rooms without the field fall back to 6.
+
+**Verified end to end on `netlify dev`, not just eyeballed:** host created and
+seated at seat 0; start refused with only the host seated; `maxPlayers: 3`
+refused the 4th joiner; start accepted at 3; the host's own `get-state` returns
+a real hand and `isYourTurn`; the host is simultaneously authorised as host.
+Authority checked from the outside — a player's token sending `ADVANCE_ROUND`
+gets **401**, a non-host reset gets **401**, the host's own gets 200, and the
+host's `ADVANCE_ROUND` in the wrong state gets **400** ("no round result is
+pending"), i.e. authorised but correctly refused. In the browser: the `/host`
+form → redirect → lobby → Start → dealt a hand; a non-host sees no host
+controls anywhere; a live join pushed through the Realtime doorbell and enabled
+Start with no polling involved.
+
+**Worth knowing for the next session:** the Browser pane's tab reports
+`document.hidden === true` while backgrounded, so `poller.js` correctly makes
+ZERO requests and nothing renders. That is the invocations fix working, not a
+bug — front the tab with `tabs_select` before testing anything poll-driven.
+
+**Not yet deployed. Next stages:** the splash → menu → create/join shell (root
+`/` takes over from hot-seat at that point), then telemetry, then the QR code.
+
 ## 🟡 READ FIRST — site restored, adaptive polling deployed (2026-08-01)
 
 **The site is serving again** (billing period rolled over Aug 1 and Netlify

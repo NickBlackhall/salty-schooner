@@ -82,7 +82,26 @@
            padding:10px 18px; border-radius:10px; z-index:20; border:1px solid #c9a227; }
   .hidden { display:none; }
   .center { text-align:center; padding:40px 20px; }
-  #waitPanel .logo { width:min(70vw,320px); display:block; margin:0 auto 18px; }
+  #waitPanel .logo, #lobbyPanel .logo { width:min(70vw,320px); display:block; margin:0 auto 18px; }
+
+  /* Lobby and round-results now live here rather than on a separate host
+     screen, because the host is a player and stays on this page all game. */
+  .lobbyCode { font-family:var(--serif); font-size:3.4rem; letter-spacing:.2em;
+               color:var(--gold-lt); margin:6px 0; text-shadow:0 3px 12px rgba(0,0,0,.6); }
+  .playerList { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:18px 0; }
+  .playerChip { font-family:var(--serif); background:var(--teal); border:1px solid var(--gold);
+                padding:8px 16px; border-radius:999px; font-size:1rem; color:var(--gold-lt); }
+  .playerChip.you { background:linear-gradient(#f0d089, #c9a227); color:#25190a; border-color:#8a6c15; }
+  .scoreRow { display:flex; justify-content:space-between; max-width:320px; margin:6px auto;
+              font-size:1.05rem; color:var(--gold-lt); }
+  button.secondary { background:rgba(20,12,7,.92); color:var(--gold-lt); border:1px solid #c99a43;
+                     box-shadow:none; }
+  button.tiny { font-size:.82rem; padding:7px 12px; }
+  /* Host-only strip. Deliberately NOT sticky: the sticky turn bar already owns
+     the top of the screen, and the fixed choice bar and Port fan already own the
+     bottom — a third pinned element would collide with one of them. */
+  .hostBar { display:flex; justify-content:flex-end; padding:8px 14px;
+             border-bottom:1px solid rgba(201,162,39,.2); }
 </style>
 </head>
 <body class="saltyBoard">
@@ -91,7 +110,25 @@
   <p>Loading your seat…</p>
 </div>
 
+<div id="lobbyPanel" class="center hidden">
+  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
+  <div class="meta">Room code</div>
+  <div class="lobbyCode" id="lobbyCode"></div>
+  <p class="meta" id="lobbyJoinHint"></p>
+  <div class="playerList" id="lobbyPlayers"></div>
+  <div id="lobbyHostControls" class="hidden">
+    <button id="startBtn" disabled>Start game</button>
+    <p style="margin-top:14px;"><button id="lobbyResetBtn" class="secondary tiny">Reset game</button></p>
+  </div>
+  <p class="meta hidden" id="lobbyWaitText">Waiting for the host to start…</p>
+</div>
+
+<div id="resultsPanel" class="center hidden"></div>
+
 <div id="gameUi" class="hidden">
+  <div class="hostBar hidden" id="hostBar">
+    <button id="resetBtn" class="secondary tiny">Reset game</button>
+  </div>
   <div class="bar" id="turnBar">Waiting…</div>
 
   <section>
@@ -157,7 +194,23 @@ if (roomId && urlPid && urlTok) {
 let selected = null; // {zone, card, index}
 let lastView = null;
 let fannedPort = null; // index of the Port currently spread open, or null
-let lastAnnouncedStatus = null;
+
+// The host is a player now, so this page carries their controls too. Holding a
+// host token for THIS room is what makes them appear — /host saves it at
+// creation time. Purely a display check: every host action is re-verified
+// server-side against rooms.host_resume_token, so faking this in devtools
+// reveals buttons that then get a 401.
+let hostToken = roomId ? Persist.loadHost(roomId) : null;
+const isHost = () => !!hostToken;
+
+// Exactly one of these four is visible at a time. The choice bar and Port fan
+// are fixed overlays that live OUTSIDE all of them, so leaving the board has to
+// tear them down explicitly or they float over the lobby showing a dead game.
+const SCREENS = ['waitPanel', 'lobbyPanel', 'resultsPanel', 'gameUi'];
+function showScreen(id) {
+  SCREENS.forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+  if (id !== 'gameUi') { hideChoiceBar(); fannedPort = null; renderPortFan(); }
+}
 
 // Declared BEFORE the boot block below, which calls startPolling(): `const` is
 // not hoisted, so defining the poller further down would put it in the temporal
@@ -402,29 +455,105 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
   } catch (e) { Sfx.play('illegal'); showToast(e.message); }
 });
 
+function renderLobby(view) {
+  showScreen('lobbyPanel');
+  document.getElementById('lobbyCode').textContent = view.roomCode || '';
+  document.getElementById('lobbyJoinHint').textContent =
+    'Others join at ' + location.host + '/join and enter this code.';
+
+  // Mark which chip is you. seat is absent on a ?tok= rejoin, in which case
+  // nothing is highlighted rather than highlighting the wrong person.
+  const mySeat = creds && typeof creds.seat === 'number' ? creds.seat : null;
+  const players = view.players || [];
+  document.getElementById('lobbyPlayers').innerHTML =
+    players.map(p => `<div class="playerChip ${p.seat === mySeat ? 'you' : ''}">${p.name}</div>`).join('')
+    || '<span class="meta">Nobody yet…</span>';
+
+  document.getElementById('lobbyHostControls').classList.toggle('hidden', !isHost());
+  document.getElementById('lobbyWaitText').classList.toggle('hidden', isHost());
+  if (isHost()) {
+    // The host occupies a seat, so this is 1 already — one other player is enough.
+    document.getElementById('startBtn').disabled = players.length < 2;
+  }
+}
+
+function renderResults(view) {
+  showScreen('resultsPanel');
+  const panel = document.getElementById('resultsPanel');
+  const gameOver = view.status === 'GAME_RESULTS';
+  // Lowest total wins — hand and HOLD cards are penalty points.
+  const rows = gameOver ? [...view.players].sort((a, b) => a.total - b.total) : view.players;
+
+  let html = gameOver
+    ? `<h2>Game over — ${rows[0].name} wins</h2>`
+    : `<h2>Round ${view.round} complete</h2>`;
+  html += rows.map(p => `<div class="scoreRow"><span>${p.name}</span><span>${
+    gameOver ? p.total : `+${p.roundScore} (${p.total})`
+  }</span></div>`).join('');
+
+  if (!isHost()) {
+    html += '<p class="meta" style="margin-top:22px;">Waiting for the host…</p>';
+  } else if (gameOver) {
+    html += '<p style="margin-top:22px;"><button id="resultsResetBtn" class="secondary">Back to the lobby</button></p>';
+  } else if (view.pendingClinch) {
+    html += `<p style="margin-top:18px;"><b>${view.pendingClinch}</b> has clinched the game.</p>`
+      + '<p><button id="endNowBtn">End game now</button></p>'
+      + '<p><button id="nextRoundBtn" class="secondary">Keep playing</button></p>';
+  } else {
+    html += '<p style="margin-top:22px;"><button id="nextRoundBtn">Start next round</button></p>'
+      + '<p style="margin-top:12px;"><button id="resultsResetBtn" class="secondary tiny">Reset game</button></p>';
+  }
+  panel.innerHTML = html;
+
+  // Rebuilt every render, so these are wired fresh rather than once at load.
+  const next = document.getElementById('nextRoundBtn');
+  if (next) next.onclick = () => advanceRound(false, view);
+  const end = document.getElementById('endNowBtn');
+  if (end) end.onclick = () => advanceRound(true, view);
+  const rst = document.getElementById('resultsResetBtn');
+  if (rst) rst.onclick = doReset;
+}
+
+async function advanceRound(endNow, view) {
+  try {
+    await Api.submitAction({
+      roomId, actorType: 'host', token: hostToken,
+      action: { type: 'ADVANCE_ROUND', endNow },
+      expectedVersion: view.stateVersion
+    });
+    poller.kick();
+  } catch (e) { showToast(e.message); }
+}
+
+async function doReset() {
+  if (!isHost()) return;
+  if (!confirm('Reset this game for everyone? Progress will be lost. Players keep their seats and do not need to rejoin.')) return;
+  try {
+    await Api.resetGame(roomId, hostToken);
+    poller.kick();
+  } catch (e) { showToast(e.message); }
+}
+
 function render(view) {
-  // The host can reset a game back to LOBBY at any time. That response has no
-  // hand/HOLD/Ports (getLobbyView, not getPlayerView) — rendering the normal
-  // game UI against it would throw on view.yourHand.map(...). Show a holding
-  // screen instead; your seat (name, resume token) is untouched by a reset.
+  // A LOBBY response is getLobbyView, not getPlayerView — no hand, HOLD or
+  // Ports — so the board code below would throw on view.yourHand.map(...).
+  // This is also the state a host reset drops everyone into mid-game.
   if (view.status === 'LOBBY') {
     // Drop any held selection. Card ids come from a uid counter in the engine
     // that restarts at 1 on a cold function instance, so a card dealt after the
     // reset can carry the same id as the one selected before it — a stale
     // `selected` would then match the wrong card by id in the next game.
     selected = null;
-    document.getElementById('gameUi').classList.add('hidden');
-    hideChoiceBar();
-    // The fan is a fixed overlay outside gameUi, so hiding gameUi doesn't take it
-    // down — without this it floats over the reset screen showing a dead game's cards.
-    fannedPort = null; renderPortFan();
-    const wait = document.getElementById('waitPanel');
-    wait.classList.remove('hidden');
-    wait.innerHTML = '<p>Game was reset.</p><p>Waiting for the host to start a new round — you’re still in the room.</p>';
+    renderLobby(view);
     return;
   }
-  document.getElementById('waitPanel').classList.add('hidden');
-  document.getElementById('gameUi').classList.remove('hidden');
+  if (view.status === 'ROUND_RESULTS' || view.status === 'GAME_RESULTS') {
+    selected = null;
+    renderResults(view);
+    return;
+  }
+  showScreen('gameUi');
+  document.getElementById('hostBar').classList.toggle('hidden', !isHost());
 
   const bar = document.getElementById('turnBar');
   bar.textContent = view.isYourTurn ? "YOUR TURN" : `${view.currentPlayerName}'s turn`;
@@ -496,13 +625,6 @@ function render(view) {
     });
   });
 
-  // Only announce on the transition — render() runs on every poll, so an
-  // unguarded toast here re-fires roughly once a second.
-  if (view.status !== lastAnnouncedStatus) {
-    if (view.status === 'ROUND_RESULTS') showToast('Round over — waiting on the host.');
-    else if (view.status === 'GAME_RESULTS') showToast('Game over — check the host screen for final scores.');
-    lastAnnouncedStatus = view.status;
-  }
 }
 
 function applyView(view) {
@@ -535,10 +657,7 @@ async function poll() {
 
 function showPausedPanel() {
   const wait = document.getElementById('waitPanel');
-  document.getElementById('gameUi').classList.add('hidden');
-  hideChoiceBar();
-  fannedPort = null; renderPortFan();
-  wait.classList.remove('hidden');
+  showScreen('waitPanel');
   wait.innerHTML = '<p>Paused — this tab went quiet for a while.</p>'
     + '<p class="meta">Stopped checking for updates so it isn’t running in the background.</p>'
     + '<button id="resumeBtn" style="margin-top:14px;">Resume game</button>';
@@ -547,6 +666,24 @@ function showPausedPanel() {
     poller.start();
   });
 }
+
+// Host-only controls. These live in static markup rather than being rebuilt per
+// render, so they are wired once here. They stay inert for non-hosts: the
+// panels holding them are hidden, and every handler re-checks isHost().
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!isHost()) return;
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  try {
+    await Api.startGame(roomId, hostToken);
+    poller.kick();
+  } catch (e) {
+    showToast(e.message);
+    btn.disabled = false;   // re-enable so a failed start can be retried
+  }
+});
+document.getElementById('lobbyResetBtn').addEventListener('click', doReset);
+document.getElementById('resetBtn').addEventListener('click', doReset);
 
 function startPolling() {
   poller.start();

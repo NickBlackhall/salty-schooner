@@ -1,10 +1,8 @@
 const { getClient } = require('./lib/supabase');
-const { generateToken } = require('./lib/rooms');
+const { generateToken, clampMaxPlayers } = require('./lib/rooms');
 const { ok, badRequest, notFound, conflict, serverError } = require('./lib/http');
 const { loadPlayers } = require('./lib/access');
 const { pulseLobbyChange } = require('./lib/pulse');
-
-const MAX_PLAYERS = 6;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return badRequest('POST only');
@@ -48,13 +46,16 @@ exports.handler = async (event) => {
   if (room.status !== 'LOBBY') return conflict('This game has already started, so you can only rejoin with the exact name you used before.');
 
   const resumeToken = generateToken();
+  // Per-room setting now (set at create-room time), not a global constant.
+  // Fallback covers rooms created before this field existed.
+  const maxPlayers = clampMaxPlayers(room.config && room.config.maxPlayers);
 
   // Seat assignment races when two phones tap Join at nearly the same instant: both can
   // read the same player count before either insert lands. Retry on the seat's unique
   // constraint instead of trusting a single read-then-write.
-  for (let attempt = 0; attempt < MAX_PLAYERS + 2; attempt++) {
+  for (let attempt = 0; attempt < maxPlayers + 2; attempt++) {
     const players = await loadPlayers(room.room_id);
-    if (players.length >= MAX_PLAYERS) return conflict('This room is full.');
+    if (players.length >= maxPlayers) return conflict('This room is full.');
     const raced = players.find(p => p.player_name.toLowerCase() === playerName.toLowerCase());
     if (raced) {
       // Someone with this name landed between our check and this attempt — treat
