@@ -4,8 +4,8 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-01 (Claude) — site is BACK UP; polling fix live, Realtime
-doorbell built and committed but NOT deployed. See entries 20-21.
+Last updated: 2026-08-02 (Claude) — site is up, Realtime doorbell IS LIVE in
+production. Entries 22-23 (draw rule, /admin) are committed but NOT deployed.
 
 ---
 
@@ -26,14 +26,19 @@ fan and the four controller fixes (entry 18), and sound all went live in the
 same deploy. Production and `multiplayer-prototype` now match. The "production
 is stale" warning that used to live here no longer applies.
 
-**The cost problem is now addressed in code but NOT YET DEPLOYED.** Entry 21
-replaces polling with a Supabase Realtime doorbell (committed `ef864d0`,
-verified on localhost). Until it is promoted, production is still on adaptive
-polling at ~18,000 invocations per 2-hour session — about 7 sessions/month.
-**Promote it:**
+**✅ The cost problem is FIXED AND DEPLOYED (2026-08-02).** Entry 21's Realtime
+doorbell is live: verified on production that `/shared/realtime.js` and the
+vendored bundle return 200, all three screens load them, and a room created
+against the live API rang the doorbell to an outside subscriber — while that
+same subscriber was refused on `rooms` and `players`. A 2-hour session should
+now cost a few thousand invocations rather than ~18,000.
+
+**Still undeployed:** entries 22 (draw-rule change) and 23 (`/admin`). Promote
+with:
 ```
 cd ~/repos/salty-schooner && netlify deploy --prod --build
 ```
+`/admin` also needs the `ADMIN_PIN` env var, which is already set on the site.
 
 **Still do this every session:**
 - Close any Salty Schooner browser tabs — yours or an agent's — pointed at a
