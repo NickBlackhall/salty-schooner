@@ -4,41 +4,40 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-07-30 (Claude) — site is PAUSED, see entry 19 before doing anything.
+Last updated: 2026-08-01 (Claude) — site is BACK UP and the polling fix is now
+live in production. See entry 20; the quota risk is reduced, not eliminated.
 
 ---
 
-## 🔴 READ FIRST — the live site is PAUSED right now (2026-07-30)
+## 🟡 READ FIRST — site restored, adaptive polling deployed (2026-08-01)
 
-**salty-schooner.netlify.app returns HTTP 503 on every route, including the
-functions.** Netlify paused the project for exceeding the Free-tier function
-quota (125,000 requests/billing-period). Confirmed via the project's own
-Function settings page: **191,384 / 125,000 — 66,384 over.** Billing period is
-Jul 1 → Aug 1, so it should lift on its own around Aug 1; upgrading the plan
-would restore it sooner but that is Nick's call, not a technical one.
+**The site is serving again** (billing period rolled over Aug 1 and Netlify
+lifted the pause on its own) **and `netlify deploy --prod --build` has been run,
+so production finally has the adaptive poller.** Verified by curl, not assumed:
+`/shared/poller.js`, `theme.css` and `sfx.js` all return 200; all three screens
+load `poller.js`; the flat `setInterval(poll, 800)` is gone from production
+`/play`; production `poller.js` is byte-identical to the local file; and
+`/api/get-public-state` returns a JSON function-level error, so functions
+survived the deploy.
 
-**Root cause:** two Browser-pane test tabs (Claude's, not Nick's) were left
-open against deployed URLs — one draft `/host`, one production `/play` — each
-polling roughly once a second, for about two days. That alone plausibly
-accounts for the overage. Full writeup, including a wrong intermediate
-diagnosis that was corrected against the actual dashboard numbers: entry 19
-below.
+**Note this promoted more than the polling fix**, by Nick's explicit approval on
+2026-08-01: the styling pass, the hand-refill rule change (entry 16), the Port
+fan and the four controller fixes (entry 18), and sound all went live in the
+same deploy. Production and `multiplayer-prototype` now match. The "production
+is stale" warning that used to live here no longer applies.
 
-**Before touching this project again:**
-1. Check whether the site is back (`curl -o /dev/null -w '%{http_code}' https://salty-schooner.netlify.app/play` — 200 means it's up, 503 means still paused).
-2. **The moment it's back, deploy production BEFORE opening any client page.**
-   Production is still running the OLD flat-polling code (`/play` 800ms, `/host`
-   900ms, `/tv` 1000ms, no pause-when-hidden). The fix has been on `main`
-   since commit `272bf99` but never promoted:
-   ```
-   cd ~/repos/salty-schooner && netlify deploy --prod --build
-   ```
-   Opening old production `/play` even once, before that deploy, restarts the
-   same problem that just got the site paused.
-3. Close any Salty Schooner browser tabs — yours or an agent's — pointed at a
-   deployed URL before ending a session. See `[[browser-tabs-cost-real-money]]`
-   in Claude's memory. `localhost`/`file://` tabs are free; `*.netlify.app`
-   tabs are not, and keep polling indefinitely if left open.
+**The underlying cost problem is NOT solved.** Adaptive polling is mitigation:
+a real 2-hour 4-player session is still an estimated ~18,000 invocations, i.e.
+roughly **7 sessions/month before hitting the same 125,000 cap.** Moving reads
+to **Supabase Realtime** remains the top priority — see entry 19.
+
+**Still do this every session:**
+- Close any Salty Schooner browser tabs — yours or an agent's — pointed at a
+  deployed URL before ending a session. See `[[browser-tabs-cost-real-money]]`
+  in Claude's memory. `localhost`/`file://` tabs are free; `*.netlify.app`
+  tabs are not. The hidden-tab pause now makes a backgrounded tab free, but a
+  *visible* forgotten tab still polls.
+- Prefer `curl` over opening a browser tab when checking production state.
 
 ## ⚠ READ FIRST — two things changed structurally
 
@@ -70,13 +69,14 @@ below.
 - **Deploy:** now `netlify deploy` from the repo (site `salty-schooner`,
   salty-schooner.netlify.app). The old Netlify Drop zip workflow below applies to
   the **hot-seat** build only.
-- **⚠ PRODUCTION IS STALE (verified 2026-07-30).** Live production has the reset
-  button, rejoin-by-name and `/tv`, but **NOT** the styling pass, the hand-refill
-  rule change, the Port fan, four controller bug fixes, or sound. All of that has
-  only ever gone to **draft** URLs pending Nick's review — deliberately, so an
-  unreviewed visual pass could not wreck a live session. **Promote with
-  `netlify deploy --prod --build` when Nick approves.** Until then the live URL is
-  missing the refill fix, which is a real scoring correction.
+- **✅ PRODUCTION IS CURRENT (verified 2026-08-01).** ~~PRODUCTION IS STALE~~ —
+  resolved. Nick approved promoting the whole branch, so live production now has
+  the styling pass, the hand-refill rule change, the Port fan, the four
+  controller bug fixes, sound, and the adaptive poller. Production and
+  `multiplayer-prototype` match. Note the visual pass reached production without
+  ever getting the draft-URL review it was being held for — Nick accepted that
+  tradeoff to get the polling fix out. **If the styling looks wrong in real play,
+  that is why, and it is a revert, not a mystery.**
 
 ## Single-source-of-truth rule (important)
 
@@ -296,4 +296,29 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       the site got paused before that could happen. Production is still
       running the old flat-polling code as of this writing. See the READ FIRST
       section at the top of this file for the exact sequencing needed once the
-      site comes back.
+      site comes back. **→ Resolved 2026-08-01, entry 20.**
+
+20. `Promote the polling fix to production` — no code written; this entry is a
+    verification record. The site came back on its own when the billing period
+    rolled (Aug 1), and the first thing checked was whether the incident's cause
+    was actually gone. **It was not.** Production was still serving
+    `setInterval(poll, 800)` with no visibility guard, and `/shared/poller.js`
+    404'd — the fix had sat on the branch for two days while the live URL kept
+    the exact code that burned the quota. Three independent signals agreed
+    production was stale (`poller.js`, `theme.css` and `sfx.js` all 404 while
+    `engine.js` returned 200, ruling out a path mistake rather than assuming it).
+    Also checked and found clean: no leftover polling browser tabs, and no
+    scheduled/cron functions quietly burning invocations.
+    **The deploy decision was deliberately handed to Nick rather than executed**,
+    because `--prod --build` bundles the unreviewed styling pass and the entry-16
+    rule change with the polling fix, and the whole reason those sat on draft
+    URLs was to keep an unreviewed visual pass away from a live session. Nick
+    approved promoting the branch whole. Post-deploy verification, all by curl
+    (no browser tab opened against production at any point): shared assets 200,
+    all three screens reference `poller.js`, flat `setInterval` gone from
+    production `/play`, production `poller.js` byte-identical to local, and
+    `/api/get-public-state` returning a JSON function-level error rather than an
+    HTML routing 404. **Restating the thing most likely to be forgotten: this
+    lowers the burn rate, it does not fix it.** ~18,000 invocations per 2-hour
+    session ≈ 7 sessions/month against the same cap. Supabase Realtime is still
+    the actual fix and is still not started.
