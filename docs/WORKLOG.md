@@ -366,6 +366,41 @@ Note on process: earlier, a King-opener issue in the v11 file was fixed but then
       (tap arms it, tap again deletes, self-disarms after 5s) rather than
       confirm-word — worth guarding against a stray tap, not worth typing for.
 
+24. `Clearing HOLD no longer ends the round instantly` — **rules change,
+    decided by the group at a physical table 2026-08-02, approved by Nick.
+    Multiplayer only.** They played on cards, not the build, and hit a line the
+    old rule forbade: a player emptied HOLD, still had a legal hand card, played
+    it, then discarded their last card to finish the round on **zero**.
+    - **Was:** `runAfterPlay()` called `endRound()` the moment `goal.length === 0`,
+      mid-turn, cancelling any legal plays still available.
+    - **Now:** three outcomes, and they are genuinely different —
+      (1) released Jailbreak Kings outstanding → defer, that debt comes first
+      (unchanged); (2) HOLD empty **and** hand empty → end **immediately**, no
+      discard; (3) HOLD empty, hand still holding → defer, and the existing
+      `goal.length === 0` check in `applyDiscardToPort` ends it there.
+    - **Case 2 is the reason this is not simply "end at the discard"** — Nick
+      raised it unprompted. §7 requires a hand card to end a turn, so deferring
+      unconditionally would force a player with nothing left to **draw a fresh
+      hand purely to end a round already over**.
+    - **Removed an early `return` after Jailbreak success.** Completing a
+      Jailbreak can itself be the play that leaves HOLD and hand both empty, and
+      the early return skipped the round-end check — stranding that player with
+      nothing to discard. Now falls through. Covered by a test.
+    - **No new state.** `pendingWinner` was confirmed still dead (assigned in
+      three places, read nowhere) so it was not leaned on; deferral works purely
+      by *not* calling `endRound()`.
+    - **No client change needed** — `/play` and `/tv` only branch on
+      `status === 'ROUND_RESULTS'`, which still fires, just later.
+    - **Test written BEFORE the change and run against the old engine first**, to
+      prove it caught the old behaviour: case 3 failed exactly as the group
+      described, then the discard threw "No round is in progress". 17 assertions
+      in `scripts/test-round-end.js`, all passing after; `test-draw-rule.js`
+      still passes; engine copies re-synced; a real room dealt through the live
+      functions.
+    - `docs/RULES.md` §11 rewritten, §7 gained the empty-hand exception, §13 and
+      the §14 conformance table updated. **Hot-seat is now three rule changes
+      behind, deliberately.**
+
 ## For ChatGPT / Codex working in this space
 
 - Authority order (from `AGENTS.md`): `MASTER_PROJECT_BRIEF.md` → newer decisions approved by Nick → newest stable prototype → existing implementation.

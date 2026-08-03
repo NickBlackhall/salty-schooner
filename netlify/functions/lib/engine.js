@@ -430,26 +430,56 @@ function applyPlayCard(state, action) {
   return events;
 }
 
+// ---- When clearing HOLD ends the round (rule change, 2026-08-02) ------------
+//
+// WAS: emptying your HOLD pile ended the round instantly, mid-turn, killing any
+// legal plays you still had.
+//
+// NOW: clearing HOLD does not end the round by itself. You keep playing, and
+// the round ends at the discard that finishes your turn. Decided by the group
+// at a physical table, after a player emptied HOLD, then played a hand card
+// that was still legal, then discarded their last card to finish on zero — a
+// line the old rule made impossible.
+//
+// Three outcomes, and they are genuinely different:
+//   1. Released Jailbreak Kings still unplayed -> do not end; that debt comes
+//      first. This case already worked and is unchanged.
+//   2. HOLD empty AND hand empty -> end IMMEDIATELY, without a discard. There
+//      is nothing left to play and no card to discard with, and §7 requires a
+//      hand card to end a turn — so deferring here would force the player to
+//      draw a fresh hand purely to end a round that is already over.
+//   3. HOLD empty, hand still holding -> defer. The discard in
+//      applyDiscardToPort already re-checks for an empty HOLD, so the round
+//      ends there with no new state needed.
 function runAfterPlay(state, events) {
   const p = currentPlayer(state);
-  const jailbreakActive = state.jailbreak && state.jailbreak.active;
-  const releasedKingsRemain = jailbreakActive && state.jailbreak.kings.length > 0;
-  if (jailbreakActive && !releasedKingsRemain) {
+  let releasedKingsRemain = state.jailbreak && state.jailbreak.active && state.jailbreak.kings.length > 0;
+
+  if (state.jailbreak && state.jailbreak.active && !releasedKingsRemain) {
     const count = state.jailbreak.initialCount || 0;
     state.jailbreak = { active: false, kings: [], initialCount: 0, lastOutcome: 'success' };
     log(state, `${p.name} played every released Brig King. The Jailbreak is complete.`);
     events.push({ type: 'JAILBREAK_SUCCESS', count });
-    return;
+    releasedKingsRemain = false;
+    // Deliberately NOT returning here any more. Completing a Jailbreak can be
+    // the very play that leaves HOLD and hand both empty, and returning early
+    // skipped the check below — stranding that player with nothing to discard.
   }
+
   if (p.goal.length === 0) {
-    if (!jailbreakActive || !releasedKingsRemain) {
+    if (releasedKingsRemain) {
+      state.pendingWinner = state.currentPlayer;
+      log(state, `${p.name} cleared their HOLD pile, but must finish the active Jailbreak before winning the round.`);
+    } else if (p.hand.length === 0) {
       state.pendingWinner = null;
       endRound(state, p, events);
       return;
+    } else {
+      state.pendingWinner = state.currentPlayer;
+      log(state, `${p.name} cleared their HOLD pile — they may keep playing; the round ends when they discard.`);
     }
-    state.pendingWinner = state.currentPlayer;
-    log(state, `${p.name} cleared their goal pile, but must finish the active Jailbreak before winning the round.`);
   }
+
   if (p.hand.length === 0 && !state.handEmptyNoted) {
     state.handEmptyNoted = true;
     log(state, `${p.name} played through their hand — draw when you're ready, or finish empty.`);

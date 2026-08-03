@@ -139,6 +139,10 @@ On your turn you may, in any order and any number of times:
 Ports.** The discard is mandatory and must come from hand, so **a turn can never
 end with an empty hand** — you must draw before you can finish.
 
+**One exception:** if you clear your HOLD pile *and* your hand, the round ends
+there and then and no discard is required (§11). You never have to draw a fresh
+hand purely to end a round you have already won.
+
 Playing from HOLD is the only way to reduce your HOLD pile, and clearing it is
 how a round is won.
 
@@ -192,9 +196,24 @@ deck**. If both are empty, no cards can be drawn. A player with an empty hand an
 nothing to draw cannot discard and therefore cannot end their turn — a **hard
 stall**.
 
-## 11. Ending a round and scoring
+## 11. Ending a round and scoring (changed — see §13)
 
-A round ends **the instant a player's HOLD pile is empty**.
+Clearing your HOLD pile **does not end the round on the spot**. You may carry on
+making any legal plays you still have, and the round ends when you **discard** to
+finish your turn.
+
+> Play your last HOLD card, then a hand card that is still legal, then discard
+> your final card — you finish the round on **zero**.
+
+Two exceptions:
+
+- **If your hand is also empty**, the round ends **immediately**, with no
+  discard. There is nothing left to play and no card to discard with, and §7
+  requires a hand card to end a turn — waiting would force you to draw a fresh
+  hand just to end a round that is already over.
+- **If a Jailbreak is still owed released Kings**, that comes first (§6). The
+  round cannot end until it is resolved, whether or not your hand is empty —
+  released Kings are played from the Brig, not from your hand.
 
 Every player scores, including the winner:
 
@@ -263,13 +282,39 @@ handed you 5 to hunt through.
 **Found by:** real play, and raised by Nick as a discrepancy with how the table
 version was being played.
 
+### 2026-08-02 — clearing HOLD no longer ends the round instantly
+*Decided by the group at a physical table. Approved by Nick Blackhall. Multiplayer builds only.*
+
+**Was:** the round ended the instant a player's HOLD pile hit zero, mid-turn,
+cancelling any legal plays they still had.
+
+**Now:** §11 — clearing HOLD defers; the round ends at the discard that finishes
+the turn. Immediate end only when the hand is *also* empty. An owed Jailbreak
+still takes priority over both.
+
+**Why:** it came up in real play. A player emptied HOLD, still had a legal hand
+card, played it, then discarded their last card to finish on **zero** — a line
+the old rule made impossible, because the round was already over the moment
+their HOLD emptied.
+
+**The edge case that shapes the rule:** "the round ends at the discard" cannot
+be the whole rule. A player who empties HOLD *and* hand on the same play has no
+card to discard with, and §7 requires one to end a turn — so they would have
+been forced to draw a fresh hand purely to end a round that was already
+finished. Hence the immediate-end exception.
+
+**Note:** this makes the ⚑ "Curse penalties can un-win a round" flag above reach
+further. A player can now clear HOLD, keep playing, fail a Jailbreak at their
+discard, take penalty cards into HOLD, and *not* win after all. That was already
+possible in the narrow Jailbreak case; it is now reachable more generally.
+
 ## 14. Build conformance
 
 | Build | Conforms to | Notes |
 |---|---|---|
 | `netlify/functions/lib/engine.js` (multiplayer) | All of §1–§12 | Current. |
 | `app/shared/engine.js` | — | Byte-identical copy of the above, served to browsers for legality hints. **Keep in sync.** |
-| `app/index.html` (hot-seat) | §1–§12 **except §8** | **Frozen at v26.16 by decision, 2026-07-29.** Still auto-refills to 5 at end of turn, and has neither the 2026-07-29 nor the 2026-08-02 change. The gap is now two rule changes wide. Deliberate, not drift — do not "resync" the engine to match it. |
+| `app/index.html` (hot-seat) | §1–§12 **except §8 and §11** | **Frozen at v26.16 by decision, 2026-07-29.** Still auto-refills to 5 at end of turn, and still ends a round the instant HOLD empties. The gap is now three rule changes wide (2026-07-29 refill, 2026-08-02 draw payout, 2026-08-02 round end). Deliberate, not drift — do not "resync" the engine to match it. |
 
 ## 15. Non-rules implementation notes
 
