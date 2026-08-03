@@ -35,33 +35,130 @@
           padding:clamp(7px,1.1vw,15px) clamp(16px,2.4vw,32px); font-size:clamp(1.05rem,2.4vw,1.9rem);
           font-weight:700; color:var(--gold-lt); }
 
-  /* ---- game ---- */
-  .turnBanner { text-align:center; font-family:var(--serif); font-size:clamp(1.5rem,4.6vw,3.4rem);
-                color:var(--gold-lt); line-height:1.1; text-shadow:0 3px 12px rgba(0,0,0,.7); }
-  .roundLine { text-align:center; font-size:clamp(.85rem,1.7vw,1.3rem); margin-bottom:clamp(10px,2vh,20px); }
-  .seats { display:flex; flex-wrap:wrap; gap:clamp(8px,1.5vw,20px); justify-content:center; margin-bottom:clamp(12px,2.5vh,26px); }
-  .seat { background:var(--wood); border:1px solid rgba(201,162,39,.4); border-radius:14px;
-          padding:clamp(9px,1.4vw,18px) clamp(13px,2vw,26px); min-width:clamp(128px,15vw,220px); text-align:center; }
-  .seat.turn { border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,162,39,.5), 0 0 26px rgba(201,162,39,.35); }
-  .seat .nm { font-family:var(--serif); font-size:clamp(1.05rem,2.2vw,1.8rem); color:var(--gold-lt); }
-  .seat .sc { font-size:clamp(.75rem,1.4vw,1.1rem); color:rgba(240,208,137,.72); }
-  .seat .card { margin:.25em 0; }
-  .runsRow { display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.4vw,18px); margin-bottom:clamp(12px,2vh,22px); }
-  .run { background:var(--teal); border:1px solid rgba(201,162,39,.35); border-radius:14px;
-         padding:clamp(8px,1.2vw,15px); min-height:clamp(78px,11vw,150px); }
-  .runLbl { font-family:var(--serif); font-size:clamp(.72rem,1.3vw,1.05rem); color:var(--gold-lt); margin-bottom:.35em; }
-  .cardRow { display:flex; flex-wrap:wrap; gap:clamp(3px,.5vw,7px); }
+  /* ---- game ------------------------------------------------------------
+   * Sized in vh, not clamp(). /tv is a 16:9 television essentially always
+   * (Nick, 2026-08-02), so height alone determines the layout and everything
+   * scales with the screen. The clamp() ceilings this replaces were tuned for
+   * a 1080p monitor and capped a 4K panel at roughly 40% of intended size,
+   * leaving 56% of the screen empty. Do not reintroduce px ceilings here.
+   */
+  #game { height:100vh; display:flex; flex-direction:column; padding:1.4vh 1.6vh; gap:1vh; }
+  .tvHeader { text-align:center; flex:0 0 auto; }
+  /* No wordmark up here — the logo lives beside the Brig instead (Nick,
+     2026-08-02), which fills the otherwise empty band to the left of it and
+     gives the status line the full width of the top. */
+  .tvStatus { font-family:var(--serif); font-size:2.4vh; letter-spacing:.08em;
+              color:var(--gold-lt); text-shadow:0 .2vh .8vh rgba(0,0,0,.9); }
+  .tvBody { flex:1 1 auto; display:flex; gap:1.4vh; min-height:0; }
+  .tvMain { flex:1 1 auto; display:flex; flex-direction:column; gap:1.4vh; min-height:0; }
+  /* Players run down the RIGHT on a TV, per Nick's mockup — a row across the
+     top competed with the runs for the eye. */
+  .tvSide { flex:0 0 15.5vw; display:flex; flex-direction:column; gap:1.2vh; min-height:0; }
+  /* Chrome now lives on each element: the runs are ONE framed panel with
+     internal dividers, the plaques and the Brig carry painted frames instead of
+     a CSS border. A shared border rule here would double up on the art. */
 
-  /* 5:7 faces, matching the hot-seat build. */
-  .card { width:clamp(30px,4.2vw,64px); aspect-ratio:5/7; font-size:clamp(.8rem,1.5vw,1.5rem); }
-  .asBadge { font-size:clamp(.5rem,.85vw,.8rem); }
+  /* theme.css paints an OPAQUE navy on body, and per CSS paint order a
+     negative-z-index pseudo-element is drawn before its parent's background —
+     so body's navy covers .saltyBoard::before entirely. The board art has only
+     ever been visible where the page was SHORTER than the viewport (which is
+     why /play's lobby showed it at the bottom and a full-height /tv showed
+     none). Clearing it here lets the art through. The same one-line fix would
+     light up /host, /join and /play too — not applied there yet because it
+     changes how those screens look and that is Nick's call, not a side effect
+     of a /tv change. */
+  /* Padding moves off body and onto the two screens that want it. #game is
+     height:100vh, so body padding was added on TOP of a full-height child and
+     pushed the Brig 60px off the bottom of the screen. */
+  body { background: transparent; padding: 0; }
+  #codeEntry, #lobby, #results { padding: 2.5vh 2.5vw; }
 
-  .brigBar { border-radius:14px; padding:clamp(10px,1.5vw,18px); margin-bottom:clamp(10px,2vh,18px);
-             background:linear-gradient(rgba(40,10,10,.72), rgba(40,10,10,.82)), url("/assets/tex-stone.webp") center / 300px;
-             border:1px solid rgba(201,162,39,.3); }
-  .brigBar.active { border-color:#ff9a5a; box-shadow:0 0 0 3px rgba(255,154,90,.45), 0 0 34px rgba(255,120,60,.4); }
-  .brigTitle { font-family:var(--serif); font-size:clamp(.9rem,1.7vw,1.35rem); color:var(--gold-lt); margin-bottom:.4em; }
-  .logBox { font-size:clamp(.78rem,1.4vw,1.1rem); color:rgba(240,208,137,.68); line-height:1.55; }
+  /* The board photo is the mockup's background. theme.css dims it heavily so
+     text stays legible on the small screens; on a television that wash flattened
+     it to near-black and threw away the art entirely. Lift it here only — /play
+     and /join still want the darker treatment behind dense controls. */
+  .saltyBoard::before {
+    background-image:
+      linear-gradient(rgba(4,16,22,.18), rgba(4,16,22,.34)),
+      url("/assets/board-bg.webp") !important;
+  }
+
+  /* Player plaques: purple wood behind, frame-hold.png laid over the top —
+     the same ::after technique hot-seat uses on its HOLD pile, so the two
+     builds share one visual language rather than two lookalikes. */
+  .seat { position:relative; flex:1 1 0; min-height:0; text-align:center;
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          padding:2.6vh 2.2vh;
+          background:linear-gradient(rgba(38,18,52,.82), rgba(38,18,52,.82)), url("/assets/tex-purple.webp") center / 300px;
+          border:none; border-radius:1.2vh; box-shadow:0 .5vh 2vh rgba(0,0,0,.55); }
+  .seat::after { content:""; position:absolute; inset:-1.2vh; pointer-events:none; z-index:2;
+                 background:url("/assets/frame-hold.png") center / 100% 100% no-repeat; }
+  .seat > * { position:relative; z-index:1; }
+  /* Whose turn it is. An outline ring was tried first and fought the ornate
+     frame — it read as a smudge behind the gold rather than an accent. Instead
+     the WAITING plaques recede (desaturated and dimmed) and the active one
+     stays full-strength, lifts slightly, and makes its own frame glow. Contrast
+     does the work, so nothing is drawn on top of the art. */
+  .seat { transition:filter .25s ease, transform .25s ease;
+          filter:saturate(.4) brightness(.55); }
+  .seat.turn { filter:none; transform:scale(1.04); z-index:1; }
+  .seat.turn::after { filter:drop-shadow(0 0 1.6vh rgba(255,214,120,.9)) brightness(1.08); }
+  .seat .nm { font-family:var(--serif); font-size:2.1vh; color:var(--gold-lt); line-height:1.1; }
+  .seat .sc { font-size:1.6vh; color:rgba(240,208,137,.8); margin-top:.4vh; }
+  .seat .card { margin:.8vh 0; }
+  /* ONE parchment panel divided into four columns, per the mockup — not four
+     separate tiles. Hot-seat's board reads as cards laid on paper; separate
+     teal tiles read as a dashboard. */
+  .runsPanel { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:repeat(4,1fr);
+               background:var(--parch); color:#3a2a16;
+               border:.45vh solid var(--gold); border-radius:1.6vh;
+               box-shadow:0 .6vh 2.4vh rgba(0,0,0,.55), inset 0 0 0 .2vh rgba(240,208,137,.25);
+               overflow:hidden; }
+  .run { padding:1.4vh; display:flex; flex-direction:column; min-width:0;
+         border-right:.28vh solid rgba(92,68,32,.32); }
+  .run:last-child { border-right:none; }
+  .runLbl { font-family:var(--serif); font-size:2.3vh; color:#4a3418; text-shadow:none;
+            text-align:center; letter-spacing:.06em; margin-bottom:1vh;
+            display:flex; align-items:center; justify-content:center; gap:.8vh; }
+  /* Direction as a badge rather than "(up)" in the label, per the mockup. */
+  .dirBadge { font-family:var(--sans); font-size:1.5vh; font-weight:800; letter-spacing:.04em;
+              padding:.3vh .8vh; border-radius:.6vh; border:.15vh solid rgba(92,68,32,.5);
+              background:rgba(255,255,255,.55); }
+  .dirBadge.up { color:#1d6b33; }
+  .dirBadge.down { color:#a4341c; }
+  /* On parchment the "A or Q" hint needs dark ink too, or it vanishes. */
+  .run .meta { color:rgba(58,42,22,.6); font-size:1.7vh; }
+  .cardRow { display:flex; flex-wrap:wrap; gap:.6vh; }
+  .run .cardRow { flex:1; align-content:flex-start; justify-content:center; }
+
+  /* 5:7 faces. Sized off viewport HEIGHT so a 4K panel scales up instead of
+     hitting a px ceiling — these are read from a sofa, not a desk. */
+  .card { width:6.2vh; aspect-ratio:5/7; font-size:2.4vh; border-radius:.6vh; }
+  .asBadge { font-size:1.1vh; }
+
+  /* The Brig is now a compact SQUARE box centred under the runs, which is what
+     lets frame-brig.png be used at last. It was previously a ~10:1 letterbox
+     bar, and stretching a 512x512 iron frame across that would have smeared the
+     skull and lettering right across the screen. */
+  /* Three columns so the Brig stays dead-centre under the runs while the logo
+     sits out on the left. A plain flex row would have shunted the Brig
+     off-centre as soon as the logo joined it. */
+  .brigWrap { flex:0 0 auto; display:grid; grid-template-columns:1fr auto 1fr;
+              align-items:center; }
+  .brigLogo { grid-column:1; justify-self:start; height:22vh; width:auto;
+              max-width:100%; object-fit:contain;
+              filter:drop-shadow(0 .6vh 1.8vh rgba(0,0,0,.75)); }
+  .brigWrap .brigBox { grid-column:2; }
+  .brigBox { position:relative; width:26vh; height:26vh; border:none; border-radius:0;
+             display:flex; align-items:center; justify-content:center; }
+  .brigBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
+  .brigInner { position:relative; z-index:1; width:70%; height:70%;
+               display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.8vh;
+               background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 220px; }
+  .brigCaption { font-family:var(--serif); font-size:1.6vh; color:var(--gold-lt); text-align:center; }
+  .brigBox.active::after { filter:drop-shadow(0 0 2vh rgba(255,140,60,.9)) brightness(1.25); }
+  .brigInner .card { width:4.6vh; font-size:1.9vh; }
   .results { text-align:center; }
   .results h2 { font-size:clamp(1.8rem,5vw,3.4rem); margin:.2em 0; }
   .results .row { font-family:var(--serif); font-size:clamp(1.05rem,2.4vw,1.9rem); margin:.15em 0; color:var(--ink); }
@@ -130,15 +227,28 @@
 </div>
 
 <div id="game" class="hidden">
-  <div class="turnBanner" id="turnBanner"></div>
-  <div class="roundLine" id="roundLine"></div>
-  <div class="seats" id="seats"></div>
-  <div class="runsRow" id="runsRow"></div>
-  <div class="brigBar" id="brigBar">
-    <div class="brigTitle" id="brigTitle">The Brig</div>
-    <div class="cardRow" id="brigCards"></div>
+  <div class="tvHeader">
+    <div class="tvStatus" id="tvStatus"></div>
   </div>
-  <div class="logBox" id="logBox"></div>
+  <div class="tvBody">
+    <div class="tvMain">
+      <div class="runsPanel" id="runsRow"></div>
+      <div class="brigWrap">
+        <img class="brigLogo" src="/assets/logo.webp" alt="Salty Schooner">
+        <div class="brigBox" id="brigBar">
+          <div class="brigInner">
+            <div class="cardRow" id="brigCards"></div>
+            <div class="brigCaption" id="brigTitle"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tvSide" id="seats"></div>
+  </div>
+  <!-- The log is deliberately not rendered on screen (Nick, 2026-08-02): the
+       board itself tells the story on a TV. view.log is still fetched and is
+       still what drives the Jailbreak sound cues by diffing, so do not stop
+       requesting it — only its display was dropped. -->
 </div>
 
 <div id="results" class="hidden results"></div>
@@ -330,33 +440,42 @@ function renderLobby(v) {
 
 function renderGame(v) {
   show('game');
-  document.getElementById('turnBanner').textContent = `${v.currentPlayerName}'s turn`;
-  document.getElementById('roundLine').textContent =
-    `Round ${v.round} of ${v.maxRounds}  ·  Draw deck ${v.deckCount}  ·  Recycle ${v.recycleCount}  ·  Room ${v.roomCode}`;
+  // One status line, as in the mockup. Real player names, never seat numbers.
+  document.getElementById('tvStatus').innerHTML =
+    `Round ${v.round} of ${v.maxRounds} &nbsp;•&nbsp; Deck ${v.deckCount} &nbsp;•&nbsp; ${v.currentPlayerName}'s turn &nbsp;•&nbsp; Room ${v.roomCode}`;
 
+  // Every player gets a plaque and the active one is outlined, so the board
+  // shows whose turn it is as well as the header saying so (Nick, 2026-08-02).
   document.getElementById('seats').innerHTML = v.players.map(p => `
     <div class="seat ${p.seat === v.currentSeat ? 'turn' : ''}">
       <div class="nm">${p.name}</div>
       <div>${cardHtml(p.goalTop)}</div>
-      <div class="sc">${p.goalCount} in HOLD · ${p.total} pts</div>
+      <div class="sc">${p.goalCount} cards</div>
     </div>`).join('');
 
-  document.getElementById('runsRow').innerHTML = v.runs.map((r,i) => `
-    <div class="run">
-      <div class="runLbl">Run ${i+1}${r.direction ? ' · ' + r.direction : ''}</div>
-      <div class="cardRow">${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q</span>'}</div>
-    </div>`).join('');
+  document.getElementById('runsRow').innerHTML = v.runs.map((r, i) => {
+    const dir = r.direction
+      ? `<span class="dirBadge ${r.direction}">${r.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
+      : '';
+    return `<div class="run">
+      <div class="runLbl">Run ${i + 1}${dir}</div>
+      <div class="cardRow">${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q only</span>'}</div>
+    </div>`;
+  }).join('');
 
   const b = v.brig;
-  const bar = document.getElementById('brigBar');
-  bar.classList.toggle('active', b.active);
+  const kings = b.active ? b.releasedKings : b.waitingKings;
+  const box = document.getElementById('brigBar');
+  box.classList.toggle('active', b.active);
+  document.getElementById('brigCards').innerHTML = kings.map(cardHtml).join('');
   document.getElementById('brigTitle').textContent = b.active
-    ? `⚔ JAILBREAK — ${b.releasedKings.length} King${b.releasedKings.length === 1 ? '' : 's'} loose!`
-    : 'The Brig';
-  document.getElementById('brigCards').innerHTML =
-    (b.active ? b.releasedKings : b.waitingKings).map(cardHtml).join('') || '<span class="meta">Empty</span>';
+    ? `JAILBREAK — ${kings.length} King${kings.length === 1 ? '' : 's'} loose!`
+    : (kings.length
+        ? `${kings.length} King${kings.length === 1 ? '' : 's'} in The Brig`
+        : 'The Brig is empty');
 
-  document.getElementById('logBox').innerHTML = v.log.slice(0,5).map(l => `<div>${l}</div>`).join('');
+  // No log rendered — see the note in the #game markup. v.log is still used by
+  // the sound cues, which derive Jailbreak events by diffing it.
 }
 
 function renderResults(v) {
