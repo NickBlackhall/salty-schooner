@@ -85,6 +85,24 @@ starting.
   discussion, not yet built as an explicit per-device switch. That switch
   (host sets the room's default, any player can override their own device) is
   future work, not part of the three stages above.
+- **Couch-mode phone layout, next step:** Nick wants to mock up what `/play`
+  should look like with the shared board (Runs, Brig) collapsed for couch mode.
+  One fork already agreed: Runs can't disappear from the phone entirely — a
+  card still has to be tapped onto *some* run, and a TV isn't touchable — so
+  they shrink to compact legality-highlighted buttons (echoing the run areas
+  visually, no card art) rather than full tiles; the actual cards live on
+  `/tv`. Wait for the mockup before building.
+
+**Raised and explicitly parked (Nick, 2026-08-02): rebuild the board in
+Three.js** for real 3D card flips/arcs, a table viewed with depth and dynamic
+lighting, and a cinematic camera-driven Jailbreak (push into the Brig, Kings
+physically bursting out) instead of the current full-screen splash image.
+Genuinely a good fit for a card game, not dismissed — but a large stack change
+(3D hit-testing instead of DOM buttons, real GPU load on the phones this has
+to run well on, no build step today vs. one then) for a project still mid
+functional-buildout with rules only just settling. Nick's own call: "keep it
+in mind" for later, once rules and layout stop moving. **Do not start this
+unprompted** — same standing as the Jokers mechanic below.
 
 **Start the next session by re-reading this section, then re-ask the two open
 questions (max-players cap, telemetry scope) before writing any code.**
