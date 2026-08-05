@@ -4,13 +4,185 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-02 (Claude) — site is up, Realtime doorbell IS LIVE in
-production. Entries 22-23 (draw rule, /admin) are committed but NOT deployed.
-**Nothing built yet for the section below — planning only, read before coding.**
+Last updated: 2026-08-02 (Claude), end of a long session — see the HANDOFF
+section immediately below before doing anything. It corrects the stale claims
+in the rest of this file: almost everything the "NEXT SESSION" banner below
+called unbuilt has since been built.
 
 ---
 
-## 🔵 NEXT SESSION — host-as-a-seat + game shell (planning only, nothing built)
+## 🟢 HANDOFF (2026-08-02, end of session — read this first)
+
+Context window filled up; this is a deliberate stopping point, not a natural
+break. Everything in here is verified against the actual repo/production state
+at write time, not recalled from memory.
+
+### Deploy state right now
+
+```
+git status: 2 commits ahead of origin (NOT pushed)
+  d0fdcc2  Rebuild /play as the landscape controller from Nick's mockups
+  61f148a  Note the Three.js idea and the couch-mode phone layout as parked
+
+Production (salty-schooner.netlify.app) is running an OLDER build:
+  - engine.js:  prod MATCHES local — the round-end rule (entry 24) IS live.
+  - play.html:  prod DIFFERS from local — the controller rebuild is NOT live.
+  - root '/':   still serves hot-seat (v26 title), unchanged.
+```
+
+**To catch production up:**
+```bash
+cd ~/repos/salty-schooner
+git push origin multiplayer-prototype
+netlify deploy --prod --build
+```
+Nothing risky in that push — both pieces were verified against real rooms
+before committing (see the commits themselves for exact verification steps).
+
+### What got built this session that this file's older sections do not reflect
+
+The "NEXT SESSION — host-as-a-seat + game shell" section right below this one
+is now **stale** — it was written mid-session when none of it existed. Almost
+everything in its Stage 1 is done (see entries 22–24 further down and the
+commits below). Do not follow its "genuinely open" list; follow this one.
+
+Built, tested against live rooms, and committed — **not yet pushed or deployed**:
+
+- **`/tv` fully restyled to Nick's mockup** (commit `1445893` + fixes in
+  `e1e702f`, `37cc7a8`): one unified parchment Runs panel with dividers, the
+  Brig as a compact square using `frame-brig.png` at last (it's 512×512 and the
+  old 10:1 Brig bar would have smeared it), player plaques in `frame-hold.png`
+  down the right, the logo filling the space beside the Brig, no on-screen log
+  (still fetched — the Jailbreak sound cues derive from diffing it, see entry
+  in the code comments). Sizing moved from `clamp()` px ceilings to `vh`, since
+  `/tv` is a 16:9 television essentially always — a 4K panel was previously
+  capped at ~40% of its actual size. **Two real bugs fixed along the way, both
+  worth knowing about because they are easy to reintroduce:**
+  - The board artwork (`board-bg.webp`) was invisible on every screen, not just
+    `/tv`. `theme.css` paints an **opaque** navy on `body`, and CSS draws a
+    negative-`z-index` pseudo-element **before** its parent's background paints
+    — so `body` was covering `.saltyBoard::before` everywhere. Fixed on `/tv`
+    and `/play` by setting `body { background: transparent }` and re-declaring
+    `.saltyBoard::before` locally. **`/host` and `/join` still have this bug** —
+    nobody has fixed it there because nobody asked yet.
+  - The Brig's shake-and-glow build-up animation targeted `.brigBar` in CSS
+    after the element's class was renamed to `.brigBox` — the `id` stayed the
+    same so the JS kept firing and nothing errored, it just silently never
+    played. Selector now matches.
+  - The 16:9 Jailbreak splash art Nick supplied was a 25.9MB PNG at 5504×3072 —
+    resized to 3840w and re-encoded to a 1.3MB JPEG (`jailbreak-tv.jpg`),
+    `object-fit` switched from `contain` to `cover`.
+
+- **`/play` rebuilt as a landscape controller** (commit `d0fdcc2`), built to
+  three mockups Nick drew, iterated round by round:
+  - **Landscape only**, sized in `dvh` so the whole board fits one screen with
+    zero scrolling — an explicit requirement. Portrait shows a rotate prompt.
+  - **Runs are bare tap targets with NO legality highlighting** — no glow, no
+    card contents in couch mode. **This is a deliberate philosophy, not a
+    half-finished feature: Nick said pre-highlighting legal plays "takes all
+    the skill away."** Do not add it back without him asking. Illegal plays
+    still toast; the server was always the real authority, so nothing in
+    `engine.js` changed for this.
+  - **King direction is now a dimmed-backdrop modal**, replacing the old docked
+    `choiceBar` — the new layout claims every region of the screen, so there is
+    no free strip left for a docked bar to occupy without covering something.
+  - **New Menu modal** (tap "Menu ☰") holds everything that is not a card play:
+    live scoreboard, the couch/remote display-mode switch, a sound on/off
+    toggle, and — for the host only — Reset Game and a link to `/admin`. Nick
+    was explicit that host controls belong here now, not in a separate corner
+    button, since "I'm likely to be the only actual host for a while."
+  - **The Brig panel fills only during YOUR OWN Jailbreak** — released Kings
+    exist solely on the turn of whoever triggered it, and that Jailbreak always
+    resolves (success or Curse) at the same discard that ends the turn, so no
+    other player's turn can ever overlap an open one. `isYourTurn && brig.active`
+    is the whole condition; no new per-player state was needed.
+  - **⚠ INCOMPLETE, flag this clearly:** the couch/remote switch is
+    **per-device only**, defaulting every device to `'couch'`
+    (`localStorage`, no server involvement). The originally discussed design
+    — *host sets the room's default, any player can override their own
+    device* — was never built. Right now every new device silently starts in
+    couch mode regardless of what the room actually needs (e.g. a solo remote
+    player would have to know to open the Menu and flip it themselves). Confirm
+    with Nick whether the hardcoded default is fine to leave as-is or whether
+    the room-level default still needs building.
+
+### Genuinely open — ask Nick, don't assume
+
+1. **The entry flow (splash → menu → create/join) — sketched in detail this
+   session, Nick said "sure, sketch it" but explicitly has NOT said "build it".
+   Zero code written.** The proposed shape, modelled on Nick's other game
+   (Make It Terrible / `github.com/NickBlackhall/studio`) but deliberately
+   trimmed:
+   - Splash (full-bleed art + one button) → Main Menu (two cards: **Play**,
+     **Settings**) → Play opens a choice of just **Create Game** / **Join
+     Game** (today's `/host` and `/join` forms, relocated behind this) →
+     existing Lobby on `/play` (already built, no new work needed there).
+   - **Deliberately NOT copying** from Make It Terrible: Browse Public Rooms
+     and Quick Join (Salty Schooner has no public-room concept — it's
+     code-shared, not matchmade) and their ready-toggle-per-player gate on
+     Start (Salty Schooner still just checks headcount).
+   - Settings screen should mostly reuse the in-game Menu's existing sound
+     toggle and `/admin` link rather than building a second settings system;
+     "How to Play" would be genuinely new content (hot-seat has a rules
+     explainer, multiplayer has none).
+   - Architecturally: **one new static page with JS-toggled sections**, same
+     pattern as `/play` and `/tv` — not a single-page-app state machine like
+     Make It Terrible's, since nothing else on this site works that way.
+   - This is also what finally lets root `/` stop serving hot-seat — don't
+     touch that redirect until this exists to replace it (per the standing
+     note further down in this file).
+2. **Nick's reef/turquoise background asset** — mentioned twice, never
+   dropped into `app/assets/`. Both `/tv` and `/play` currently fall back to
+   the old `board-bg.webp`. One-line swap once it lands; ask if it's been
+   provided yet before assuming it hasn't.
+3. **Telemetry** — Nick confirmed (2026-08-02) he wants it for real, not a
+   placeholder. Multiplayer has zero telemetry today. Still not started,
+   deliberately deferred as its own stage. Do not build ad hoc alongside
+   something else.
+4. **Three ⚑ items in `docs/RULES.md`, unratified since it was first
+   written** — Run 1's non-Ace/Queen opener, Curse penalties being able to
+   un-win a round, a second Jailbreak reachable in one turn. Nobody has asked
+   Nick to rule on these; they are not blocking anything, just sitting open.
+5. **The clinch-check is provably unsound** (`docs/RULES.md` §17 in spirit —
+   search WORKLOG for "clinch ceiling"): it assumes a max round score that
+   Curse penalties can exceed, so the game can claim someone is "mathematically
+   uncatchable" when they are not. Unfixed. Needs Nick's call on the approach,
+   not just a patch.
+6. **Three.js** — explicitly parked by Nick ("keep it in mind"), same standing
+   as the Jokers mechanic. Do not start unprompted.
+
+### Standing conventions this session established — follow them without re-deriving
+
+- **No legality hints, anywhere, ever, on either screen.** This is a
+  considered philosophy (preserves skill), not an oversight to "fix."
+- **The host is always a player. There is no seatless-host mode any more** — it
+  was built, tried end-to-end, found to strand the host with "No saved seat
+  found", and deliberately removed same-day. Don't reintroduce it.
+- **Rules changes need a test written and run against the OLD code first**, to
+  prove the test actually catches the reported problem before trusting it to
+  verify the fix. Worked cleanly twice this session (`test-draw-rule.js`,
+  `test-round-end.js`) — keep doing it.
+- **Hot-seat (`app/index.html`) stays completely frozen.** It is now three rule
+  changes behind multiplayer, deliberately (refill, draw payout, round-end).
+  Do not resync it without Nick asking.
+- **Reuse hot-seat's existing assets and CSS rather than inventing new visual
+  language** — every restyle this session (`/tv`, `/play`) pulled from
+  `app/assets/` and `app/index.html`'s existing rules rather than designing
+  from scratch. Check there first.
+- **`/admin` PIN is `allure`.** Short and memorable by Nick's explicit choice —
+  only sound because of the 5-attempt/15-minute lockout in `admin_guard`. If
+  that lockout is ever removed, the PIN must become a long random secret again.
+- **The biggest untested thing remains round-end.** Nobody has played a full
+  round to completion on any build since the round-end rule changed or the
+  controller was rebuilt. If something breaks on a real playtest, that is the
+  first place to look.
+
+---
+
+## 🔵 SUPERSEDED — host-as-a-seat + game shell (planning only, nothing built)
+**Everything in Stage 1 below is now done — see the HANDOFF section above.
+Kept for historical context only; do not treat its "genuinely open" list as
+current.**
 
 Nick hit a usage limit mid-discussion, so this is written down before context is
 lost. **No code exists for any of this yet.** Read this whole section before
