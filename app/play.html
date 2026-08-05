@@ -14,44 +14,155 @@
      handlers select on them. Restyle them; do not rename or re-nest them. */
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { padding-bottom: 30px; }
-  .bar { position:sticky; top:0; z-index:5; display:flex; justify-content:space-between; align-items:center;
-         font-family:var(--serif); font-size:1.05rem; padding:11px 14px; color:var(--gold-lt);
-         background:linear-gradient(rgba(10,20,26,.92), rgba(10,20,26,.86)), url("/assets/tex-wood.webp") center / 340px;
-         border-bottom:1px solid rgba(201,162,39,.45); }
-  .bar.myTurn { color:#2a1e05; border-bottom-color:var(--gold);
-                background:linear-gradient(#f0d089, #c9a227); text-shadow:none; }
-  section { padding: 12px 14px; }
-  h3 { margin:6px 0; font-family:var(--serif); font-size:.9rem; color:var(--gold-lt);
-       text-transform:uppercase; letter-spacing:.1em; font-weight:600; }
-  .runsGrid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-  .run { background:var(--teal); border:1px solid rgba(201,162,39,.35); border-radius:12px; padding:8px; min-height:64px; }
-  /* A run the selected card can legally go to. This is the main affordance on
-     a phone, so it stays loud. */
-  .run.legal { border-color:var(--gold); box-shadow:0 0 0 2px rgba(201,162,39,.55) inset, 0 0 16px rgba(201,162,39,.35); }
-  .cardRow { display:flex; flex-wrap:wrap; gap:6px; }
+  /* theme.css paints an opaque navy on body, and CSS draws a negative-z-index
+     pseudo-element BEFORE its parent's background — so body was covering
+     .saltyBoard::before and hiding the board art entirely. Same bug fixed on
+     /tv; it applies here too. Swap board-bg.webp for Nick's reef background
+     when that asset lands. */
+  body { margin:0; overflow:hidden; background:transparent; }
+  .saltyBoard::before {
+    background-image:
+      linear-gradient(rgba(4,16,22,.34), rgba(4,16,22,.5)),
+      url("/assets/board-bg.webp") !important;
+  }
 
-  /* 5:7 faces like the hot-seat build, sized up for thumbs. */
-  .card { width:44px; aspect-ratio:5/7; font-size:1.05rem; }
-  .handRow .card, #holdTop { width:52px; font-size:1.15rem; }
-  .asBadge { font-size:9px; }
-  .card.selected { outline:3px solid var(--gold-lt); outline-offset:1px; transform:translateY(-5px);
-                   box-shadow:0 0 14px rgba(240,208,137,.8), 0 6px 10px rgba(0,0,0,.5); }
+  /* ---- LANDSCAPE CONTROLLER -------------------------------------------------
+   * Built to Nick's mockups (2026-08-02), which draw the phone held sideways.
+   * Everything is sized in dvh so the whole board fits one screen with no
+   * scrolling — an explicit requirement: "I don't want to have to scroll to see
+   * things on that screen." Portrait gets a rotate prompt rather than a squashed
+   * fallback, because the four-run row and the hand row cannot both survive a
+   * narrow viewport at a usable size.
+   */
+  #gameUi { height:100dvh; display:flex; flex-direction:column;
+            gap:1.1dvh; padding:1.4dvh 1.6dvh; }
+
+  .topBar { flex:0 0 auto; display:flex; align-items:center; gap:1.4dvh; }
+  .turnPill { flex:1 1 auto; display:flex; align-items:center; justify-content:space-between;
+              gap:1.4dvh; padding:.9dvh 2.2dvh; border-radius:1.4dvh;
+              border:.35dvh solid var(--gold); font-family:var(--serif);
+              background:linear-gradient(rgba(24,14,6,.9), rgba(24,14,6,.82));
+              color:var(--gold-lt); font-size:3.4dvh; line-height:1;
+              box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.5); }
+  .turnPill.myTurn { background:linear-gradient(#f0d089, #c9a227); color:#2a1e05; }
+  .turnPill .roundMeta { font-size:2.2dvh; opacity:.85; white-space:nowrap; }
+  .topLogo { flex:0 0 auto; height:8dvh; width:auto;
+             filter:drop-shadow(0 .3dvh .9dvh rgba(0,0,0,.8)); }
+
+  /* Runs are TAP TARGETS ONLY — no card art, no legality highlight. Nick,
+     2026-08-02: showing which runs accept the selected card "takes all the
+     skill away if you're telegraphing to the player where to play the cards."
+     The card contents live on /tv. Illegal plays still toast. */
+  .runsRow { flex:0 0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:1.2dvh; }
+  .run { background:var(--parch); color:#4a3418; border:.35dvh solid var(--gold);
+         border-radius:1.4dvh; min-height:9dvh;
+         display:flex; align-items:center; justify-content:center;
+         font-family:var(--serif); font-size:2.6dvh; letter-spacing:.05em;
+         box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45), inset 0 0 0 .18dvh rgba(240,208,137,.3);
+         cursor:pointer; }
+  .run:active { transform:translateY(.2dvh); }
+  /* Remote mode only — the shared board is not on a TV, so the phone carries it. */
+  .run.showCards { flex-direction:column; gap:.5dvh; font-size:1.9dvh; padding:.8dvh; }
+
+  .midRow { flex:1 1 auto; display:grid; grid-template-columns:1fr auto; gap:1.4dvh; min-height:0; }
+  .leftCol { display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
+  .rightCol { flex:0 0 auto; width:26dvh; display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
+
+  /* Hand on planks inside the rope frame, per the mockup. */
+  /* Hand and Ports share the left column. The hand gets the larger share (it is
+     the primary interaction) but not all of it — an unconstrained flex:1 here
+     let the plank panel swallow the column and left the cards looking tiny
+     inside it. */
+  #handSection { flex:3 1 0; min-height:0; position:relative;
+                 border:2.4dvh solid transparent;
+                 border-image:url("/assets/frame-generic.png") 90 fill / 2.4dvh / 0 round;
+                 display:flex; align-items:center; }
+  .handInner { display:flex; align-items:center; gap:1dvh; width:100%;
+               background:linear-gradient(rgba(20,12,7,.35), rgba(20,12,7,.35)), url("/assets/tex-wood.webp") center / 300px;
+               padding:.8dvh; border-radius:.6dvh; min-height:0; }
+  .handRow { display:flex; gap:1dvh; flex:1 1 auto; justify-content:center; }
+  #drawBtn { flex:0 0 auto; font-family:var(--serif); font-size:1.9dvh; line-height:1.15;
+             padding:1.4dvh 1.2dvh; border-radius:1dvh; border:.3dvh solid var(--gold);
+             background:linear-gradient(rgba(120,92,16,.95), rgba(84,64,10,.95));
+             color:var(--gold-lt); box-shadow:none; white-space:pre-line; }
+
+  .cardRow { display:flex; gap:.6dvh; }
+  /* 5:7 faces, sized off viewport height so the row fits a landscape phone. */
+  .card { width:13dvh; aspect-ratio:5/7; font-size:4dvh; border-radius:.8dvh; }
+  .asBadge { font-size:1.2dvh; }
+  .card.selected { outline:.5dvh solid var(--gold-lt); outline-offset:.2dvh; transform:translateY(-.8dvh);
+                   box-shadow:0 0 2dvh rgba(240,208,137,.85), 0 .8dvh 1.4dvh rgba(0,0,0,.55); }
   .card.slot { cursor:pointer; }
 
-  .handRow { display:flex; flex-wrap:wrap; gap:8px; }
-  .portsGrid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
-  .port { background:var(--wood); border:1px solid rgba(201,162,39,.3); border-radius:10px; padding:8px;
-          text-align:center; min-height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center;
-          position:relative; }
-  .port .count { font-size:.72rem; color:rgba(240,208,137,.7); margin-top:4px; }
+  /* HOLD in the ornate gold frame, Brig in the iron one — both lifted from
+     hot-seat rather than restyled, same as /tv. */
+  .holdBox, .brigBox { position:relative; flex:1 1 0; min-height:0;
+                       display:flex; align-items:center; justify-content:center; }
+  .holdBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-hold.png") center / 100% 100% no-repeat; }
+  .brigBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
+  .holdInner, .brigInner { position:relative; z-index:1; width:66%; height:66%;
+                           display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5dvh; }
+  .holdInner { background:linear-gradient(rgba(38,18,52,.85), rgba(38,18,52,.85)), url("/assets/tex-purple.webp") center / 200px; }
+  .brigInner { background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 180px; }
+  .holdInner .card, .brigInner .card { width:7.4dvh; font-size:2.6dvh; }
+  .panelCount { font-size:1.5dvh; color:var(--gold-lt); }
+  .brigInner .cardRow { justify-content:center; flex-wrap:wrap; }
+
+  .portsGrid { flex:2 1 0; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); gap:1dvh;
+               background:var(--teal); border:.4dvh solid var(--gold); border-radius:1.4dvh;
+               padding:1dvh; box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45); }
+  .port { background:rgba(8,40,44,.6); border:.25dvh solid rgba(201,162,39,.45); border-radius:1dvh;
+          text-align:center; min-height:0; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; position:relative; cursor:pointer; }
+  .port .count { font-size:1.4dvh; color:rgba(240,208,137,.7); }
   /* Tap the count to fan the whole pile open — matches togglePortFan() in the
      hot-seat build. Separate hit target from the port tile itself (stopPropagation
      in the handler), since tapping the tile plays/discards. */
-  .portBadge { position:absolute; top:-6px; right:-6px; background:var(--gold); color:#25190a;
-               border-radius:999px; min-width:20px; height:20px; padding:0 5px; font-size:.72rem;
+  .portBadge { position:absolute; top:-.6dvh; right:-.6dvh; background:var(--gold); color:#25190a;
+               border-radius:999px; min-width:2.6dvh; height:2.6dvh; padding:0 .6dvh; font-size:1.5dvh;
                font-weight:800; display:flex; align-items:center; justify-content:center;
-               box-shadow:0 1px 4px rgba(0,0,0,.5); cursor:pointer; }
+               box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
+
+  /* ---- Modals ---------------------------------------------------------------
+   * The King direction question and the Menu are both dimmed-backdrop modals,
+   * matching hot-seat's showModal(). The landscape layout claims every region of
+   * the screen — runs, hand, ports, HOLD, Brig — so there is no free strip left
+   * for a docked bar to occupy without covering something. A modal floats above
+   * all of it and cannot collide.
+   */
+  .modalBackdrop { position:fixed; inset:0; z-index:40; display:none;
+                   align-items:center; justify-content:center; padding:2dvh;
+                   background:rgba(4,10,14,.78); }
+  .modalBackdrop.show { display:flex; }
+  .modalCard { width:min(88vw, 92dvh); max-height:92dvh; overflow-y:auto;
+               background:linear-gradient(rgba(28,16,8,.97), rgba(20,12,6,.98));
+               border:.4dvh solid var(--gold); border-radius:1.6dvh; padding:2.4dvh;
+               box-shadow:0 1dvh 4dvh rgba(0,0,0,.7); }
+  .modalCard h2 { margin:0 0 1.4dvh; font-family:var(--serif); font-size:3dvh; color:var(--gold-lt); }
+  .modalCard p { margin:.6dvh 0; font-size:2dvh; }
+  .modalChoices { display:flex; flex-wrap:wrap; gap:1.2dvh; margin-top:2dvh; }
+  .modalChoices button { flex:1 1 auto; font-size:2.1dvh; padding:1.6dvh 2dvh; }
+  .menuSection { margin-top:2dvh; padding-top:1.6dvh; border-top:.2dvh solid rgba(201,162,39,.3); }
+  .menuSection h3 { margin:0 0 1dvh; font-family:var(--serif); font-size:1.9dvh;
+                    color:var(--gold-lt); text-transform:uppercase; letter-spacing:.1em; }
+  .menuScore { display:flex; justify-content:space-between; font-size:2.1dvh;
+               color:var(--gold-lt); padding:.5dvh 0; }
+  .menuScore.turn { font-weight:700; }
+  .menuBtns { display:flex; flex-wrap:wrap; gap:1dvh; }
+  .menuBtns button { font-size:1.9dvh; padding:1.2dvh 1.6dvh; }
+
+  /* Landscape is the designed orientation; portrait gets an honest prompt
+     rather than a broken board. */
+  #rotatePrompt { position:fixed; inset:0; z-index:60; display:none;
+                  flex-direction:column; align-items:center; justify-content:center;
+                  gap:2vh; padding:8vw; text-align:center;
+                  background:linear-gradient(rgba(6,14,20,.96), rgba(6,14,20,.99)); }
+  #rotatePrompt img { width:min(60vw,260px); }
+  @media (orientation: portrait) {
+    #rotatePrompt.armed { display:flex; }
+  }
 
   .portFanOverlay { position:fixed; left:0; right:0; bottom:0; z-index:15; max-height:70vh;
                      background:linear-gradient(rgba(10,20,26,.97), rgba(10,20,26,.99));
@@ -97,11 +208,7 @@
   button.secondary { background:rgba(20,12,7,.92); color:var(--gold-lt); border:1px solid #c99a43;
                      box-shadow:none; }
   button.tiny { font-size:.82rem; padding:7px 12px; }
-  /* Host-only strip. Deliberately NOT sticky: the sticky turn bar already owns
-     the top of the screen, and the fixed choice bar and Port fan already own the
-     bottom — a third pinned element would collide with one of them. */
-  .hostBar { display:flex; justify-content:flex-end; padding:8px 14px;
-             border-bottom:1px solid rgba(201,162,39,.2); }
+  /* (.hostBar is gone — host controls live in the Menu modal now.) */
 </style>
 </head>
 <body class="saltyBoard">
@@ -126,47 +233,71 @@
 <div id="resultsPanel" class="center hidden"></div>
 
 <div id="gameUi" class="hidden">
-  <div class="hostBar hidden" id="hostBar">
-    <button id="resetBtn" class="secondary tiny">Reset game</button>
-  </div>
-  <div class="bar" id="turnBar">Waiting…</div>
-
-  <section>
-    <h3>Runs</h3>
-    <div class="runsGrid" id="runsGrid"></div>
-  </section>
-
-  <section id="handSection">
-    <h3>Your Hand</h3>
-    <div class="handRow" id="handRow"></div>
-    <button id="drawBtn" class="wide hidden" style="margin-top:10px;">Draw cards</button>
-  </section>
-
-  <section>
-    <h3>Ports — tap to discard, or tap a card to pick it up</h3>
-    <div class="portsGrid" id="portsGrid"></div>
-  </section>
-
-  <section class="holdRow">
-    <div>
-      <h3>Your HOLD</h3>
-      <div id="holdCard"></div>
+  <div class="topBar">
+    <div class="turnPill" id="turnBar">
+      <span id="turnText">Waiting…</span>
+      <span class="roundMeta" id="roundMeta"></span>
     </div>
-    <div class="meta" id="holdCount"></div>
-  </section>
+    <button id="menuBtn" class="secondary">Menu ☰</button>
+    <img class="topLogo" src="/assets/logo.webp" alt="Salty Schooner">
+  </div>
 
-  <section>
-    <h3>The Brig</h3>
-    <div id="brigStrip" class="cardRow"></div>
-  </section>
+  <div class="runsRow" id="runsGrid"></div>
+
+  <div class="midRow">
+    <div class="leftCol">
+      <div id="handSection">
+        <div class="handInner">
+          <button id="drawBtn" class="hidden">Draw&#10;Cards</button>
+          <div class="handRow" id="handRow"></div>
+        </div>
+      </div>
+      <div class="portsGrid" id="portsGrid"></div>
+    </div>
+
+    <div class="rightCol">
+      <div class="holdBox">
+        <div class="holdInner">
+          <div id="holdCard"></div>
+          <div class="panelCount" id="holdCount"></div>
+        </div>
+      </div>
+      <!-- The Brig frame is always drawn; it only fills with Kings during YOUR
+           Jailbreak. Released Kings exist solely on the turn of whoever set them
+           loose, and that Jailbreak always resolves at the same discard that
+           ends the turn — so no other player's turn can overlap an open one, and
+           `isYourTurn && brig.active` is the whole condition. -->
+      <div class="brigBox">
+        <div class="brigInner">
+          <div id="brigStrip" class="cardRow"></div>
+          <div class="panelCount" id="brigCount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<div id="choiceBar" class="choiceBar hidden"></div>
 <div id="toast" class="toast hidden"></div>
+
+<!-- One modal element serves both the King question and the Menu; only one can
+     ever be open, and reusing it keeps a single dismissal path. -->
+<div id="modalBackdrop" class="modalBackdrop">
+  <div class="modalCard">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div id="modalChoices" class="modalChoices"></div>
+  </div>
+</div>
+
 <div id="portFanOverlay" class="portFanOverlay hidden">
   <h3 id="portFanTitle">Port</h3>
   <div class="portFanRow" id="portFanRow"></div>
   <button class="wide" id="portFanClose">Close</button>
+</div>
+
+<div id="rotatePrompt">
+  <img src="/assets/logo.webp" alt="Salty Schooner">
+  <p style="font-size:1.2rem;color:var(--gold-lt);">Turn your phone sideways to play.</p>
 </div>
 
 <script src="/shared/api.js"></script>
@@ -384,25 +515,40 @@ async function attemptPlay(runIndex) {
   sendPlay(card.id, runIndex, undefined);
 }
 
+// ---- Modal ------------------------------------------------------------------
+// Lifted from hot-seat's showModal(): dimmed backdrop, titled card, a row of
+// choice buttons. Replaces the old docked choiceBar, which had nowhere to live
+// once the landscape layout claimed every region of the screen.
 function hideChoiceBar() {
-  document.getElementById('choiceBar').classList.add('hidden');
+  document.getElementById('modalBackdrop').classList.remove('show');
 }
 function choiceBarOpen() {
-  return !document.getElementById('choiceBar').classList.contains('hidden');
+  return document.getElementById('modalBackdrop').classList.contains('show');
 }
-function showChoiceBar(choices, onPick) {
-  // A pending King question and the Port fan are both fixed to the bottom of the
-  // screen; the fan sits above and would bury the question. Close it.
+function showModal(title, bodyHtml, choices) {
+  // The Port fan is a bottom sheet and would sit under the backdrop looking
+  // half-interactive. Close it before anything opens over the top.
   fannedPort = null; renderPortFan();
-  const bar = document.getElementById('choiceBar');
-  bar.innerHTML = '';
-  choices.forEach(c => {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml || '';
+  const box = document.getElementById('modalChoices');
+  box.innerHTML = '';
+  (choices || []).forEach(c => {
     const b = document.createElement('button');
     b.textContent = c.label;
-    b.onclick = () => { bar.classList.add('hidden'); onPick(c); };
-    bar.appendChild(b);
+    if (c.secondary) b.className = 'secondary';
+    b.onclick = () => { hideChoiceBar(); if (c.action) c.action(); };
+    box.appendChild(b);
   });
-  bar.classList.remove('hidden');
+  document.getElementById('modalBackdrop').classList.add('show');
+}
+// Kept under its old name so attemptPlay()'s King path needs no rewiring.
+function showChoiceBar(choices, onPick) {
+  showModal(
+    'Captain’s Orders',
+    '<p>Which direction does the run continue?</p>',
+    choices.map(c => ({ label: c.label, action: () => onPick(c) }))
+  );
 }
 
 async function sendPlay(cardId, runIndex, kingChoice) {
@@ -553,15 +699,24 @@ function render(view) {
     return;
   }
   showScreen('gameUi');
-  document.getElementById('hostBar').classList.toggle('hidden', !isHost());
+  document.getElementById('rotatePrompt').classList.add('armed');
 
   const bar = document.getElementById('turnBar');
-  bar.textContent = view.isYourTurn ? "YOUR TURN" : `${view.currentPlayerName}'s turn`;
+  document.getElementById('turnText').textContent =
+    view.isYourTurn ? 'Your Turn' : `${view.currentPlayerName}'s turn`;
+  document.getElementById('roundMeta').textContent = `Round ${view.round}/${view.maxRounds}`;
   bar.classList.toggle('myTurn', view.isYourTurn);
 
-  document.getElementById('runsGrid').innerHTML = view.runs.map((r,i) => {
-    const legal = selected && Engine.canPlayCardOnRun(selected.card, r);
-    return `<div class="run ${legal ? 'legal':''}" data-run="${i}"><div class="meta">Run ${i+1} ${r.direction?('('+r.direction+')'):''}</div><div class="cardRow">${r.cards.map(c=>cardHtml(c)).join('') || '<span class="meta">A or Q</span>'}</div></div>`;
+  // Runs are bare tap targets in couch mode. NO legality highlight anywhere —
+  // Nick, 2026-08-02: telegraphing where a card can go removes the skill. Remote
+  // mode adds the card contents back, because then no TV is carrying them.
+  const showCards = displayMode() === 'remote';
+  document.getElementById('runsGrid').innerHTML = view.runs.map((r, i) => {
+    const cards = showCards
+      ? `<div class="cardRow">${r.cards.slice(-3).map(c => cardHtml(c)).join('')}</div>`
+      : '';
+    return `<div class="run ${showCards ? 'showCards' : ''}" data-run="${i}">`
+      + `<div>RUN ${i + 1}</div>${cards}</div>`;
   }).join('');
   document.querySelectorAll('#runsGrid .run').forEach(el => {
     el.addEventListener('click', () => attemptPlay(Number(el.dataset.run)));
@@ -586,7 +741,7 @@ function render(view) {
   // quota and whether the hand has been cleared, and a label stating a count is
   // one more thing that can drift out of step with what the server deals. The
   // server decides the amount; the button just offers the choice.
-  drawBtn.textContent = 'Draw cards';
+  drawBtn.textContent = 'Draw\nCards';
 
   document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
     const top = pile[pile.length-1];
@@ -609,15 +764,23 @@ function render(view) {
   })();
   const holdTop = document.getElementById('holdTop');
   if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
-  document.getElementById('holdCount').textContent = view.yourGoalCount + ' cards left';
+  document.getElementById('holdCount').textContent = view.yourGoalCount + ' cards';
 
+  // Your Brig fills ONLY during your own Jailbreak. The waiting Kings are public
+  // and live on /tv; what belongs here are the Kings you personally have to play
+  // before you discard. Released Kings only exist on the turn of whoever sprang
+  // them, so this condition already scopes it to the right player.
   const b = view.brig;
-  document.getElementById('brigStrip').innerHTML = b.active
-    ? b.releasedKings.map((c,i) => {
+  const mineToPlay = b.active && view.isYourTurn;
+  document.getElementById('brigStrip').innerHTML = mineToPlay
+    ? b.releasedKings.map(c => {
         const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
-        return `<span class="card slot ${sel?'selected':''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
-      }).join('') + ' <span class="meta">JAILBREAK — play these!</span>'
-    : (b.waitingKings.map(c=>cardHtml(c)).join('') || '<span class="meta">Empty</span>');
+        return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+      }).join('')
+    : '';
+  document.getElementById('brigCount').textContent = mineToPlay
+    ? `JAILBREAK — play ${b.releasedKings.length}`
+    : '';
   document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
     el.addEventListener('click', () => {
       const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);
@@ -667,6 +830,83 @@ function showPausedPanel() {
   });
 }
 
+// ---- Display mode -----------------------------------------------------------
+// PER-DEVICE, not per-room. The server sends every device the same payload; the
+// only difference is what a device chooses to draw. "couch" hides the shared
+// board because a /tv is carrying it; "remote" draws it here instead. This is
+// what lets one room mix both — Nick's mother playing remote while everyone
+// else is on a couch. Stored locally, so each phone keeps its own answer.
+// Sound preference persists per device too. Sfx exposes setEnabled/isEnabled but
+// keeps no storage of its own, so the choice would reset on every reload without
+// this; the stored value is pushed back into Sfx at boot, below.
+const SOUND_KEY = 'salty-sound-on';
+function soundOn() { return Sfx.isEnabled(); }
+function setSoundOn(v) {
+  Sfx.setEnabled(v);
+  localStorage.setItem(SOUND_KEY, v ? '1' : '0');
+}
+if (localStorage.getItem(SOUND_KEY) === '0') Sfx.setEnabled(false);
+
+const MODE_KEY = 'salty-display-mode';
+function displayMode() { return localStorage.getItem(MODE_KEY) || 'couch'; }
+function setDisplayMode(m) {
+  localStorage.setItem(MODE_KEY, m);
+  if (lastView) render(lastView);
+}
+
+// ---- Menu -------------------------------------------------------------------
+// Everything that is not a card play lives here: scoreboard, sound, the mode
+// switch, and (for the host) the round controls that used to sit in a corner
+// strip. Nick, 2026-08-02 — "the host controls should live in the menu also,
+// along with the reset/admin page button."
+function openMenu() {
+  const v = lastView;
+  if (!v) return;
+  const mode = displayMode();
+
+  let html = '<div class="menuSection"><h3>Scores</h3>';
+  html += (v.players || []).map(p =>
+    `<div class="menuScore ${p.seat === v.currentSeat ? 'turn' : ''}">`
+    + `<span>${p.name}${p.seat === v.yourSeat ? ' (you)' : ''}</span>`
+    + `<span>${p.goalCount} in HOLD · ${p.total} pts</span></div>`).join('');
+  html += '</div>';
+
+  html += `<div class="menuSection"><h3>This device</h3>
+    <div class="menuBtns">
+      <button id="mCouch" class="${mode === 'couch' ? '' : 'secondary'}">Couch mode</button>
+      <button id="mRemote" class="${mode === 'remote' ? '' : 'secondary'}">Remote mode</button>
+      <button id="mSound" class="secondary">Sound: ${soundOn() ? 'on' : 'off'}</button>
+    </div>
+    <p class="meta" style="font-size:1.6dvh;margin-top:1dvh;">
+      Couch mode hides the shared board because the TV is showing it.
+      Remote mode draws the runs here instead.</p></div>`;
+
+  if (isHost()) {
+    const roundBtn = v.status === 'ROUND_RESULTS'
+      ? '<button id="mNextRound">Next round</button>' : '';
+    html += `<div class="menuSection"><h3>Host</h3><div class="menuBtns">
+      ${roundBtn}
+      <button id="mReset" class="secondary">Reset game</button>
+      <button id="mAdmin" class="secondary">Admin page</button>
+    </div></div>`;
+  }
+
+  showModal('Menu', html, [{ label: 'Close', secondary: true }]);
+
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('mCouch', () => { setDisplayMode('couch'); hideChoiceBar(); });
+  on('mRemote', () => { setDisplayMode('remote'); hideChoiceBar(); });
+  on('mSound', () => {
+    setSoundOn(!soundOn());
+    hideChoiceBar();
+    openMenu();   // reopen so the label reflects the new state
+  });
+  on('mNextRound', () => { hideChoiceBar(); advanceRound(false, v); });
+  on('mReset', () => { hideChoiceBar(); doReset(); });
+  on('mAdmin', () => { location.href = '/admin'; });
+}
+document.getElementById('menuBtn').addEventListener('click', openMenu);
+
 // Host-only controls. These live in static markup rather than being rebuilt per
 // render, so they are wired once here. They stay inert for non-hosts: the
 // panels holding them are hidden, and every handler re-checks isHost().
@@ -683,7 +923,7 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   }
 });
 document.getElementById('lobbyResetBtn').addEventListener('click', doReset);
-document.getElementById('resetBtn').addEventListener('click', doReset);
+// (The in-game Reset button moved into the Menu modal — see openMenu().)
 
 function startPolling() {
   poller.start();
