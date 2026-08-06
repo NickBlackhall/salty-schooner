@@ -190,12 +190,12 @@
   /* Tap the count to fan the whole pile open — matches togglePortFan() in the
      hot-seat build. Separate hit target from the port tile itself (stopPropagation
      in the handler), since tapping the tile plays/discards. */
-  /* 3x its original 2.6dvh: at 11px it was both unreadable and a poor thumb
-     target. Sat INSIDE the tile corner now rather than straddling it — at this
-     size the old negative offsets pushed it over the Ports panel's own border
-     and, on Port 4, past its right edge. */
+  /* ~2x its original 2.6dvh. Briefly tried 3x, which Nick found too loud on the
+     tile; this is that backed off 30%. Sits INSIDE the tile corner rather than
+     straddling it — above roughly 5dvh the old negative offsets pushed it over
+     the Ports panel's own border and, on Port 4, past its right edge. */
   .portBadge { position:absolute; top:.5dvh; right:.5dvh; background:var(--gold); color:#25190a;
-               border-radius:999px; min-width:7.8dvh; height:7.8dvh; padding:0 1dvh; font-size:3.4dvh;
+               border-radius:999px; min-width:5.5dvh; height:5.5dvh; padding:0 .7dvh; font-size:2.4dvh;
                font-weight:800; display:flex; align-items:center; justify-content:center;
                box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
 
