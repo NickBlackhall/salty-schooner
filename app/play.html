@@ -132,8 +132,8 @@
                background:linear-gradient(rgba(20,12,7,.35), rgba(20,12,7,.35)), url("/assets/tex-wood.webp") center / 300px;
                padding:.8dvh; border-radius:.6dvh; min-height:0; }
   .handRow { display:flex; gap:1dvh; flex:1 1 auto; justify-content:center; }
-  #drawBtn { flex:0 0 auto; font-family:var(--serif); font-size:1.9dvh; line-height:1.15;
-             padding:1.4dvh 1.2dvh; border-radius:1dvh; border:.3dvh solid var(--gold);
+  #drawBtn { flex:0 0 auto; font-family:var(--serif); font-size:2.85dvh; line-height:1.15;
+             padding:2.1dvh 1.8dvh; border-radius:1dvh; border:.3dvh solid var(--gold);
              background:linear-gradient(rgba(120,92,16,.95), rgba(84,64,10,.95));
              color:var(--gold-lt); box-shadow:none; white-space:pre-line; }
 
@@ -536,6 +536,26 @@ function renderPortFan() {
 }
 document.getElementById('portFanClose').addEventListener('click', () => { fannedPort = null; renderPortFan(); });
 
+// Selection is the ONE piece of UI state that changes nothing but a CSS class,
+// so it must never go through render(). render() rebuilds the innerHTML of the
+// runs, hand, Ports, HOLD and Brig and re-binds every listener; since the
+// restyle those elements carry layered gradients, a border-image PNG and
+// texture backgrounds, so a full rebuild on every tap is what made selecting a
+// card feel laggy on a phone — a local, zero-network action. Toggling the class
+// is equivalent because `selected` only ever feeds `.selected` in the markup
+// (grep the render() branches: hand, port top, holdTop, brig king). If that
+// stops being true, this has to grow to match, not go back to render().
+function paintSelection() {
+  document.querySelectorAll('#gameUi .card.selected').forEach(el => el.classList.remove('selected'));
+  if (!selected) return;
+  let el = null;
+  if (selected.zone === 'hand') el = document.querySelector(`#handRow .card[data-id="${selected.card.id}"]`);
+  else if (selected.zone === 'goal') el = document.getElementById('holdTop');
+  else if (selected.zone === 'discard') el = document.querySelector(`#portsGrid .port[data-port="${selected.index}"] .card`);
+  else if (selected.zone === 'jailbreak') el = document.querySelector(`#brigStrip [data-jb="${selected.card.id}"]`);
+  if (el) el.classList.add('selected');
+}
+
 function selectCard(zone, card, index) {
   if (!lastView.isYourTurn) return;
   // Picking a different card abandons any King direction question still on
@@ -544,10 +564,10 @@ function selectCard(zone, card, index) {
   // Tapping the selected card again clears it. Without this you cannot get from
   // "hand card selected" back to "nothing selected", which is the state a Port
   // pickup requires.
-  if (selected && selected.card.id === card.id) { selected = null; Sfx.play('deselect'); render(lastView); return; }
+  if (selected && selected.card.id === card.id) { selected = null; Sfx.play('deselect'); paintSelection(); return; }
   selected = { zone, card, index };
   Sfx.play('select');
-  render(lastView);
+  paintSelection();
 }
 
 // Mirrors window.portTap() in app/index.html: a Port tile is both the discard
