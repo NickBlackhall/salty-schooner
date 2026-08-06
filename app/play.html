@@ -45,7 +45,7 @@
      max-width keeps it from overflowing a narrower phone than the 926px
      landscape iPhone this was tuned against. */
   .turnPill { flex:0 1 600px; max-width:100%; display:flex; align-items:center;
-              gap:1.4dvh; padding:.7dvh .8dvh .7dvh 2.2dvh; border-radius:1.4dvh;
+              gap:1.4dvh; padding:.35dvh .5dvh .35dvh 2.2dvh; border-radius:1.4dvh;
               border:.35dvh solid var(--gold); font-family:var(--serif);
               background:linear-gradient(rgba(24,14,6,.9), rgba(24,14,6,.82));
               color:var(--gold-lt); font-size:3.4dvh; line-height:1;
@@ -54,8 +54,12 @@
   #turnText { flex:1 1 auto; }
   .turnPill .roundMeta { font-size:2.2dvh; opacity:.85; white-space:nowrap; }
   /* Stays dark in both pill states — on your turn the pill goes gold, so a gold
-     button would disappear into it. */
-  .pillMenu { flex:0 0 auto; font-size:2.6dvh; padding:1.5dvh 2dvh; border-radius:1dvh;
+     button would disappear into it.
+     Deliberately oversized for its text: it sits in the top strip where iOS
+     Safari reveals its toolbar, so a near-miss above the button un-fullscreens
+     the game. A bigger target is the cheap mitigation — the bar's own vertical
+     padding was cut to pay for most of the extra height. */
+  .pillMenu { flex:0 0 auto; font-size:2.6dvh; padding:2.6dvh 2.4dvh; border-radius:1dvh;
               background:linear-gradient(rgba(24,14,6,.95), rgba(16,9,4,.95));
               color:var(--gold-lt); border:.25dvh solid #c99a43; box-shadow:none; }
   /* margin-left:auto pins it to the far right, so the space the turn bar gave up
