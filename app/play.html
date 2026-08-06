@@ -37,23 +37,45 @@
   #gameUi { height:100dvh; display:flex; flex-direction:column;
             gap:1.1dvh; padding:1.4dvh 1.6dvh; }
 
-  .topBar { flex:0 0 auto; display:flex; align-items:center; gap:1.4dvh; }
-  .turnPill { flex:1 1 auto; display:flex; align-items:center; justify-content:space-between;
-              gap:1.4dvh; padding:.9dvh 2.2dvh; border-radius:1.4dvh;
+  .topBar { flex:0 0 auto; display:flex; align-items:center; gap:1.2dvh; }
+  /* Menu lives INSIDE the pill (see the markup): three separate items across the
+     top read as clutter on a phone. Right padding is trimmed to .8dvh so the
+     button sits just inside the pill's edge rather than floating in it. */
+  /* Fixed 600px rather than filling the row, to leave the logo real space.
+     max-width keeps it from overflowing a narrower phone than the 926px
+     landscape iPhone this was tuned against. */
+  .turnPill { flex:0 1 600px; max-width:100%; display:flex; align-items:center;
+              gap:1.4dvh; padding:.7dvh .8dvh .7dvh 2.2dvh; border-radius:1.4dvh;
               border:.35dvh solid var(--gold); font-family:var(--serif);
               background:linear-gradient(rgba(24,14,6,.9), rgba(24,14,6,.82));
               color:var(--gold-lt); font-size:3.4dvh; line-height:1;
               box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.5); }
   .turnPill.myTurn { background:linear-gradient(#f0d089, #c9a227); color:#2a1e05; }
+  #turnText { flex:1 1 auto; }
   .turnPill .roundMeta { font-size:2.2dvh; opacity:.85; white-space:nowrap; }
-  .topLogo { flex:0 0 auto; height:8dvh; width:auto;
+  /* Stays dark in both pill states — on your turn the pill goes gold, so a gold
+     button would disappear into it. */
+  .pillMenu { flex:0 0 auto; font-size:2.6dvh; padding:1.5dvh 2dvh; border-radius:1dvh;
+              background:linear-gradient(rgba(24,14,6,.95), rgba(16,9,4,.95));
+              color:var(--gold-lt); border:.25dvh solid #c99a43; box-shadow:none; }
+  /* margin-left:auto pins it to the far right, so the space the turn bar gave up
+     opens between the two rather than stranding the logo mid-row.
+     logo-wide.png is the wordmark cropped tight — 4.65:1, no transparent
+     padding, unlike logo.webp which is two-thirds empty vertically and is still
+     what /tv, /host, /join and the lobby panels use. Height is capped at the
+     turn bar's own height so the logo never drives the row taller; at this
+     aspect that still buys ~175px of width. */
+  .topLogo { flex:0 0 auto; height:8.8dvh; width:auto; margin-left:auto;
              filter:drop-shadow(0 .3dvh .9dvh rgba(0,0,0,.8)); }
 
   /* Runs are TAP TARGETS ONLY — no card art, no legality highlight. Nick,
      2026-08-02: showing which runs accept the selected card "takes all the
      skill away if you're telegraphing to the player where to play the cards."
      The card contents live on /tv. Illegal plays still toast. */
-  .runsRow { flex:0 0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:1.2dvh; }
+  /* Grows into whatever the hand/ports column leaves over (they are pinned to
+     fixed heights below, and .midRow sizes to them) — the runs were the smallest
+     tap target on the screen, so the slack goes here. */
+  .runsRow { flex:1 1 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:1.2dvh; }
   .run { background:var(--parch); color:#4a3418; border:.35dvh solid var(--gold);
          border-radius:1.4dvh; min-height:9dvh;
          display:flex; align-items:center; justify-content:center;
@@ -61,19 +83,43 @@
          box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45), inset 0 0 0 .18dvh rgba(240,208,137,.3);
          cursor:pointer; }
   .run:active { transform:translateY(.2dvh); }
+  /* Direction wash, lifted from hot-seat (app/index.html .run.direction-*). This
+     is NOT a legality hint: it reports the run's own established direction, which
+     is public state already shown on /tv, and does not change with what you have
+     selected. Direction is communicated by both hue and where the wash is
+     strongest — green pooling at the top for ascending, red at the bottom for
+     descending — so it survives colour-blindness better than hue alone. */
+  .run.direction-up { background:
+      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.09) 58%, rgba(26,145,85,0)),
+      var(--parch); }
+  .run.direction-down { background:
+      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.09) 42%, rgba(184,48,42,.34)),
+      var(--parch); }
   /* Remote mode only — the shared board is not on a TV, so the phone carries it. */
   .run.showCards { flex-direction:column; gap:.5dvh; font-size:1.9dvh; padding:.8dvh; }
 
-  .midRow { flex:1 1 auto; display:grid; grid-template-columns:1fr auto; gap:1.4dvh; min-height:0; }
-  .leftCol { display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
-  .rightCol { flex:0 0 auto; width:26dvh; display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
+  /* Sizes to the hand/ports column rather than filling the screen, so the slack
+     lands in .runsRow above instead of padding out the bottom of this row. */
+  .midRow { flex:0 1 auto; display:grid; grid-template-columns:1fr auto; gap:1.4dvh; min-height:0; }
+  /* align-items:center insets #handSection/.portsGrid below their own width
+     (see those rules) rather than letting them stretch edge-to-edge — leaves
+     the reef/board art visible on both sides and centers the ports under the
+     hand, matching Nick's ask. */
+  .leftCol { display:flex; flex-direction:column; align-items:center; gap:1.2dvh; min-height:0; }
+  /* Width is tuned to keep the Brig/HOLD frames square: each is half this
+     column's height, and the column now measures the hand + ports stack. Retune
+     this if either of those fixed heights changes. */
+  .rightCol { flex:0 0 auto; width:31.5dvh; display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
 
   /* Hand on planks inside the rope frame, per the mockup. */
   /* Hand and Ports share the left column. The hand gets the larger share (it is
      the primary interaction) but not all of it — an unconstrained flex:1 here
      let the plank panel swallow the column and left the cards looking tiny
      inside it. */
-  #handSection { flex:3 1 0; min-height:0; position:relative;
+  /* Hand and Ports are pinned to explicit heights rather than flex shares: the
+     ports were sized as a leftover and grew to fill the column. Fixed bases keep
+     the hand exactly as it is while the ports shrink independently. */
+  #handSection { flex:0 0 31.8dvh; width:88%; min-height:0; position:relative;
                  border:2.4dvh solid transparent;
                  border-image:url("/assets/frame-generic.png") 90 fill / 2.4dvh / 0 round;
                  display:flex; align-items:center; }
@@ -89,6 +135,11 @@
   .cardRow { display:flex; gap:.6dvh; }
   /* 5:7 faces, sized off viewport height so the row fits a landscape phone. */
   .card { width:13dvh; aspect-ratio:5/7; font-size:4dvh; border-radius:.8dvh; }
+  /* Hand cards are the primary touch target — bigger than the generic .card
+     default so they don't look lost in the plank panel. Scoped to #handRow so
+     port-fan and remote-mode run cards (which reuse the base .card size)
+     aren't affected. */
+  #handRow .card { width:18dvh; font-size:5.6dvh; }
   .asBadge { font-size:1.2dvh; }
   .card.selected { outline:.5dvh solid var(--gold-lt); outline-offset:.2dvh; transform:translateY(-.8dvh);
                    box-shadow:0 0 2dvh rgba(240,208,137,.85), 0 .8dvh 1.4dvh rgba(0,0,0,.55); }
@@ -110,7 +161,7 @@
   .panelCount { font-size:1.5dvh; color:var(--gold-lt); }
   .brigInner .cardRow { justify-content:center; flex-wrap:wrap; }
 
-  .portsGrid { flex:2 1 0; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); gap:1dvh;
+  .portsGrid { flex:0 0 31.4dvh; width:88%; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); gap:1dvh;
                background:var(--teal); border:.4dvh solid var(--gold); border-radius:1.4dvh;
                padding:1dvh; box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45); }
   .port { background:rgba(8,40,44,.6); border:.25dvh solid rgba(201,162,39,.45); border-radius:1dvh;
@@ -213,12 +264,12 @@
 </head>
 <body class="saltyBoard">
 <div id="waitPanel" class="center">
-  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
+  <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
   <p>Loading your seat…</p>
 </div>
 
 <div id="lobbyPanel" class="center hidden">
-  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
+  <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
   <div class="meta">Room code</div>
   <div class="lobbyCode" id="lobbyCode"></div>
   <p class="meta" id="lobbyJoinHint"></p>
@@ -237,9 +288,9 @@
     <div class="turnPill" id="turnBar">
       <span id="turnText">Waiting…</span>
       <span class="roundMeta" id="roundMeta"></span>
+      <button id="menuBtn" class="pillMenu">Menu ☰</button>
     </div>
-    <button id="menuBtn" class="secondary">Menu ☰</button>
-    <img class="topLogo" src="/assets/logo.webp" alt="Salty Schooner">
+    <img class="topLogo" src="/assets/logo-wide.png" alt="Salty Schooner">
   </div>
 
   <div class="runsRow" id="runsGrid"></div>
@@ -296,7 +347,7 @@
 </div>
 
 <div id="rotatePrompt">
-  <img src="/assets/logo.webp" alt="Salty Schooner">
+  <img src="/assets/logo-wide.png" alt="Salty Schooner">
   <p style="font-size:1.2rem;color:var(--gold-lt);">Turn your phone sideways to play.</p>
 </div>
 
@@ -710,12 +761,14 @@ function render(view) {
   // Runs are bare tap targets in couch mode. NO legality highlight anywhere —
   // Nick, 2026-08-02: telegraphing where a card can go removes the skill. Remote
   // mode adds the card contents back, because then no TV is carrying them.
+  // The direction- class is a different thing and stays in both modes: it states
+  // the run's own direction, not whether your selection fits there.
   const showCards = displayMode() === 'remote';
   document.getElementById('runsGrid').innerHTML = view.runs.map((r, i) => {
     const cards = showCards
       ? `<div class="cardRow">${r.cards.slice(-3).map(c => cardHtml(c)).join('')}</div>`
       : '';
-    return `<div class="run ${showCards ? 'showCards' : ''}" data-run="${i}">`
+    return `<div class="run direction-${r.direction || 'unset'} ${showCards ? 'showCards' : ''}" data-run="${i}">`
       + `<div>RUN ${i + 1}</div>${cards}</div>`;
   }).join('');
   document.querySelectorAll('#runsGrid .run').forEach(el => {

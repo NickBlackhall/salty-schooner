@@ -117,6 +117,14 @@
   .run { padding:1.4vh; display:flex; flex-direction:column; min-width:0;
          border-right:.28vh solid rgba(92,68,32,.32); }
   .run:last-child { border-right:none; }
+  /* Direction wash, lifted from hot-seat (app/index.html .run.direction-*) and
+     matched on /play. No parchment layer here — .runsPanel already paints it
+     under all four columns. The dirBadge in the label stays: the wash reads
+     across the room, the badge is the unambiguous version up close. */
+  .run.direction-up { background:
+      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.09) 58%, rgba(26,145,85,0)); }
+  .run.direction-down { background:
+      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.09) 42%, rgba(184,48,42,.34)); }
   .runLbl { font-family:var(--serif); font-size:2.3vh; color:#4a3418; text-shadow:none;
             text-align:center; letter-spacing:.06em; margin-bottom:1vh;
             display:flex; align-items:center; justify-content:center; gap:.8vh; }
@@ -469,7 +477,7 @@ function renderGame(v) {
     const dir = r.direction
       ? `<span class="dirBadge ${r.direction}">${r.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
       : '';
-    return `<div class="run">
+    return `<div class="run direction-${r.direction || 'unset'}">
       <div class="runLbl">Run ${i + 1}${dir}</div>
       <div class="cardRow">${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q only</span>'}</div>
     </div>`;
