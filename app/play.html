@@ -149,6 +149,15 @@
   .card.selected { outline:.5dvh solid var(--gold-lt); outline-offset:.2dvh; transform:translateY(-.8dvh);
                    box-shadow:0 0 2dvh rgba(240,208,137,.85), 0 .8dvh 1.4dvh rgba(0,0,0,.55); }
   .card.slot { cursor:pointer; }
+  /* Optimistic feedback while a play is in flight. This is FEEDBACK ONLY — no
+     view state is faked, so the board can never disagree with the server (see
+     beginPendingPlay). The card fades where it sat and the target run takes a
+     ring, which is the honest cue in couch mode: runs deliberately carry no
+     card art there, so there is nothing for a card to fly INTO. */
+  .card.pending { opacity:.26; transform:translateY(.6dvh) scale(.94); pointer-events:none;
+                  transition:opacity .12s ease, transform .12s ease; }
+  .run.pendingTarget { box-shadow:0 0 0 .9dvh rgba(240,208,137,1), 0 0 2.4dvh rgba(240,208,137,.75);
+                       filter:brightness(1.12); }
 
   /* HOLD in the ornate gold frame, Brig in the iron one — both lifted from
      hot-seat rather than restyled, same as /tv. */
@@ -400,6 +409,66 @@ let selected = null; // {zone, card, index}
 let lastView = null;
 let fannedPort = null; // index of the Port currently spread open, or null
 
+// ---- Optimistic play feedback ----------------------------------------------
+// A play costs a ~300ms server round-trip that no amount of tuning removes (the
+// DB work measured as a rounding error; it is invocation and network), so the
+// tap has to LOOK answered before the answer arrives.
+//
+// The hard rule: this NEVER fakes state. lastView is not mutated, no card is
+// moved into a run, nothing is rendered as though the action succeeded. It only
+// fades the source card and rings the target, so the worst case on rejection is
+// a card fading back in — never a board that disagrees with the server. That is
+// the failure this project has hit twice; it is not worth re-opening for
+// perceived speed.
+//
+// Kings, Jailbreak plays, discards and draws are deliberately excluded: Kings
+// route through a modal, and the others have consequences (Brig release, payout)
+// that this feedback would misrepresent.
+let pendingPlay = null;      // { cardId, runIndex } while a PLAY_CARD is in flight
+let pendingTimer = null;
+const PENDING_TIMEOUT_MS = 8000;
+
+function beginPendingPlay(cardId, runIndex) {
+  pendingPlay = { cardId, runIndex };
+  Sfx.play('place');         // sound now, not when the server agrees
+  paintPending();
+  // Failsafe: if the request never settles — phone loses WiFi mid-tap — neither
+  // then() nor catch() runs and input would stay locked forever. This releases
+  // it and repaints the authoritative view; a late response still applies
+  // correctly afterwards because applyView is version-guarded.
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    if (!pendingPlay) return;
+    clearPendingPlay();
+    if (lastView) render(lastView);
+    showToast('Still waiting on the server — try again.');
+  }, PENDING_TIMEOUT_MS);
+}
+
+function clearPendingPlay() {
+  pendingPlay = null;
+  clearTimeout(pendingTimer);
+  pendingTimer = null;
+  document.querySelectorAll('#gameUi .card.pending').forEach(el => el.classList.remove('pending'));
+  document.querySelectorAll('#runsGrid .run.pendingTarget').forEach(el => el.classList.remove('pendingTarget'));
+}
+
+// Re-applied at the end of render() as well as on tap: the poller is still
+// running during those ~300ms, and a tick landing mid-flight rebuilds the hand
+// and would silently restore the card that was just faded out.
+function paintPending() {
+  if (!pendingPlay) return;
+  const card = document.querySelector(`#handRow .card[data-id="${pendingPlay.cardId}"]`)
+            || document.querySelector(`#portsGrid .card[data-id="${pendingPlay.cardId}"]`);
+  if (card) card.classList.add('pending');
+  const run = document.querySelector(`#runsGrid .run[data-run="${pendingPlay.runIndex}"]`);
+  if (run) run.classList.add('pendingTarget');
+}
+
+// Every gameplay entry point checks this, rather than blanket pointer-events:none
+// on the board — the Menu, the Port fan and the rotate prompt must stay live.
+function inputLocked() { return pendingPlay !== null; }
+
 // The host is a player now, so this page carries their controls too. Holding a
 // host token for THIS room is what makes them appear — /host saves it at
 // creation time. Purely a display check: every host action is re-verified
@@ -557,7 +626,7 @@ function paintSelection() {
 }
 
 function selectCard(zone, card, index) {
-  if (!lastView.isYourTurn) return;
+  if (!lastView.isYourTurn || inputLocked()) return;
   // Picking a different card abandons any King direction question still on
   // screen — that question belongs to the card you were playing a moment ago.
   hideChoiceBar();
@@ -573,7 +642,7 @@ function selectCard(zone, card, index) {
 // Mirrors window.portTap() in app/index.html: a Port tile is both the discard
 // target AND the way to pick a card back out of a Port to play it to a Run.
 function portTap(portIndex) {
-  if (!lastView.isYourTurn) return;
+  if (!lastView.isYourTurn || inputLocked()) return;
   if (selected && selected.zone === 'hand') return discardTo(portIndex);
   const pile = lastView.yourPorts[portIndex] || [];
   const top = pile[pile.length - 1];
@@ -587,7 +656,10 @@ function legalRunIndexes(card) {
 }
 
 async function attemptPlay(runIndex) {
-  if (!selected) return;
+  // Requirement 7: one action in flight at a time. Without this a double-tap
+  // sends two plays, and the second comes back as a version conflict — a
+  // confusing "someone else already acted" for a solo player.
+  if (!selected || inputLocked()) return;
   const card = selected.card;
   const run = lastView.runs[runIndex];
   if (!Engine.canPlayCardOnRun(card, run)) { Sfx.play('illegal'); showToast('Illegal play.'); return; }
@@ -606,6 +678,10 @@ async function attemptPlay(runIndex) {
     showChoiceBar(choices, (choice) => sendPlay(card.id, runIndex, { value: choice.value, dir: choice.dir }));
     return;
   }
+  // Non-King, already checked legal by the same engine the server runs: give the
+  // feedback now, then send. Kings above deliberately skip this — they go
+  // through a modal, so there is no unanswered tap to cover.
+  beginPendingPlay(card.id, runIndex);
   sendPlay(card.id, runIndex, undefined);
 }
 
@@ -646,6 +722,9 @@ function showChoiceBar(choices, onPick) {
 }
 
 async function sendPlay(cardId, runIndex, kingChoice) {
+  // Whether the tap already got its feedback. The King path does not call
+  // beginPendingPlay, so it still needs the sound on success.
+  const wasOptimistic = pendingPlay !== null;
   try {
     const res = await Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
@@ -653,10 +732,16 @@ async function sendPlay(cardId, runIndex, kingChoice) {
       expectedVersion: lastView.stateVersion
     });
     selected = null;
-    Sfx.play('place');
+    // Cleared BEFORE applyView so render()'s paintPending has nothing to
+    // re-apply — the authoritative view already has the card in the run.
+    clearPendingPlay();
+    if (!wasOptimistic) Sfx.play('place');
     applyView(res.view);
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
+    // Requirement 6: fall back to the untouched authoritative view. Nothing was
+    // faked, so this is just a repaint — the faded card comes back where it was.
+    clearPendingPlay();
     Sfx.play('illegal');
     showToast(e.message);
     selected = null;
@@ -683,6 +768,9 @@ async function discardTo(portIndex) {
 }
 
 document.getElementById('drawBtn').addEventListener('click', async () => {
+  // Draw is not itself optimistic (requirement 8), but it must not fire while a
+  // play is in flight — it would race the same expectedVersion and lose.
+  if (inputLocked()) return;
   try {
     const res = await Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
@@ -884,6 +972,10 @@ function render(view) {
     });
   });
 
+  // Last, because everything above just replaced the elements it styles. A poll
+  // landing while a play is in flight would otherwise restore the faded card and
+  // drop the target ring, undoing the feedback mid-request.
+  paintPending();
 }
 
 function applyView(view) {
