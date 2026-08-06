@@ -160,9 +160,23 @@
                     background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
   .holdInner, .brigInner { position:relative; z-index:1; width:66%; height:66%;
                            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5dvh; }
-  .holdInner { background:linear-gradient(rgba(38,18,52,.85), rgba(38,18,52,.85)), url("/assets/tex-purple.webp") center / 200px; }
+  /* 72% is measured, not guessed: frame-hold.png is 512x512 and its transparent
+     window runs x=72..440, i.e. 71.9% of the image. Going wider (80% was tried)
+     slides the purple panel UNDER the ornate border and reads as the frame
+     clipping the card. Re-measure the art before changing this. The Brig keeps
+     the shared 66%: it holds several Kings at once and needs room to wrap. */
+  .holdInner { width:72%; height:72%;
+               background:linear-gradient(rgba(38,18,52,.85), rgba(38,18,52,.85)), url("/assets/tex-purple.webp") center / 200px; }
   .brigInner { background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 180px; }
   .holdInner .card, .brigInner .card { width:7.4dvh; font-size:2.6dvh; }
+  /* HOLD shows exactly ONE card — the top of your pile — so it can be sized for
+     legibility rather than to fit a row. Scoped away from .brigInner, whose
+     cards must stay small enough that a multi-King Jailbreak still fits.
+     Sized to leave real clearance inside the 72% window above: the card plus the
+     count line has to fit its height, and a card that exactly fills it reads as
+     jammed even when nothing is actually clipped. */
+  .holdInner .card { width:12.5dvh; font-size:4.2dvh; }
+  .holdInner .panelCount { font-size:1.3dvh; }
   .panelCount { font-size:1.5dvh; color:var(--gold-lt); }
   .brigInner .cardRow { justify-content:center; flex-wrap:wrap; }
 
@@ -176,8 +190,12 @@
   /* Tap the count to fan the whole pile open — matches togglePortFan() in the
      hot-seat build. Separate hit target from the port tile itself (stopPropagation
      in the handler), since tapping the tile plays/discards. */
-  .portBadge { position:absolute; top:-.6dvh; right:-.6dvh; background:var(--gold); color:#25190a;
-               border-radius:999px; min-width:2.6dvh; height:2.6dvh; padding:0 .6dvh; font-size:1.5dvh;
+  /* 3x its original 2.6dvh: at 11px it was both unreadable and a poor thumb
+     target. Sat INSIDE the tile corner now rather than straddling it — at this
+     size the old negative offsets pushed it over the Ports panel's own border
+     and, on Port 4, past its right edge. */
+  .portBadge { position:absolute; top:.5dvh; right:.5dvh; background:var(--gold); color:#25190a;
+               border-radius:999px; min-width:7.8dvh; height:7.8dvh; padding:0 1dvh; font-size:3.4dvh;
                font-weight:800; display:flex; align-items:center; justify-content:center;
                box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
 
