@@ -11,14 +11,19 @@ exports.handler = async (event) => {
   const { roomId, actorType, token, playerId } = q;
   if (!roomId || !actorType || !token) return badRequest('Missing required query params.');
 
-  const room = await loadRoom(roomId);
+  // Issued together rather than in sequence — see the same change in
+  // submit-action.js. This is the endpoint every poll hits, so the saved
+  // round-trip is paid back on every client, every tick.
+  const [room, player] = await Promise.all([
+    loadRoom(roomId),
+    actorType === 'player' ? findPlayer(roomId, playerId) : Promise.resolve(null)
+  ]);
   if (!room) return notFound('Room not found.');
 
   let seat = null;
   if (actorType === 'host') {
     if (!verifyHost(room, token)) return unauthorized('Bad host token.');
   } else if (actorType === 'player') {
-    const player = await findPlayer(roomId, playerId);
     if (!verifyPlayer(player, token)) return unauthorized('Bad player token.');
     seat = player.seat_number;
   } else {

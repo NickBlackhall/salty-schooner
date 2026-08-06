@@ -16,7 +16,17 @@ exports.handler = async (event) => {
   const { roomId, actorType, token, playerId, action, expectedVersion } = body;
   if (!roomId || !actorType || !token || !action || !action.type) return badRequest('Missing required fields.');
 
-  const room = await loadRoom(roomId);
+  // Both reads are issued together: they hit different tables and neither uses
+  // the other's result, but running them in sequence put two full DB
+  // round-trips on the critical path of every play. The player read is started
+  // before the room is known to be valid, which costs one wasted SELECT on the
+  // error paths below and saves a round-trip on every successful action — the
+  // overwhelmingly common case. Validation order and every response are
+  // unchanged; only the waiting overlaps.
+  const [room, player] = await Promise.all([
+    loadRoom(roomId),
+    actorType === 'player' ? findPlayer(roomId, playerId) : Promise.resolve(null)
+  ]);
   if (!room) return notFound('Room not found.');
   if (room.status !== 'IN_ROUND' && room.status !== 'ROUND_RESULTS') return conflict('This room has no game in progress.');
   if (typeof expectedVersion !== 'number' || expectedVersion !== room.state_version) {
@@ -28,7 +38,6 @@ exports.handler = async (event) => {
     if (!verifyHost(room, token)) return unauthorized('Bad host token.');
     if (!HOST_ACTIONS.has(action.type)) return badRequest('Not a host action.');
   } else if (actorType === 'player') {
-    const player = await findPlayer(roomId, playerId);
     if (!verifyPlayer(player, token)) return unauthorized('Bad player token.');
     if (!PLAYER_ACTIONS.has(action.type)) return badRequest('Not a player action.');
     seat = player.seat_number;
