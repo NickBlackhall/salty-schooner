@@ -29,6 +29,14 @@ function createPoller({
   maxInterval = 8000,         // ceiling once backed off
   backoffAfter = 5,           // unchanged polls before backing off
   idleStopMs = 15 * 60 * 1000,
+  // Backstop against the failure this whole file exists to prevent: no STATE
+  // CHANGE for this long stops polling no matter what has been deferring the
+  // idle timer. idleStopMs above can be pushed back indefinitely by anything
+  // that counts as interaction, which is exactly how a /tv left on a dead lobby
+  // polled for 17 hours and burned ~61,000 invocations (half the monthly quota)
+  // — see the kick()/refresh() split below for the specific bug. This one cannot
+  // be deferred, so a screen nobody is playing on always dies eventually.
+  hardStopMs = 90 * 60 * 1000,
   onIdleStop = null,          // called when polling stops itself
   onError = null
 }) {
@@ -75,8 +83,13 @@ function createPoller({
       unchangedCount++;   // a failing endpoint should back off too, not hammer
     }
     // Abandoned: nothing has changed and nobody has touched it in a long time.
-    const idleFor = Date.now() - Math.max(lastChangeAt, lastInteractionAt);
-    if (idleStopMs && idleFor > idleStopMs) {
+    const now = Date.now();
+    const idleFor = now - Math.max(lastChangeAt, lastInteractionAt);
+    // ...or the game itself has been frozen for so long that whatever is
+    // deferring idleStopMs cannot be a person playing. Deliberately measured
+    // from lastChangeAt ONLY, so no amount of interaction can postpone it.
+    const frozenFor = now - lastChangeAt;
+    if ((idleStopMs && idleFor > idleStopMs) || (hardStopMs && frozenFor > hardStopMs)) {
       stop();
       if (onIdleStop) onIdleStop();
       return;
@@ -99,10 +112,25 @@ function createPoller({
   }
   // Force an immediate poll and return to the fast rate — call after submitting an
   // action, so the acting player never waits out a backed-off delay.
+  //
+  // ONLY for things a HUMAN did. It defers the idle stop, so calling it from
+  // machinery is how a screen becomes immortal: /tv wired its Realtime
+  // connect/disconnect handler to kick(), and a flapping socket then reset the
+  // 20-minute timer forever. Use refresh() for anything not driven by a person.
   function kick() {
     if (!running) return;
     unchangedCount = 0;
     lastInteractionAt = Date.now();
+    clearTimeout(timer);
+    tick();
+  }
+  // Same immediate poll, but does NOT count as someone being present. For
+  // programmatic nudges — a socket reconnecting, a tab becoming visible — which
+  // should refresh what is on screen without claiming anybody is still playing.
+  // No-ops when stopped, so it can never resurrect a screen that gave up.
+  function refresh() {
+    if (!running) return;
+    unchangedCount = 0;
     clearTimeout(timer);
     tick();
   }
@@ -131,5 +159,5 @@ function createPoller({
   ['pointerdown', 'keydown'].forEach(ev =>
     document.addEventListener(ev, noteInteraction, { passive: true }));
 
-  return { start, stop, kick, wake, noteInteraction, isRunning: () => running };
+  return { start, stop, kick, refresh, wake, noteInteraction, isRunning: () => running };
 }

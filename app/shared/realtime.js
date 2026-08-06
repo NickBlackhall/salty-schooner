@@ -161,11 +161,16 @@ function createDoorbell({
   // A backgrounded phone gets its socket killed by the OS with no error event —
   // the tab simply returns to a dead channel. Re-establish on the way back in,
   // and fetch immediately, because we cannot know what was missed while away.
+  //
+  // The second argument marks this as machinery rather than a real pulse: a tab
+  // merely becoming visible must not restart a poller that already gave up and
+  // showed a paused screen, or an OS churning a background tab keeps a dead game
+  // polling forever. Callers route it to refresh() instead of wake().
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || stopped) return;
       if (!live) connect();
-      try { onChange(null); } catch (e) { /* handled by caller */ }
+      try { onChange(null, { programmatic: true }); } catch (e) { /* handled by caller */ }
     });
   }
 

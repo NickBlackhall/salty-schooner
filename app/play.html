@@ -509,7 +509,12 @@ const poller = createPoller({
     return lastView.isYourTurn ? 1200 : 3500;           // your turn vs watching
   },
   maxInterval: 10000,
-  idleStopMs: 10 * 60 * 1000,
+  // 30 min with a still board and nobody touching the phone, plus a hard 90 min
+  // since the game last changed that nothing can defer. Raised from 10 min at
+  // Nick's request — a snack break should not paywall the game behind a tap —
+  // and the hard stop is what makes the longer window safe.
+  idleStopMs: 30 * 60 * 1000,
+  hardStopMs: 90 * 60 * 1000,
   onIdleStop: showPausedPanel
 });
 
@@ -523,10 +528,15 @@ const doorbell = createDoorbell({
   // find the Resume button before the game starts moving again. No DOM cleanup
   // here — render() either hides waitPanel outright or rewrites its contents,
   // so the paused card clears itself on the fetch this triggers.
-  onChange: () => poller.wake(),
+  // A real pulse means a human played, so it may restart a paused screen. The
+  // visibility nudge is machinery and routes to refresh(), which no-ops when
+  // stopped — otherwise a phone waking in a pocket revives a dead game.
+  onChange: (version, meta) => (meta && meta.programmatic) ? poller.refresh() : poller.wake(),
   // Recompute the delay immediately on a connection change, so losing the socket
-  // restores fast polling now rather than after one more 45s wait.
-  onLiveChange: () => poller.kick()
+  // restores fast polling now rather than after one more 45s wait. refresh(),
+  // not kick(): a reconnecting socket is not a person, and kick() would defer
+  // the idle stop on every flap.
+  onLiveChange: () => poller.refresh()
 });
 
 // One browser can now hold several seats (playing two sides yourself). With more

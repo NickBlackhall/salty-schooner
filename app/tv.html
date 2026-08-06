@@ -53,7 +53,11 @@
   .tvMain { flex:1 1 auto; display:flex; flex-direction:column; gap:1.4vh; min-height:0; }
   /* Players run down the RIGHT on a TV, per Nick's mockup — a row across the
      top competed with the runs for the eye. */
-  .tvSide { flex:0 0 15.5vw; display:flex; flex-direction:column; gap:1.2vh; min-height:0; }
+  /* space-evenly rather than the stretch every flex column defaults away from —
+     seats are fixed-size squares now (see .seat), so leftover height becomes
+     gap instead of being forced into the boxes. */
+  .tvSide { flex:0 0 15.5vw; display:flex; flex-direction:column; justify-content:space-evenly;
+            gap:1.2vh; min-height:0; }
   /* Chrome now lives on each element: the runs are ONE framed panel with
      internal dividers, the plaques and the Brig carry painted frames instead of
      a CSS border. A shared border rule here would double up on the art. */
@@ -86,7 +90,16 @@
   /* Player plaques: purple wood behind, frame-hold.png laid over the top —
      the same ::after technique hot-seat uses on its HOLD pile, so the two
      builds share one visual language rather than two lookalikes. */
-  .seat { position:relative; flex:1 1 0; min-height:0; text-align:center;
+  /* Was flex:1 1 0, which force-stretched every plaque to fill an equal share of
+     the column's full height. With only 2-3 players that made each box a tall
+     rectangle, and frame-hold.png (a square asset, background-size 100% 100%)
+     stretched right along with it — the ornate scrollwork visibly elongated.
+     Square and sized off the column's own WIDTH instead, so the frame art is
+     never distorted regardless of player count; .tvSide's justify-content
+     absorbs the leftover height as gap. Untested above ~4 players: at 15.5vw
+     wide seats and a 16:9 TV, 6 squares stacked exceeds the column's height and
+     nobody has sized for that case yet. */
+  .seat { position:relative; width:100%; aspect-ratio:1; flex:0 0 auto; text-align:center;
           display:flex; flex-direction:column; align-items:center; justify-content:center;
           padding:2.6vh 2.2vh;
           background:linear-gradient(rgba(38,18,52,.82), rgba(38,18,52,.82)), url("/assets/tex-purple.webp") center / 300px;
@@ -391,9 +404,19 @@ muteBtn.addEventListener('click', () => {
   muteBtn.textContent = 'Sound: ' + (Sfx.isEnabled() ? 'on' : 'off');
 });
 
+// The screen still knows its room — the code is only forgotten on a 404 — so
+// making someone retype it was pure friction, and friction here is what makes a
+// 30-minute idle stop feel like a punishment rather than a power saver. Prefill
+// it and offer one tap. The button below is the normal Show Game handler, so
+// resuming re-verifies the room exists before committing the screen to it.
 function showTvPaused() {
   show('codeEntry');
-  document.getElementById('err').textContent = 'Paused — nothing happened for a while. Enter the code to resume.';
+  const saved = localStorage.getItem(CODE_KEY) || '';
+  const input = document.getElementById('codeInput');
+  if (saved) input.value = saved;
+  document.getElementById('err').textContent = saved
+    ? `Paused — nothing happened for a while. Tap Show Game to pick room ${saved} back up.`
+    : 'Paused — nothing happened for a while. Enter the code to resume.';
 }
 
 // The TV is a display, so 2s is imperceptible. Its backoff ceiling is deliberately
@@ -407,7 +430,12 @@ const poller = createPoller({
   // the server says it happened, and the timer is only a safety net.
   intervalFor: () => (doorbell.isLive() ? 45000 : 2000),
   maxInterval: 4000,
-  idleStopMs: 20 * 60 * 1000,
+  // 30 min of a still board with nobody touching the screen, and a hard 90 min
+  // since the game last actually changed. A /tv sat on a dead lobby overnight is
+  // what burned half a month's function quota; the hard stop is what makes that
+  // impossible rather than merely unlikely.
+  idleStopMs: 30 * 60 * 1000,
+  hardStopMs: 90 * 60 * 1000,
   onIdleStop: showTvPaused
 });
 
@@ -416,8 +444,14 @@ const poller = createPoller({
 const doorbell = createDoorbell({
   roomCode: () => roomCode,
   label: 'tv',
-  onChange: () => poller.wake(),
-  onLiveChange: () => poller.kick()
+  // A real pulse means somebody genuinely played, so it may restart a stopped
+  // screen. The visibility nudge (programmatic) may not — that was half of how
+  // an abandoned /tv kept itself alive.
+  onChange: (version, meta) => (meta && meta.programmatic) ? poller.refresh() : poller.wake(),
+  // refresh(), NOT kick(). A socket connecting or dropping is machinery, and
+  // kick() defers the idle stop — so a flapping connection reset the 20-minute
+  // timer on every flap and the screen polled a dead lobby for 17 hours.
+  onLiveChange: () => poller.refresh()
 });
 
 function start(code) {
