@@ -181,10 +181,13 @@
   /* HOLD shows exactly ONE card — the top of your pile — so it can be sized for
      legibility rather than to fit a row. Scoped away from .brigInner, whose
      cards must stay small enough that a multi-King Jailbreak still fits.
-     Sized to leave real clearance inside the 72% window above: the card plus the
-     count line has to fit its height, and a card that exactly fills it reads as
-     jammed even when nothing is actually clipped. */
-  .holdInner .card { width:12.5dvh; font-size:4.2dvh; }
+     12.5dvh was tried first and was wrong in a specific way: at a 5:7 card
+     ratio that is 17.5dvh tall against a 22.68dvh panel (72% of a 31.5dvh
+     column) — 77% of the panel's HEIGHT, so it read as jammed vertically even
+     with the frame itself untouched and nothing clipping. 10dvh -> 14dvh tall
+     is 62%, real margin on every side. Re-derive the percentage if either the
+     panel's 72% or the column's 31.5dvh changes. */
+  .holdInner .card { width:10dvh; font-size:3.4dvh; }
   .holdInner .panelCount { font-size:1.3dvh; }
   .panelCount { font-size:1.5dvh; color:var(--gold-lt); }
   .brigInner .cardRow { justify-content:center; flex-wrap:wrap; }
