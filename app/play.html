@@ -38,14 +38,15 @@
             gap:1.1dvh; padding:1.4dvh 1.6dvh; }
 
   .topBar { flex:0 0 auto; display:flex; align-items:center; gap:1.2dvh; }
-  /* Menu lives INSIDE the pill (see the markup): three separate items across the
-     top read as clutter on a phone. Right padding is trimmed to .8dvh so the
-     button sits just inside the pill's edge rather than floating in it. */
-  /* Fixed 600px rather than filling the row, to leave the logo real space.
+  /* Menu lives INSIDE the bar (see the markup): three separate items across the
+     top read as clutter on a phone. Order is Menu / turn / round — the button is
+     hard against the left edge, so its padding is trimmed on that side and the
+     round text gets the roomier right inset.
+     Fixed 600px rather than filling the row, to leave the logo real space.
      max-width keeps it from overflowing a narrower phone than the 926px
      landscape iPhone this was tuned against. */
   .turnPill { flex:0 1 600px; max-width:100%; display:flex; align-items:center;
-              gap:1.4dvh; padding:.35dvh .5dvh .35dvh 2.2dvh; border-radius:1.4dvh;
+              gap:1.4dvh; padding:.35dvh 2.2dvh .35dvh .5dvh; border-radius:1.4dvh;
               border:.35dvh solid var(--gold); font-family:var(--serif);
               background:linear-gradient(rgba(24,14,6,.9), rgba(24,14,6,.82));
               color:var(--gold-lt); font-size:3.4dvh; line-height:1;
@@ -290,9 +291,9 @@
 <div id="gameUi" class="hidden">
   <div class="topBar">
     <div class="turnPill" id="turnBar">
+      <button id="menuBtn" class="pillMenu">Menu ☰</button>
       <span id="turnText">Waiting…</span>
       <span class="roundMeta" id="roundMeta"></span>
-      <button id="menuBtn" class="pillMenu">Menu ☰</button>
     </div>
     <img class="topLogo" src="/assets/logo-wide.png" alt="Salty Schooner">
   </div>
