@@ -49,15 +49,25 @@
      gives the status line the full width of the top. */
   .tvStatus { font-family:var(--serif); font-size:2.4vh; letter-spacing:.08em;
               color:var(--gold-lt); text-shadow:0 .2vh .8vh rgba(0,0,0,.9); }
-  .tvBody { flex:1 1 auto; display:flex; gap:1.4vh; min-height:0; }
-  .tvMain { flex:1 1 auto; display:flex; flex-direction:column; gap:1.4vh; min-height:0; }
-  /* Players run down the RIGHT on a TV, per Nick's mockup — a row across the
-     top competed with the runs for the eye. */
-  /* space-evenly rather than the stretch every flex column defaults away from —
-     seats are fixed-size squares now (see .seat), so leftover height becomes
-     gap instead of being forced into the boxes. */
-  .tvSide { flex:0 0 15.5vw; display:flex; flex-direction:column; justify-content:space-evenly;
-            gap:1.2vh; min-height:0; }
+  /* Command-deck composition (docs/TV_REDESIGN_SPEC.md §5): player rails down
+     BOTH edges with the four Runs and the Brig between them. Players used to run
+     down the right only, which could not fit six plaques — three per rail can.
+     The centre must NOT shrink as players join, so the rails are fixed-width and
+     the plaques adapt inside them. */
+  .tvStage { flex:1 1 auto; min-height:0; display:grid;
+             grid-template-columns:14vw minmax(0,1fr) 14vw; gap:1.2vw; }
+  .playerRail { display:flex; flex-direction:column; justify-content:space-evenly;
+                gap:1.2vh; min-height:0; min-width:0; }
+  /* Two Runs, the Brig, two Runs. auto on the middle row keeps the Brig at its
+     natural size and hands the leftover height to the Run lanes. */
+  .commandTable { min-width:0; min-height:0; display:grid;
+                  grid-template-columns:repeat(2, minmax(0,1fr));
+                  grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);
+                  grid-template-areas:"run1 run2" "brig brig" "run3 run4";
+                  gap:1.2vh 1vw; }
+  #run0 { grid-area:run1; } #run1 { grid-area:run2; }
+  #run2 { grid-area:run3; } #run3 { grid-area:run4; }
+  .brigWrap { grid-area:brig; display:flex; align-items:center; justify-content:center; }
   /* Chrome now lives on each element: the runs are ONE framed panel with
      internal dividers, the plaques and the Brig carry painted frames instead of
      a CSS border. A shared border rule here would double up on the art. */
@@ -87,97 +97,126 @@
       url("/assets/board-bg.webp") !important;
   }
 
-  /* Player plaques: purple wood behind, frame-hold.png laid over the top —
-     the same ::after technique hot-seat uses on its HOLD pile, so the two
-     builds share one visual language rather than two lookalikes. */
-  /* Was flex:1 1 0, which force-stretched every plaque to fill an equal share of
-     the column's full height. With only 2-3 players that made each box a tall
-     rectangle, and frame-hold.png (a square asset, background-size 100% 100%)
-     stretched right along with it — the ornate scrollwork visibly elongated.
-     Square and sized off the column's own WIDTH instead, so the frame art is
-     never distorted regardless of player count; .tvSide's justify-content
-     absorbs the leftover height as gap. Untested above ~4 players: at 15.5vw
-     wide seats and a 16:9 TV, 6 squares stacked exceeds the column's height and
-     nobody has sized for that case yet. */
-  .seat { position:relative; width:100%; aspect-ratio:1; flex:0 0 auto; text-align:center;
+  /* Captain plaques. The ornate frame-hold.png overlay is deliberately GONE:
+     it is a square asset drawn with background-size 100% 100%, so any plaque
+     that was not square visibly stretched its scrollwork, and forcing squareness
+     to protect it is what made six players overflow the rail. The plaque is now
+     free to size to its own content, with the player's colour carrying the
+     identity instead of gold filigree (spec §8). */
+  .seat { position:relative; width:100%; flex:0 0 auto; text-align:center;
           display:flex; flex-direction:column; align-items:center; justify-content:center;
-          padding:2.6vh 2.2vh;
-          background:linear-gradient(rgba(38,18,52,.82), rgba(38,18,52,.82)), url("/assets/tex-purple.webp") center / 300px;
-          border:none; border-radius:1.2vh; box-shadow:0 .5vh 2vh rgba(0,0,0,.55); }
-  .seat::after { content:""; position:absolute; inset:-1.2vh; pointer-events:none; z-index:2;
-                 background:url("/assets/frame-hold.png") center / 100% 100% no-repeat; }
-  .seat > * { position:relative; z-index:1; }
-  /* Whose turn it is. An outline ring was tried first and fought the ornate
-     frame — it read as a smudge behind the gold rather than an accent. Instead
-     the WAITING plaques recede (desaturated and dimmed) and the active one
-     stays full-strength, lifts slightly, and makes its own frame glow. Contrast
-     does the work, so nothing is drawn on top of the art. */
-  .seat { transition:filter .25s ease, transform .25s ease;
-          filter:saturate(.4) brightness(.55); }
-  .seat.turn { filter:none; transform:scale(1.04); z-index:1; }
-  .seat.turn::after { filter:drop-shadow(0 0 1.6vh rgba(255,214,120,.9)) brightness(1.08); }
-  .seat .nm { font-family:var(--serif); font-size:2.1vh; color:var(--gold-lt); line-height:1.1; }
-  .seat .sc { font-size:1.6vh; color:rgba(240,208,137,.8); margin-top:.4vh; }
-  .seat .card { margin:.8vh 0; }
-  /* ONE parchment panel divided into four columns, per the mockup — not four
-     separate tiles. Hot-seat's board reads as cards laid on paper; separate
-     teal tiles read as a dashboard. */
-  .runsPanel { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:repeat(4,1fr);
-               background:var(--parch); color:#3a2a16;
-               border:.45vh solid var(--gold); border-radius:1.6vh;
-               box-shadow:0 .6vh 2.4vh rgba(0,0,0,.55), inset 0 0 0 .2vh rgba(240,208,137,.25);
-               overflow:hidden; }
-  .run { padding:1.4vh; display:flex; flex-direction:column; min-width:0;
-         border-right:.28vh solid rgba(92,68,32,.32); }
-  .run:last-child { border-right:none; }
-  /* Direction wash, lifted from hot-seat (app/index.html .run.direction-*) and
-     matched on /play. No parchment layer here — .runsPanel already paints it
-     under all four columns. The dirBadge in the label stays: the wash reads
-     across the room, the badge is the unambiguous version up close. */
-  .run.direction-up { background:
-      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.09) 58%, rgba(26,145,85,0)); }
-  .run.direction-down { background:
-      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.09) 42%, rgba(184,48,42,.34)); }
-  .runLbl { font-family:var(--serif); font-size:2.3vh; color:#4a3418; text-shadow:none;
-            text-align:center; letter-spacing:.06em; margin-bottom:1vh;
-            display:flex; align-items:center; justify-content:center; gap:.8vh; }
-  /* Direction as a badge rather than "(up)" in the label, per the mockup. */
-  .dirBadge { font-family:var(--sans); font-size:1.5vh; font-weight:800; letter-spacing:.04em;
-              padding:.3vh .8vh; border-radius:.6vh; border:.15vh solid rgba(92,68,32,.5);
-              background:rgba(255,255,255,.55); }
-  .dirBadge.up { color:#1d6b33; }
-  .dirBadge.down { color:#a4341c; }
-  /* On parchment the "A or Q" hint needs dark ink too, or it vanishes. */
-  .run .meta { color:rgba(58,42,22,.6); font-size:1.7vh; }
+          gap:.5vh; padding:1.4vh 1vh; border-radius:1.2vh; overflow:hidden;
+          background:linear-gradient(rgba(38,18,52,.86), rgba(38,18,52,.9)),
+                     url("/assets/tex-purple.webp") center / 300px;
+          box-shadow:inset 0 0 0 .28vh color-mix(in srgb, var(--player-color) 65%, #fff 15%),
+                     0 .5vh 2vh rgba(0,0,0,.55);
+          transition:filter .25s ease, transform .25s ease, box-shadow .25s ease; }
+  /* Waiting plaques recede but stay READABLE — the old saturate(.4)/brightness(.55)
+     treatment was severe enough that opponents' Hold cards were hard to read from
+     a sofa, which is most of what the TV is for (spec §6). */
+  .seat { filter:saturate(.82) brightness(.86); }
+  .seat.turn { filter:none; transform:scale(1.035); z-index:1;
+               box-shadow:inset 0 0 0 .34vh color-mix(in srgb, var(--player-color) 80%, #fff 20%),
+                          0 0 2.4vh color-mix(in srgb, var(--player-color) 80%, transparent),
+                          0 .7vh 2.2vh rgba(0,0,0,.65); }
+  /* The name sits on a colour band, as in the mockup — this is the player's
+     identity at a glance, and it is what makes the plaque readable across a room
+     before you have parsed any numbers. */
+  .seat .nm { font-family:var(--serif); font-size:2vh; line-height:1.15; letter-spacing:.04em;
+              width:100%; padding:.35vh .6vh; border-radius:.6vh; color:#1a1020;
+              background:color-mix(in srgb, var(--player-color) 78%, #fff 22%);
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .seat .stat { display:flex; justify-content:space-between; align-items:baseline; width:100%;
+                font-size:1.5vh; letter-spacing:.06em; color:rgba(240,208,137,.8); }
+  .seat .stat b { font-family:var(--serif); font-size:2vh; color:var(--gold-lt); }
+  .seat .card { margin:.2vh 0; }
+  /* Turn state must never rest on colour alone (spec §2) — this label is the
+     non-colour signal that survives colour blindness and a bad TV picture. */
+  .seat .helm { font-family:var(--serif); font-size:1.25vh; letter-spacing:.12em;
+                color:#1a1020; background:color-mix(in srgb, var(--player-color) 85%, #fff 15%);
+                border-radius:.5vh; padding:.15vh .8vh; }
+  /* FOUR independent lanes on the dark deck, replacing the single cream panel
+     that used to span the screen (spec §9). The old panel was flex:1 1 auto, so
+     it claimed all leftover height whatever it held — early in a round that was
+     three cards adrift in a huge empty field. A lane sizes to its own contents
+     and the deck shows between them. */
+  .runLane { position:relative; min-width:0; min-height:0; display:flex; flex-direction:column;
+             gap:.8vh; padding:1.2vh 1vh; border-radius:1.2vh;
+             background:linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+                        url("/assets/tex-wood.webp") center / 320px;
+             box-shadow:inset 0 0 0 .22vh rgba(240,208,137,.34), 0 .5vh 1.8vh rgba(0,0,0,.5); }
+  /* Direction wash, still lifted verbatim from hot-seat's .run.direction-*, now
+     layered over the lane's own wood rather than shared parchment. */
+  .runLane.direction-up { background:
+      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.08) 58%, rgba(26,145,85,0)),
+      linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+      url("/assets/tex-wood.webp") center / 320px; }
+  .runLane.direction-down { background:
+      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.08) 42%, rgba(184,48,42,.34)),
+      linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+      url("/assets/tex-wood.webp") center / 320px; }
+  /* Quiet when empty (spec §10) — present enough to hold its grid slot, dim
+     enough that a live lane beside it clearly reads as the active one. */
+  .runLane.empty { opacity:.62; box-shadow:inset 0 0 0 .18vh rgba(240,208,137,.2); }
+  .runHeader { display:flex; align-items:center; justify-content:center; gap:.9vh; flex:0 0 auto;
+               font-family:var(--serif); font-size:2vh; letter-spacing:.07em; color:var(--gold-lt); }
+  .dirBadge { font-family:var(--sans); font-size:1.4vh; font-weight:800; letter-spacing:.04em;
+              padding:.25vh .8vh; border-radius:.6vh; }
+  .dirBadge.up { color:#0f2e18; background:#7fd39a; }
+  .dirBadge.down { color:#2e0d0a; background:#e79180; }
+  .emptyRun { flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+              font-family:var(--serif); font-size:2vh; letter-spacing:.1em;
+              color:rgba(240,208,137,.72); }
   .cardRow { display:flex; flex-wrap:wrap; gap:.6vh; }
-  .run .cardRow { flex:1; align-content:flex-start; justify-content:center; }
+  /* Cards sit on one line and are allowed to escape the lane's padding box when
+     the top card lifts — hence overflow:visible rather than a clip. */
+  .runCards { flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+              min-width:0; overflow:visible; }
+  /* Older cards slide UNDER their neighbours so a long Run still fits, while the
+     newest four never overlap each other (spec §2). z-index rises with position
+     so the sequence reads left-to-right as a stack, newest on top. */
+  .runCard { position:relative; flex:0 0 auto; z-index:var(--card-index); }
+  /* --history-step is set per lane by runHtml(): a full A..Q Run is 12 cards and
+     the default overlap does not fit the lane at that length, so the step tightens
+     as history grows. The newest four are never affected (spec §9). */
+  .runCard.history + .runCard.history,
+  .runCard.history + .runCard.visibleTail { margin-left:calc(-1 * var(--history-step, 4.4vh)); }
+  .runCard.visibleTail + .runCard.visibleTail { margin-left:.6vh; }
+  .runCard.top { transform:translateY(-.4vh) scale(1.08);
+                 filter:drop-shadow(0 .5vh .7vh rgba(0,0,0,.55)); }
 
   /* 5:7 faces. Sized off viewport HEIGHT so a 4K panel scales up instead of
      hitting a px ceiling — these are read from a sofa, not a desk. */
   .card { width:6.2vh; aspect-ratio:5/7; font-size:2.4vh; border-radius:.6vh; }
   .asBadge { font-size:1.1vh; }
+  /* Run cards are the thing the room is actually reading, and the lanes have the
+     height to spare, so they run larger than the base card. History overlap is
+     retuned to match: -4.4vh of a 8vh card still leaves the rank corner showing. */
+  .runCard .card { width:8vh; font-size:3.1vh; }
+  .runCard .asBadge { font-size:1.35vh; }
 
   /* The Brig is now a compact SQUARE box centred under the runs, which is what
      lets frame-brig.png be used at last. It was previously a ~10:1 letterbox
      bar, and stretching a 512x512 iron frame across that would have smeared the
      skull and lettering right across the screen. */
-  /* Three columns so the Brig stays dead-centre under the runs while the logo
-     sits out on the left. A plain flex row would have shunted the Brig
-     off-centre as soon as the logo joined it. */
-  .brigWrap { flex:0 0 auto; display:grid; grid-template-columns:1fr auto 1fr;
-              align-items:center; }
-  .brigLogo { grid-column:1; justify-self:start; height:22vh; width:auto;
-              max-width:100%; object-fit:contain;
-              filter:drop-shadow(0 .6vh 1.8vh rgba(0,0,0,.75)); }
-  .brigWrap .brigBox { grid-column:2; }
-  .brigBox { position:relative; width:26vh; height:26vh; border:none; border-radius:0;
+  /* The Brig now sits BETWEEN the two pairs of Runs rather than under them, so
+     the most dangerous object on the board is also the centre of it (spec §11).
+     The wordmark that used to share this row is gone — spec §12 keeps the logo
+     off the active-game screen entirely. */
+  .brigBox { position:relative; width:27vh; height:27vh; border:none; border-radius:0;
              display:flex; align-items:center; justify-content:center; }
   .brigBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
                     background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
-  .brigInner { position:relative; z-index:1; width:70%; height:70%;
-               display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.8vh;
+  /* 76% not 70%: at three Kings the narrower window wrapped them onto a second
+     row and clipped the caption mid-word ("3 Kings in The"). The cage art has
+     enough margin to give this back. */
+  .brigInner { position:relative; z-index:1; width:76%; height:76%;
+               display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.7vh;
+               padding:0 .4vh;
                background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 220px; }
-  .brigCaption { font-family:var(--serif); font-size:1.6vh; color:var(--gold-lt); text-align:center; }
+  .brigInner .cardRow { flex-wrap:nowrap; justify-content:center; }
+  .brigCaption { font-family:var(--serif); font-size:1.5vh; line-height:1.15; color:var(--gold-lt);
+                 text-align:center; max-width:100%; }
   .brigBox.active::after { filter:drop-shadow(0 0 2vh rgba(255,140,60,.9)) brightness(1.25); }
   /* Kings only get theme.css's gold ring when they are WILD (standing in for a
      value on a run). A King sitting in the Brig has no effective value, so it
@@ -263,20 +302,30 @@
   <div class="tvHeader">
     <div class="tvStatus" id="tvStatus"></div>
   </div>
-  <div class="tvBody">
-    <div class="tvMain">
-      <div class="runsPanel" id="runsRow"></div>
-      <div class="brigWrap">
-        <img class="brigLogo" src="/assets/logo.webp" alt="Salty Schooner">
+  <!-- Rails BOTH sides, Runs and Brig between them (spec §5). brigBar, brigCards
+       and brigTitle keep their ids: the Jailbreak animation and the sound cues
+       look them up by id, so renaming them would silently kill both. -->
+  <div class="tvStage" id="tvStage">
+    <aside class="playerRail" id="seatsLeft"></aside>
+
+    <main class="commandTable">
+      <section class="runLane" id="run0"></section>
+      <section class="runLane" id="run1"></section>
+
+      <section class="brigWrap">
         <div class="brigBox" id="brigBar">
           <div class="brigInner">
             <div class="cardRow" id="brigCards"></div>
             <div class="brigCaption" id="brigTitle"></div>
           </div>
         </div>
-      </div>
-    </div>
-    <div class="tvSide" id="seats"></div>
+      </section>
+
+      <section class="runLane" id="run2"></section>
+      <section class="runLane" id="run3"></section>
+    </main>
+
+    <aside class="playerRail" id="seatsRight"></aside>
   </div>
   <!-- The log is deliberately not rendered on screen (Nick, 2026-08-02): the
        board itself tells the story on a TV. view.log is still fetched and is
@@ -488,34 +537,98 @@ function renderLobby(v) {
   show('lobby');
   document.getElementById('lobbyCode').textContent = v.roomCode;
   document.getElementById('lobbyPlayers').innerHTML =
-    v.players.map(p => `<div class="chip">${p.name}</div>`).join('')
+    v.players.map(p => `<div class="chip">${escapeHtml(p.name)}</div>`).join('')
     || '<div class="chip meta">Nobody yet…</div>';
+}
+
+// Player names are typed by players and interpolated straight into innerHTML
+// below, so they get escaped. Previously they did not — a name containing markup
+// would have been parsed as HTML on every screen showing it.
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+// Palette IDs rather than raw colour strings, so nothing player-controlled ever
+// reaches CSS (spec §7). Player-chosen colours are a later pass; until the
+// server stores one, seat order picks deterministically — same player, same
+// colour, every render. When p.color arrives this function is the only thing
+// that changes.
+const PALETTE = {
+  gold:   '#f0b429', violet: '#a78bfa', teal:   '#2dd4bf', coral:  '#fb7185',
+  lime:   '#a3e635', blue:   '#60a5fa', orange: '#fb923c', pink:   '#f472b6'
+};
+const PALETTE_ORDER = ['gold', 'violet', 'teal', 'coral', 'lime', 'blue', 'orange', 'pink'];
+function safePlayerColor(player) {
+  const id = player && player.color;
+  if (id && Object.prototype.hasOwnProperty.call(PALETTE, id)) return PALETTE[id];
+  const seat = player && typeof player.seat === 'number' ? player.seat : 0;
+  return PALETTE[PALETTE_ORDER[seat % PALETTE_ORDER.length]];
+}
+
+function seatHtml(p, currentSeat) {
+  const active = p.seat === currentSeat;
+  return `
+    <article class="seat ${active ? 'turn' : ''}" style="--player-color:${safePlayerColor(p)}" data-seat="${p.seat}">
+      <div class="nm">${escapeHtml(p.name)}</div>
+      <div>${cardHtml(p.goalTop)}</div>
+      <div class="stat"><span>HOLD</span><b>${p.goalCount}</b></div>
+      <div class="stat"><span>SCORE</span><b>${p.total}</b></div>
+      ${active ? '<div class="helm">AT THE HELM</div>' : ''}
+    </article>`;
+}
+
+// Alternate sides by seat order so the rails stay balanced at every player
+// count: 2 -> 1/1, 3 -> 2/1, 4 -> 2/2, 5 -> 3/2, 6 -> 3/3 (spec §6).
+function renderPlayerRails(v) {
+  const left = [], right = [];
+  (v.players || []).forEach((p, i) => (i % 2 === 0 ? left : right).push(p));
+  document.getElementById('seatsLeft').innerHTML = left.map(p => seatHtml(p, v.currentSeat)).join('');
+  document.getElementById('seatsRight').innerHTML = right.map(p => seatHtml(p, v.currentSeat)).join('');
+}
+
+// Every card stays in the DOM; only spacing changes. Nothing is truncated,
+// summarised or reordered — the overlap is presentation only (spec §2).
+const RUN_VISIBLE_TAIL = 4;
+function runHtml(run, index) {
+  const cards = run.cards || [];
+  const historyCount = Math.max(0, cards.length - RUN_VISIBLE_TAIL);
+  const dir = run.direction
+    ? `<span class="dirBadge ${run.direction}">${run.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
+    : '';
+  // A Run can legally reach twelve cards (A through Q), which overflows the lane
+  // at the base overlap. Tighten the step past six historical cards instead of
+  // shrinking the newest four, which must stay full size and fully spaced.
+  const historyStep = 4.4 + Math.max(0, historyCount - 6) * 0.5;
+  const body = cards.length
+    ? `<div class="runCards" style="--history-step:${historyStep.toFixed(2)}vh">${cards.map((card, i) => {
+        const cls = [i < historyCount ? 'history' : 'visibleTail', i === cards.length - 1 ? 'top' : '']
+          .filter(Boolean).join(' ');
+        return `<span class="runCard ${cls}" style="--card-index:${i}">${cardHtml(card)}</span>`;
+      }).join('')}</div>`
+    : '<div class="emptyRun">EMPTY · A OR Q</div>';
+  return `<div class="runHeader"><span>RUN ${index + 1}</span>${dir}</div>${body}`;
+}
+
+function renderRuns(runs) {
+  (runs || []).forEach((run, i) => {
+    const lane = document.getElementById('run' + i);
+    if (!lane) return;
+    lane.className = `runLane direction-${run.direction || 'unset'}${(run.cards || []).length ? '' : ' empty'}`;
+    lane.innerHTML = runHtml(run, i);
+  });
 }
 
 function renderGame(v) {
   show('game');
-  // One status line, as in the mockup. Real player names, never seat numbers.
-  document.getElementById('tvStatus').innerHTML =
-    `Round ${v.round} of ${v.maxRounds} &nbsp;•&nbsp; Deck ${v.deckCount} &nbsp;•&nbsp; ${v.currentPlayerName}'s turn &nbsp;•&nbsp; Room ${v.roomCode}`;
+  // Round only. Deck count, room code and whose-turn text are gone from the
+  // permanent HUD (spec §12) — the active plaque already says whose turn it is,
+  // and the rest was reference data nobody reads from a sofa.
+  document.getElementById('tvStatus').textContent = `ROUND ${v.round} OF ${v.maxRounds}`;
 
-  // Every player gets a plaque and the active one is outlined, so the board
-  // shows whose turn it is as well as the header saying so (Nick, 2026-08-02).
-  document.getElementById('seats').innerHTML = v.players.map(p => `
-    <div class="seat ${p.seat === v.currentSeat ? 'turn' : ''}">
-      <div class="nm">${p.name}</div>
-      <div>${cardHtml(p.goalTop)}</div>
-      <div class="sc">${p.goalCount} cards</div>
-    </div>`).join('');
-
-  document.getElementById('runsRow').innerHTML = v.runs.map((r, i) => {
-    const dir = r.direction
-      ? `<span class="dirBadge ${r.direction}">${r.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
-      : '';
-    return `<div class="run direction-${r.direction || 'unset'}">
-      <div class="runLbl">Run ${i + 1}${dir}</div>
-      <div class="cardRow">${r.cards.map(cardHtml).join('') || '<span class="meta">A or Q only</span>'}</div>
-    </div>`;
-  }).join('');
+  renderPlayerRails(v);
+  renderRuns(v.runs);
 
   const b = v.brig;
   const kings = b.active ? b.releasedKings : b.waitingKings;
@@ -537,13 +650,13 @@ function renderResults(v) {
   const sorted = [...v.players].sort((a,b) => a.total - b.total);
   const panel = document.getElementById('results');
   if (v.status === 'GAME_RESULTS') {
-    panel.innerHTML = `<h2>🏆 ${sorted[0].name} wins!</h2>`
-      + sorted.map(p => `<div class="row">${p.name} — ${p.total}</div>`).join('')
+    panel.innerHTML = `<h2>🏆 ${escapeHtml(sorted[0].name)} wins!</h2>`
+      + sorted.map(p => `<div class="row">${escapeHtml(p.name)} — ${p.total}</div>`).join('')
       + (v.endedEarly ? '<div class="banner">Ended early — already decided.</div>' : '');
   } else {
     panel.innerHTML = `<h2>Round ${v.round} complete</h2>`
-      + v.players.map(p => `<div class="row">${p.name}: +${p.roundScore} (${p.total} total)</div>`).join('')
-      + (v.pendingClinch ? `<div class="banner">${v.pendingClinch} has clinched the game.</div>` : '')
+      + v.players.map(p => `<div class="row">${escapeHtml(p.name)}: +${p.roundScore} (${p.total} total)</div>`).join('')
+      + (v.pendingClinch ? `<div class="banner">${escapeHtml(v.pendingClinch)} has clinched the game.</div>` : '')
       + '<div class="banner meta">Waiting for the host…</div>';
   }
 }
