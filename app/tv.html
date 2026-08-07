@@ -176,11 +176,13 @@
      newest four never overlap each other (spec §2). z-index rises with position
      so the sequence reads left-to-right as a stack, newest on top. */
   .runCard { position:relative; flex:0 0 auto; z-index:var(--card-index); }
-  /* --history-step is set per lane by runHtml(): a full A..Q Run is 12 cards and
-     the default overlap does not fit the lane at that length, so the step tightens
-     as history grows. The newest four are never affected (spec §9). */
+  /* --history-step is MEASURED per lane by fitRunCards() rather than guessed from
+     a card count. A Run is not capped at twelve cards: Kings can reverse a Run's
+     direction, so it can bounce and grow without bound (Nick, 2026-08-07). Any
+     formula keyed to length eventually overflows the lane; solving for the width
+     that is actually available cannot. The newest four are never affected. */
   .runCard.history + .runCard.history,
-  .runCard.history + .runCard.visibleTail { margin-left:calc(-1 * var(--history-step, 4.4vh)); }
+  .runCard.history + .runCard.visibleTail { margin-left:calc(-1 * var(--history-step, 9.6vh)); }
   .runCard.visibleTail + .runCard.visibleTail { margin-left:.6vh; }
   .runCard.top { transform:translateY(-.4vh) scale(1.08);
                  filter:drop-shadow(0 .5vh .7vh rgba(0,0,0,.55)); }
@@ -189,11 +191,16 @@
      hitting a px ceiling — these are read from a sofa, not a desk. */
   .card { width:6.2vh; aspect-ratio:5/7; font-size:2.4vh; border-radius:.6vh; }
   .asBadge { font-size:1.1vh; }
-  /* Run cards are the thing the room is actually reading, and the lanes have the
-     height to spare, so they run larger than the base card. History overlap is
-     retuned to match: -4.4vh of a 8vh card still leaves the rank corner showing. */
-  .runCard .card { width:8vh; font-size:3.1vh; }
-  .runCard .asBadge { font-size:1.35vh; }
+  /* Run cards are what the room is actually reading, so they run much larger than
+     the base card. The budget for this comes from squeezing the history down to
+     slivers (see fitRunCards) rather than from the lane, which has no more to
+     give. */
+  /* fitRunCards() always sets --run-card-w; the 11vh fallback is the same base
+     value it starts from (RUN_CARD_VH), kept here so the lane still looks right
+     if the script has not measured yet. Font scales off the card so a shrunk
+     card stays legible. */
+  .runCard .card { width:var(--run-card-w, 11vh); font-size:calc(var(--run-card-w, 11vh) * .38); }
+  .runCard .asBadge { font-size:calc(var(--run-card-w, 11vh) * .145); }
 
   /* The Brig is now a compact SQUARE box centred under the runs, which is what
      lets frame-brig.png be used at last. It was previously a ~10:1 letterbox
@@ -597,12 +604,8 @@ function runHtml(run, index) {
   const dir = run.direction
     ? `<span class="dirBadge ${run.direction}">${run.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
     : '';
-  // A Run can legally reach twelve cards (A through Q), which overflows the lane
-  // at the base overlap. Tighten the step past six historical cards instead of
-  // shrinking the newest four, which must stay full size and fully spaced.
-  const historyStep = 4.4 + Math.max(0, historyCount - 6) * 0.5;
   const body = cards.length
-    ? `<div class="runCards" style="--history-step:${historyStep.toFixed(2)}vh">${cards.map((card, i) => {
+    ? `<div class="runCards">${cards.map((card, i) => {
         const cls = [i < historyCount ? 'history' : 'visibleTail', i === cards.length - 1 ? 'top' : '']
           .filter(Boolean).join(' ');
         return `<span class="runCard ${cls}" style="--card-index:${i}">${cardHtml(card)}</span>`;
@@ -611,14 +614,74 @@ function runHtml(run, index) {
   return `<div class="runHeader"><span>RUN ${index + 1}</span>${dir}</div>${body}`;
 }
 
+// Solve for the overlap that makes the sequence fit, instead of predicting it
+// from the card count. Runs have no maximum length — a King can reverse a Run's
+// direction, so it can bounce between ends indefinitely — and every count-based
+// formula overflows eventually. Measuring cannot.
+//
+// The newest four keep full size and full spacing at every length; all of the
+// compression is taken out of the history, down to a floor that still leaves a
+// visible sliver per card so the pile reads as depth rather than one thick card.
+const RUN_CARD_VH = 11;        // base card size; mirrored by the CSS fallback
+const MIN_SLIVER_VH = 0.55;    // thinnest a buried card may show and still read as a card
+const MIN_CARD_VH = 6.5;       // never shrink below this, however long the Run gets
+function fitRunCards(lane) {
+  const box = lane.querySelector('.runCards');
+  if (!box) return;
+  const vh = window.innerHeight / 100;
+  const baseCard = RUN_CARD_VH * vh;
+  const total = box.querySelectorAll('.runCard').length;
+  const history = box.querySelectorAll('.runCard.history').length;
+  const tailCount = total - history;
+
+  if (!history) {                       // four or fewer: full size, nothing to solve
+    box.style.setProperty('--run-card-w', baseCard.toFixed(2) + 'px');
+    box.style.removeProperty('--history-step');
+    return;
+  }
+
+  const tail = box.querySelectorAll('.runCard.visibleTail');
+  // A fixed margin, so it measures the same whatever the current step is.
+  const tailSpacing = tailCount > 1
+    ? Math.max(0, tail[1].getBoundingClientRect().left - tail[0].getBoundingClientRect().right)
+    : 0;
+  const sliver = MIN_SLIVER_VH * vh;
+  // The top card is scale(1.08), which grows it about 4% past its box on each
+  // side. Reserve that or the newest card visibly clips the lane edge.
+  const available = box.clientWidth - baseCard * 0.05;
+
+  // Tightest the row can be at full card size. If even that will not fit, the
+  // cards themselves have to come down — a Run has no maximum length, because a
+  // King can reverse its direction and send it back the other way.
+  let card = baseCard;
+  const tightest = tailCount * card + Math.max(0, tailCount - 1) * tailSpacing + history * sliver;
+  if (tightest > available) {
+    card = Math.max(MIN_CARD_VH * vh,
+      (available - history * sliver - Math.max(0, tailCount - 1) * tailSpacing) / tailCount);
+  }
+
+  // Every unit of step buys back one unit on each of the `history` seams.
+  const flat = total * card + Math.max(0, tailCount - 1) * tailSpacing;
+  const step = Math.min(card - sliver, Math.max(0, (flat - available) / history));
+  box.style.setProperty('--run-card-w', card.toFixed(2) + 'px');
+  box.style.setProperty('--history-step', step.toFixed(2) + 'px');
+}
+
 function renderRuns(runs) {
   (runs || []).forEach((run, i) => {
     const lane = document.getElementById('run' + i);
     if (!lane) return;
     lane.className = `runLane direction-${run.direction || 'unset'}${(run.cards || []).length ? '' : ' empty'}`;
     lane.innerHTML = runHtml(run, i);
+    fitRunCards(lane);
   });
 }
+
+// Lane width is viewport-derived, so a resized window (or a TV switching
+// resolution) invalidates every measured step.
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.runLane').forEach(fitRunCards);
+});
 
 function renderGame(v) {
   show('game');
