@@ -3,6 +3,7 @@ const { generateToken, clampMaxPlayers } = require('./lib/rooms');
 const { ok, badRequest, notFound, conflict, serverError } = require('./lib/http');
 const { loadPlayers } = require('./lib/access');
 const { pulseLobbyChange } = require('./lib/pulse');
+const { buildPublicSnapshot } = require('./lib/views');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return badRequest('POST only');
@@ -73,7 +74,12 @@ exports.handler = async (event) => {
       // touches rooms.state_version — the game state is untouched until Start.
       // Ring the doorbell explicitly, or four people tapping Join would appear
       // only when the safety-net poll next fired.
-      await pulseLobbyChange(room.room_id, room.state_version, room.room_code);
+      // `players` is the read from the TOP of this loop iteration, so it does
+      // not include the row just inserted — append it by hand rather than
+      // re-querying. connection_status defaults to CONNECTED on insert.
+      const freshPlayers = [...players, { seat_number: seat, player_name: playerName, connection_status: 'CONNECTED' }];
+      await pulseLobbyChange(room.room_id, room.state_version, room.room_code,
+        buildPublicSnapshot(room, {}, freshPlayers));
       return ok({ roomId: room.room_id, roomCode: room.room_code, playerId: player.player_id, seat, resumeToken, rejoined: false });
     }
     if (error.code !== '23505') return serverError(error.message);

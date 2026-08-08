@@ -1,6 +1,6 @@
 const { badRequest, notFound } = require('./lib/http');
 const { loadRoomByCode, loadPlayers } = require('./lib/access');
-const { getHostView, getLobbyView } = require('./lib/views');
+const { buildPublicSnapshot } = require('./lib/views');
 
 // Unauthenticated read of a room's PUBLIC board, addressed by room code, for a
 // TV or any other shared display. Deliberately has no token: the display is
@@ -26,9 +26,10 @@ exports.handler = async (event) => {
   const room = await loadRoomByCode(code);
   if (!room) return notFound('No room with that code.');
 
-  if (room.status === 'LOBBY') {
-    const players = await loadPlayers(room.room_id);
-    return ok(getLobbyView(room, players));
-  }
-  return ok(getHostView(room, room.current_game_state));
+  // buildPublicSnapshot() is the SAME function the pulse-embedding writers use
+  // (submit-action, start-game, reset-game, join-room, create-room) — this
+  // fetch path and the Realtime-push path must never disagree on what a given
+  // status looks like.
+  const players = room.status === 'LOBBY' ? await loadPlayers(room.room_id) : null;
+  return ok(buildPublicSnapshot(room, room.current_game_state, players));
 };

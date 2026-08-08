@@ -2,6 +2,7 @@ const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, conflict, serverError } = require('./lib/http');
 const { loadRoom, loadPlayers, verifyHost } = require('./lib/access');
 const { bumpPulse } = require('./lib/pulse');
+const { buildPublicSnapshot } = require('./lib/views');
 const engine = require('./lib/engine');
 
 exports.handler = async (event) => {
@@ -30,8 +31,11 @@ exports.handler = async (event) => {
   if (error) return serverError(error.message);
 
   // Start is the one bump every phone is waiting on — without it they sit on
-  // the lobby screen until the safety-net poll fires.
-  await bumpPulse(room.room_id, room.state_version + 1, state.status, room.room_code);
+  // the lobby screen until the safety-net poll fires. state.status is always
+  // IN_ROUND here (dealRound just ran), so this is the getHostView branch.
+  const freshRoom = { ...room, status: state.status, state_version: room.state_version + 1 };
+  await bumpPulse(room.room_id, room.state_version + 1, state.status, room.room_code,
+    buildPublicSnapshot(freshRoom, state, null));
 
   return ok({ ok: true });
 };

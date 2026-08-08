@@ -3,6 +3,7 @@ const { generateRoomCode, generateToken, clampMaxPlayers } = require('./lib/room
 const { ok, badRequest, serverError } = require('./lib/http');
 const { normalizeMatchConfig } = require('./lib/engine');
 const { bumpPulse } = require('./lib/pulse');
+const { buildPublicSnapshot } = require('./lib/views');
 
 // THE HOST IS A PLAYER (Nick, 2026-08-02). Creating a room used to mint only a
 // host token — an anonymous control panel with no seat, no hand, and no way to
@@ -66,7 +67,12 @@ exports.handler = async (event) => {
     // Seed the pulse row up front, so the host — who subscribes moments later
     // — is already watching a row that exists. Clients listen for UPDATE; with
     // no row there would be nothing to update until the first join.
-    await bumpPulse(data.room_id, 0, 'LOBBY', data.room_code);
+    // No extra read for the snapshot: the host just seated is the only player,
+    // and connection_status defaults to CONNECTED on insert (matches the
+    // players table's own default, see access.js).
+    const seedRoom = { room_code: data.room_code, status: 'LOBBY', config };
+    const seedPlayers = [{ seat_number: 0, player_name: hostName, connection_status: 'CONNECTED' }];
+    await bumpPulse(data.room_id, 0, 'LOBBY', data.room_code, buildPublicSnapshot(seedRoom, {}, seedPlayers));
     return ok({
       roomId: data.room_id,
       roomCode: data.room_code,

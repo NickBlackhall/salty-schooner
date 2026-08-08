@@ -109,7 +109,14 @@ function createDoorbell({
           payload => {
             const version = payload && payload.new ? payload.new.state_version : null;
             retries = 0;                       // a delivered message proves the socket is healthy
-            try { onChange(version); } catch (e) { console.error(`[${label}] onChange threw`, e); }
+            // The row itself rides along as meta.row. It may carry public_state —
+            // an already-public board snapshot (see lib/pulse.js) that lets /tv
+            // render straight off this push instead of following up with its own
+            // fetch. programmatic is false here on purpose: a REAL pulse means
+            // somebody actually did something, so it is allowed to restart a
+            // screen that had stopped (see wake() vs refresh() at call sites).
+            try { onChange(version, { row: payload && payload.new, programmatic: false }); }
+            catch (e) { console.error(`[${label}] onChange threw`, e); }
           }
         )
         .subscribe((status) => {

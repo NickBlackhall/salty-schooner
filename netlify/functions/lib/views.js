@@ -71,4 +71,14 @@ function getLobbyView(room, players) {
   };
 }
 
-module.exports = { getHostView, getPlayerView, getLobbyView };
+// The ALREADY-PUBLIC snapshot embedded in room_pulse (see lib/pulse.js) so /tv
+// can render straight off the Realtime push instead of making the same
+// follow-up call get-public-state.js would have made. This must stay in sync
+// with get-public-state.js's own branching — same inputs, same shape, same
+// LOBBY-vs-game split — or the pushed render and the fetched render would
+// silently disagree on what a given status looks like.
+function buildPublicSnapshot(room, state, players) {
+  return room.status === 'LOBBY' ? getLobbyView(room, players || []) : getHostView(room, state);
+}
+
+module.exports = { getHostView, getPlayerView, getLobbyView, buildPublicSnapshot };

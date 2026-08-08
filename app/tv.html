@@ -227,7 +227,21 @@
                display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.7vh;
                padding:0 .4vh;
                background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 220px; }
-  .brigInner .cardRow { flex-wrap:nowrap; justify-content:center; }
+  /* nowrap by default — fitBrigCards() shrinks the cards to fit N of them on one
+     row, which is what actually fixed the "3 Kings" clipping (that was really a
+     too-narrow panel, addressed by the 76% above). Deck size is ONE FULL DECK
+     PER PLAYER (engine.js makeDeck), so at 6 players there are 24 Kings in the
+     game — Nick saw 7 land in the Brig at once during play, and nowrap alone
+     just ran them off the edge of the frame. .wrap is the last-resort escape
+     hatch for whatever count still will not fit even at the size floor. */
+  /* min-width:0 overrides a flex item's default min-width:auto, which otherwise
+     lets an intrinsic-sized child grow PAST its container instead of respecting
+     it — with nowrap and enough Kings, the row was measuring its own ballooned
+     894px instead of the 148px .brigInner actually had, so every fit calculation
+     below thought there was room that did not exist. Same fix already applied
+     to .runCards for the same reason. */
+  .brigInner .cardRow { flex-wrap:nowrap; justify-content:center; row-gap:.4vh; min-width:0; max-width:100%; }
+  .brigInner .cardRow.wrap { flex-wrap:wrap; }
   .brigCaption { font-family:var(--serif); font-size:1.5vh; line-height:1.15; color:var(--gold-lt);
                  text-align:center; max-width:100%; }
   .brigBox.active::after { filter:drop-shadow(0 0 2vh rgba(255,140,60,.9)) brightness(1.25); }
@@ -235,8 +249,9 @@
      value on a run). A King sitting in the Brig has no effective value, so it
      rendered as a plain card. On a TV the Brig is a focal point, so give them
      the ring here — it is the same treatment, applied by position rather than
-     by role. */
-  .brigInner .card { width:4.6vh; font-size:1.9vh;
+     by role. --brig-card-w is set by fitBrigCards(); the 4.6vh here is only the
+     value before JS has measured anything, same pattern as --run-card-w. */
+  .brigInner .card { width:var(--brig-card-w, 4.6vh); font-size:calc(var(--brig-card-w, 4.6vh) * .41);
                      background:#f7ecc8; border-color:var(--gold);
                      box-shadow:inset 0 0 0 .25vh var(--gold), 0 .3vh .6vh rgba(0,0,0,.5); }
   .brigBox.active .brigInner .card { box-shadow:inset 0 0 0 .25vh var(--gold), 0 0 1.4vh rgba(255,180,80,.9); }
@@ -509,7 +524,19 @@ const doorbell = createDoorbell({
   // A real pulse means somebody genuinely played, so it may restart a stopped
   // screen. The visibility nudge (programmatic) may not — that was half of how
   // an abandoned /tv kept itself alive.
-  onChange: (version, meta) => (meta && meta.programmatic) ? poller.refresh() : poller.wake(),
+  //
+  // While RUNNING, a real pulse is rendered straight from its own payload —
+  // applyPulseRow — instead of triggering the fetch poll() would make; that
+  // fetch was a full extra Netlify Function round-trip on top of however long
+  // the action itself took, for data that was already sitting in the push.
+  // Falls back to a real fetch (wake) when the row has nothing usable, or when
+  // the screen was stopped — recovering a paused screen is not the hot path
+  // this was built to shave time off, so it keeps the simpler, safer fetch.
+  onChange: (version, meta) => {
+    if (meta && meta.programmatic) { poller.refresh(); return; }
+    if (poller.isRunning() && applyPulseRow(meta && meta.row)) return;
+    poller.wake();
+  },
   // refresh(), NOT kick(). A socket connecting or dropping is machinery, and
   // kick() defers the idle stop — so a flapping connection reset the 20-minute
   // timer on every flap and the screen polled a dead lobby for 17 hours.
@@ -682,9 +709,39 @@ function renderRuns(runs) {
   });
 }
 
-// Lane width is viewport-derived, so a resized window (or a TV switching
-// resolution) invalidates every measured step.
+// Same measure-and-solve idea as fitRunCards, simpler: the Brig has no history
+// tail to protect, just N Kings that should all read as cards on one row.
+// Deck size is one full deck PER PLAYER (engine.js makeDeck), so at 6 players
+// there are 24 Kings in the game — Nick saw 7 pile into the Brig during a real
+// game, and a fixed card size just ran them off the edge of the frame.
+const BRIG_CARD_VH = 4.6;      // mirrors the CSS fallback
+const BRIG_MIN_CARD_VH = 2.2;  // floor before falling back to wrap as a last resort
+function fitBrigCards() {
+  const row = document.querySelector('.brigInner .cardRow');
+  if (!row) return;
+  const n = row.querySelectorAll('.card').length;
+  row.classList.remove('wrap');
+  if (!n) return;
+  const vh = window.innerHeight / 100;
+  const base = BRIG_CARD_VH * vh;
+  const gap = parseFloat(getComputedStyle(row).gap) || 0;
+  const available = row.clientWidth;
+
+  let card = base;
+  if (n * base + (n - 1) * gap > available) {
+    card = Math.max(BRIG_MIN_CARD_VH * vh, (available - (n - 1) * gap) / n);
+  }
+  row.style.setProperty('--brig-card-w', card.toFixed(2) + 'px');
+
+  // Even the floor can be beaten by enough Kings — wrap rather than let them
+  // spill past the iron frame. A two-row Brig beats an overflowing one.
+  if (n * card + (n - 1) * gap > available + 0.5) row.classList.add('wrap');
+}
+
+// Both viewport-derived, so a resized window (or a TV switching resolution)
+// invalidates every measured value.
 window.addEventListener('resize', () => {
+  fitBrigCards();
   document.querySelectorAll('.runLane').forEach(fitRunCards);
 });
 
@@ -703,6 +760,7 @@ function renderGame(v) {
   const box = document.getElementById('brigBar');
   box.classList.toggle('active', b.active);
   document.getElementById('brigCards').innerHTML = kings.map(cardHtml).join('');
+  fitBrigCards();
   document.getElementById('brigTitle').textContent = b.active
     ? `JAILBREAK — ${kings.length} King${kings.length === 1 ? '' : 's'} loose!`
     : (kings.length
@@ -729,27 +787,50 @@ function renderResults(v) {
   }
 }
 
+// Tracks the numeric stateVersion of whatever is currently on screen, null
+// while in a LOBBY (which carries none). Shared by both the fetched path
+// (poll) and the pushed path (applyPulseRow) below, because now that a render
+// can be triggered by two different sources, an in-flight fetch that started
+// before a push arrived could otherwise resolve afterward and revert the
+// screen to older content — the same race /play's applyView() already guards
+// against.
+let lastAppliedVersion = null;
+
+function applyPublicView(v) {
+  if (typeof lastAppliedVersion === 'number' && typeof v.stateVersion === 'number'
+      && v.stateVersion < lastAppliedVersion) {
+    return;
+  }
+  lastAppliedVersion = typeof v.stateVersion === 'number' ? v.stateVersion : null;
+
+  muteBtn.classList.remove('hidden');
+  if (v.status === 'LOBBY') {
+    // A reset re-deals, so the old log is gone — re-baseline silently rather
+    // than replaying a dead game's events.
+    lastTopLogLine = null;
+    renderLobby(v);
+  } else if (v.status === 'ROUND_RESULTS' || v.status === 'GAME_RESULTS') {
+    renderResults(v);
+  } else {
+    renderGame(v);
+    // Render first so the Brig element exists for the burst animation.
+    reactToLog(v.log);
+  }
+}
+
+// Signature for the poller. LOBBY carries no stateVersion, so fold in the
+// player count or the lobby would look static as people join and back off.
+function pulseSignature(v) {
+  return v.status === 'LOBBY'
+    ? 'LOBBY:' + (v.players ? v.players.length : 0)
+    : v.status + ':' + v.stateVersion;
+}
+
 async function poll() {
   try {
     const v = await Api.getPublicState(roomCode);
-    muteBtn.classList.remove('hidden');
-    if (v.status === 'LOBBY') {
-      // A reset re-deals, so the old log is gone — re-baseline silently rather
-      // than replaying a dead game's events.
-      lastTopLogLine = null;
-      renderLobby(v);
-    } else if (v.status === 'ROUND_RESULTS' || v.status === 'GAME_RESULTS') {
-      renderResults(v);
-    } else {
-      renderGame(v);
-      // Render first so the Brig element exists for the burst animation.
-      reactToLog(v.log);
-    }
-    // Signature for the poller. LOBBY carries no stateVersion, so fold in the
-    // player count or the lobby would look static as people join and back off.
-    return v.status === 'LOBBY'
-      ? 'LOBBY:' + (v.players ? v.players.length : 0)
-      : v.status + ':' + v.stateVersion;
+    applyPublicView(v);
+    return pulseSignature(v);
   } catch (e) {
     // A deleted/expired room shouldn't strand the screen — fall back to entry.
     if (e.status === 404) {
@@ -759,6 +840,21 @@ async function poll() {
       document.getElementById('err').textContent = 'That room is no longer available.';
     }
   }
+}
+
+// The fast path: a Realtime push already carries the public board (see
+// lib/pulse.js), so render straight from it instead of following up with the
+// same fetch poll() would otherwise make — the whole point of embedding it.
+// poller.announce() updates the SAME bookkeeping a successful poll() would,
+// without the network round-trip. Returns false when the row has nothing
+// usable (an older row from before this shipped, or a lobby-only bump this
+// path cannot yet cover), so the caller can fall back to a real fetch.
+function applyPulseRow(row) {
+  const v = row && row.public_state;
+  if (!v) return false;
+  applyPublicView(v);
+  poller.announce(pulseSignature(v));
+  return true;
 }
 
 // ?code=ABCD for a bookmarkable TV link; otherwise resume the last code so a

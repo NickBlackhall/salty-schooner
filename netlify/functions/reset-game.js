@@ -1,7 +1,8 @@
 const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, serverError } = require('./lib/http');
-const { loadRoom, verifyHost } = require('./lib/access');
+const { loadRoom, loadPlayers, verifyHost } = require('./lib/access');
 const { bumpPulse } = require('./lib/pulse');
+const { buildPublicSnapshot } = require('./lib/views');
 
 // Wipes game progress and returns the room to LOBBY, keeping the same room
 // code and the same seated players (their tokens are untouched), so nobody
@@ -31,7 +32,12 @@ exports.handler = async (event) => {
   if (error) return serverError(error.message);
   if (!updated) return serverError('Reset did not apply.');
 
-  await bumpPulse(room.room_id, updated.state_version, 'LOBBY', room.room_code);
+  // One extra read (players were not otherwise needed here) so /tv can render
+  // the lobby roster straight off this push rather than following up itself.
+  const players = await loadPlayers(room.room_id);
+  const freshRoom = { ...room, status: 'LOBBY', state_version: updated.state_version };
+  await bumpPulse(room.room_id, updated.state_version, 'LOBBY', room.room_code,
+    buildPublicSnapshot(freshRoom, {}, players));
 
   return ok({ ok: true, stateVersion: updated.state_version });
 };

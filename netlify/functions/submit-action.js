@@ -1,7 +1,7 @@
 const { getClient } = require('./lib/supabase');
 const { ok, badRequest, notFound, unauthorized, conflict, serverError } = require('./lib/http');
 const { loadRoom, findPlayer, verifyHost, verifyPlayer } = require('./lib/access');
-const { getHostView, getPlayerView } = require('./lib/views');
+const { getPlayerView, buildPublicSnapshot } = require('./lib/views');
 const { bumpPulse } = require('./lib/pulse');
 const engine = require('./lib/engine');
 
@@ -73,13 +73,19 @@ exports.handler = async (event) => {
     .single();
   if (error || !updated) return conflict('Someone else already acted — refresh and try again.');
 
+  const freshRoom = { ...room, status: state.status, state_version: newVersion };
+  // An action never lands the room in LOBBY (that is reset-game's job), so this
+  // is always the getHostView branch of buildPublicSnapshot — but calling the
+  // shared function rather than getHostView directly means a future status this
+  // file does not expect degrades to a lobby snapshot instead of throwing.
+  const publicSnapshot = buildPublicSnapshot(freshRoom, state, null);
+
   // Ring the doorbell only after the authoritative write has landed, so nobody
   // is ever told to fetch a version that does not exist yet. Awaited rather
   // than fired-and-forgotten because the Lambda can freeze the moment the
   // response returns, which would drop an un-awaited write on the floor.
-  await bumpPulse(roomId, newVersion, state.status, room.room_code);
+  await bumpPulse(roomId, newVersion, state.status, room.room_code, publicSnapshot);
 
-  const freshRoom = { ...room, status: state.status, state_version: newVersion };
-  const view = actorType === 'host' ? getHostView(freshRoom, state) : getPlayerView(freshRoom, state, seat);
+  const view = actorType === 'host' ? publicSnapshot : getPlayerView(freshRoom, state, seat);
   return ok({ events, view });
 };

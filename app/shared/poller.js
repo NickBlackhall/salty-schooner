@@ -136,6 +136,24 @@ function createPoller({
   }
   function noteInteraction() { lastInteractionAt = Date.now(); }
 
+  // For a caller that already has fresh data from somewhere OTHER than poll()
+  // — a Realtime push carrying its own snapshot — and wants this poller's
+  // bookkeeping (signature, backoff, idle timers) kept honest without paying
+  // for a redundant fetch to get a signature it already knows. This is exactly
+  // tick()'s success bookkeeping, lifted out so it can run without calling
+  // poll(). Counts as a real update (touches lastChangeAt, same as a genuine
+  // poll would), but deliberately does NOT touch lastInteractionAt or the
+  // schedule — the next safety-net tick fires on its normal cadence, since
+  // there is nothing stale left for it to catch up on.
+  function announce(sig) {
+    if (!running) return;
+    if (sig !== lastSignature) {
+      lastSignature = sig;
+      unchangedCount = 0;
+      lastChangeAt = Date.now();
+    }
+  }
+
   // Fetch now whether or not we are currently running. A Realtime doorbell can
   // ring after the idle stop has already fired — someone wandered back to the
   // table and played — and kick() alone returns early when stopped, which would
@@ -159,5 +177,5 @@ function createPoller({
   ['pointerdown', 'keydown'].forEach(ev =>
     document.addEventListener(ev, noteInteraction, { passive: true }));
 
-  return { start, stop, kick, refresh, wake, noteInteraction, isRunning: () => running };
+  return { start, stop, kick, refresh, announce, wake, noteInteraction, isRunning: () => running };
 }
