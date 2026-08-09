@@ -468,9 +468,43 @@ function paintPending() {
   if (run) run.classList.add('pendingTarget');
 }
 
+// True while ANY action POST is outstanding, not just an optimistic run play.
+// pendingPlay alone covered only the run path, so a second tap on Draw or on a
+// Port sent a second request against the same expectedVersion: the server's
+// compare-and-swap correctly refused it (no state was ever corrupted), but the
+// player got a confusing "someone else already acted" for their own double-tap,
+// and every duplicate still cost a function invocation. Nick hit exactly this
+// on 2026-08-09 — tapping Draw three times because it felt unresponsive.
+let actionInFlight = false;
+
 // Every gameplay entry point checks this, rather than blanket pointer-events:none
 // on the board — the Menu, the Port fan and the rotate prompt must stay live.
-function inputLocked() { return pendingPlay !== null; }
+function inputLocked() { return pendingPlay !== null || actionInFlight; }
+
+// Wraps an action POST so the in-flight flag is always cleared, including on
+// the throw paths. Returns whatever the action returns.
+async function withActionLock(fn) {
+  actionInFlight = true;
+  try { return await fn(); }
+  finally { actionInFlight = false; }
+}
+
+// A tap that arrives while an action is in flight is dropped on purpose — but
+// dropping it in TOTAL SILENCE is its own bug. "Still working" and "your tap
+// did nothing" looked identical, so a normal network wait read as a dead app
+// and invited more tapping. Acknowledge every swallowed tap quietly; if they
+// keep tapping, say it in words too, since a sound is invisible with the
+// volume down (which on a couch, next to a TV playing the game's audio, is
+// the likely case).
+let busyTaps = 0;
+let busyTapTimer = null;
+function noteBusyTap() {
+  Sfx.play('ui');                     // soft cue, NOT 'illegal' — nothing is wrong
+  busyTaps++;
+  if (busyTaps >= 2) showToast('Still working on your last move…');
+  clearTimeout(busyTapTimer);
+  busyTapTimer = setTimeout(() => { busyTaps = 0; }, 1500);
+}
 
 // The host is a player now, so this page carries their controls too. Holding a
 // host token for THIS room is what makes them appear — /host saves it at
@@ -532,11 +566,18 @@ const doorbell = createDoorbell({
   // visibility nudge is machinery and routes to refresh(), which no-ops when
   // stopped — otherwise a phone waking in a pocket revives a dead game.
   onChange: (version, meta) => (meta && meta.programmatic) ? poller.refresh() : poller.wake(),
-  // Recompute the delay immediately on a connection change, so losing the socket
-  // restores fast polling now rather than after one more 45s wait. refresh(),
-  // not kick(): a reconnecting socket is not a person, and kick() would defer
-  // the idle stop on every flap.
-  onLiveChange: () => poller.refresh()
+  // Recompute the delay on a connection change, so losing the socket restores
+  // fast polling rather than waiting out one more 45s safety-net tick.
+  //
+  // reschedule(), NOT refresh() and NOT kick(). All three used to look
+  // interchangeable; they are not, and this line is where that cost real money.
+  // kick() would defer the idle stop on every flap (the 17-hour incident).
+  // refresh() fetches immediately and resets the backoff, so a socket flapping
+  // once a second produced ~2 fetches a second — ~7,200/hour, sustained, even
+  // with nobody playing (the 2026-08-09 incident). reschedule() only re-reads
+  // the clock: no fetch, no backoff reset. A connection changing state is not
+  // news about the GAME, and only news about the game may cost an invocation.
+  onLiveChange: () => poller.reschedule()
 });
 
 // One browser can now hold several seats (playing two sides yourself). With more
@@ -639,7 +680,8 @@ function paintSelection() {
 }
 
 function selectCard(zone, card, index) {
-  if (!lastView.isYourTurn || inputLocked()) return;
+  if (!lastView.isYourTurn) return;
+  if (inputLocked()) { noteBusyTap(); return; }
   // Picking a different card abandons any King direction question still on
   // screen — that question belongs to the card you were playing a moment ago.
   hideChoiceBar();
@@ -655,7 +697,8 @@ function selectCard(zone, card, index) {
 // Mirrors window.portTap() in app/index.html: a Port tile is both the discard
 // target AND the way to pick a card back out of a Port to play it to a Run.
 function portTap(portIndex) {
-  if (!lastView.isYourTurn || inputLocked()) return;
+  if (!lastView.isYourTurn) return;
+  if (inputLocked()) { noteBusyTap(); return; }
   if (selected && selected.zone === 'hand') return discardTo(portIndex);
   const pile = lastView.yourPorts[portIndex] || [];
   const top = pile[pile.length - 1];
@@ -672,7 +715,8 @@ async function attemptPlay(runIndex) {
   // Requirement 7: one action in flight at a time. Without this a double-tap
   // sends two plays, and the second comes back as a version conflict — a
   // confusing "someone else already acted" for a solo player.
-  if (!selected || inputLocked()) return;
+  if (!selected) return;
+  if (inputLocked()) { noteBusyTap(); return; }
   const card = selected.card;
   const run = lastView.runs[runIndex];
   if (!Engine.canPlayCardOnRun(card, run)) { Sfx.play('illegal'); showToast('Illegal play.'); return; }
@@ -739,11 +783,11 @@ async function sendPlay(cardId, runIndex, kingChoice) {
   // beginPendingPlay, so it still needs the sound on success.
   const wasOptimistic = pendingPlay !== null;
   try {
-    const res = await Api.submitAction({
+    const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
       action: { type: 'PLAY_CARD', cardId, runIndex, kingChoice },
       expectedVersion: lastView.stateVersion
-    });
+    }));
     selected = null;
     // Cleared BEFORE applyView so render()'s paintPending has nothing to
     // re-apply — the authoritative view already has the card in the run.
@@ -764,12 +808,15 @@ async function sendPlay(cardId, runIndex, kingChoice) {
 
 async function discardTo(portIndex) {
   if (!selected || selected.zone !== 'hand') { Sfx.play('illegal'); showToast('Select a card from your hand first.'); return; }
+  // Discard had no in-flight guard at all: a double-tap on a Port fired two
+  // POSTs, and the loser came back as "someone else already acted".
+  if (inputLocked()) { noteBusyTap(); return; }
   try {
-    const res = await Api.submitAction({
+    const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
       action: { type: 'DISCARD_TO_PORT', cardId: selected.card.id, portIndex },
       expectedVersion: lastView.stateVersion
-    });
+    }));
     selected = null;
     Sfx.play('discard');
     applyView(res.view);
@@ -782,14 +829,15 @@ async function discardTo(portIndex) {
 
 document.getElementById('drawBtn').addEventListener('click', async () => {
   // Draw is not itself optimistic (requirement 8), but it must not fire while a
-  // play is in flight — it would race the same expectedVersion and lose.
-  if (inputLocked()) return;
+  // play is in flight — it would race the same expectedVersion and lose. Since
+  // actionInFlight now covers draws too, this also stops Draw racing ITSELF.
+  if (inputLocked()) { noteBusyTap(); return; }
   try {
-    const res = await Api.submitAction({
+    const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
       action: { type: 'DRAW_HAND' },
       expectedVersion: lastView.stateVersion
-    });
+    }));
     Sfx.play('ui');
     applyView(res.view);
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay

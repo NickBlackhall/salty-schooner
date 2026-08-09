@@ -537,10 +537,14 @@ const doorbell = createDoorbell({
     if (poller.isRunning() && applyPulseRow(meta && meta.row)) return;
     poller.wake();
   },
-  // refresh(), NOT kick(). A socket connecting or dropping is machinery, and
-  // kick() defers the idle stop — so a flapping connection reset the 20-minute
-  // timer on every flap and the screen polled a dead lobby for 17 hours.
-  onLiveChange: () => poller.refresh()
+  // reschedule(), NOT refresh() and NOT kick(). A socket connecting or dropping
+  // is machinery. kick() defers the idle stop — so a flapping connection reset
+  // the 20-minute timer on every flap and the screen polled a dead lobby for 17
+  // hours. refresh() was the next attempt and leaked a different way: it fetches
+  // on every edge and resets the backoff, so a flapping socket set the poll rate
+  // outright (~7,200 fetches/hour, measured 2026-08-09). reschedule() re-reads
+  // the interval and nothing else.
+  onLiveChange: () => poller.reschedule()
 });
 
 function start(code) {

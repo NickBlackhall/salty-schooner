@@ -4,9 +4,88 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-07 (Claude), end of a long session — see the HANDOFF
-section immediately below before doing anything. The 2026-08-02 HANDOFF further
-down is now superseded; almost everything in it shipped during this session.
+Last updated: 2026-08-09 (Claude) — a cost incident found during Nick's first
+playtest of the 2026-08-07 work, and its fix. Read the INCIDENT section directly
+below, then the 2026-08-07 HANDOFF under it (still current for everything else).
+
+---
+
+## 🔴 INCIDENT + FIX (2026-08-09) — a flapping socket set the poll rate
+
+**Symptom Nick reported:** the game "feels like it's struggling" — phone taps
+inconsistently laggy, `/tv` updates sometimes fast and sometimes slow. Notably
+he said it felt *worse* than before the 2026-08-07 latency work, not better.
+
+**What it actually was, measured against production** (Supabase request logs,
+not inferred): `/play` was fetching state **~2×/second, sustained** — including
+an 11-minute stretch when nobody was playing at all, while he was typing
+messages. **~7,200 invocations/hour against a 125,000/month cap: roughly 6% of
+the month per hour of play.** The poller's backoff never engaged once.
+
+**Root cause — three defects compounding:**
+
+1. **`onLiveChange` was wired to `poller.refresh()`** on both `/play` and `/tv`.
+   `refresh()` fetches immediately *and* resets the backoff. So every Realtime
+   connect/disconnect edge forced a fetch and wiped the slowdown. A socket
+   flapping once a second therefore produced ~2 fetches a second, and the
+   carefully-tuned `intervalFor()` rates were never consulted by anything.
+2. **The reconnect backoff could never grow.** `retries` was reset to 0 on every
+   `SUBSCRIBED`, but the connection was dying immediately after subscribing — so
+   the counter reset every cycle and the client retried at the first backoff step
+   (1s) forever, with no ceiling and no give-up.
+3. **`teardownChannel()` was not awaited**, and the replacement channel reused
+   the same topic name. `removeChannel` is async, so a new subscription could
+   collide with the not-yet-departed old one under the same key — plausibly the
+   thing *causing* the drops in (2), and self-sustaining once started.
+
+**Fixes (all four files, plus a test):**
+
+- **`poller.js`** gains `reschedule()` — recompute the delay, fetch nothing,
+  touch no backoff — which is what a connection change actually needs. Both
+  screens now call it instead of `refresh()`. `schedule()` became deadline-based
+  (`lastPollAt + delay`) so repeated rescheduling is idempotent and can neither
+  pull polls forward nor starve them. All forced-fetch paths funnel through one
+  `forceTick()` with a **`minForcedGapMs` floor (900ms)** — the backstop that
+  caps cost no matter which caller misbehaves. `tick()` gained a concurrency
+  guard so a forced poll can't overlap an in-flight one.
+- **`realtime.js`**: going DOWN is now **debounced by `downGraceMs` (4s)** —
+  a blip that heals costs the screen nothing, so announcing it only causes
+  churn; coming UP is still announced immediately. `retries` is now forgiven
+  only after a connection **holds** for `stableMs` (15s) or actually delivers a
+  message. `teardownChannel()` is awaited and channel topics carry a unique
+  suffix.
+- **`play.html`**: a general `actionInFlight` flag now covers **every** action
+  POST via `withActionLock()`. Previously only optimistic run plays were
+  guarded, so a double-tap on Draw or a Port fired a second request that the
+  server's compare-and-swap correctly refused — costing an invocation and
+  showing the player "someone else already acted" for their own double-tap.
+  Swallowed taps now call `noteBusyTap()` (soft cue, plus a toast on repeat)
+  instead of being **silently** dropped, which is what made a normal network
+  wait indistinguishable from a dead app.
+
+**`scripts/test-flap-cost.js`** runs the real `poller.js` + `realtime.js` wired
+as `/play` wires them, on a stubbed clock and socket. Written and **run against
+the old code first** (repo convention): it reproduced **7,206 fetches/hour**
+against the ~7,400/hour measured in production, and showed reconnect gaps pinned
+flat at 1000ms. After the fix: **84/hour**, gaps escalating 1s→2s→4s→8s→16s→30s.
+It also asserts a *genuine* outage still falls back to fast polling — the fix
+must not buy cheapness by going deaf.
+
+**Standing rule this adds — `kick()` vs `refresh()` vs `reschedule()`:**
+`kick()` = a human acted (fetch now, defer idle-stop). `refresh()` = machinery
+wants fresh data (fetch now, do NOT defer idle-stop). `reschedule()` = the base
+rate changed (fetch NOTHING). These three look interchangeable and are not;
+picking the wrong one has now caused two separate cost incidents (the 17-hour
+`/tv` poll, and this). **Only news about the GAME may cost an invocation** — a
+connection changing state is not news about the game.
+
+**Not yet verified in real play.** Everything above is proven by test and by
+code reading, not by a playtest. The open question is *why* the socket was
+dropping in the first place — the fixes make the client's response to drops
+cheap and correct regardless, but the underlying drop cause is unconfirmed.
+The doorbell logs `[play] realtime LIVE/DOWN` to the browser console on every
+**reported** transition; with the 4s debounce in place, a healthy session should
+print almost none.
 
 ---
 

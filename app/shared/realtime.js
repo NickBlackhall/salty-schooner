@@ -37,7 +37,16 @@ function createDoorbell({
   roomCode,
   onChange,                 // (stateVersion) => void — something changed, go fetch
   onLiveChange = null,      // (isLive) => void — connection came up or went down
-  label = 'doorbell'
+  label = 'doorbell',
+  // How long the socket must stay down before anyone is TOLD it is down. A
+  // connection that blips and heals within this window has cost the screen
+  // nothing — the doorbell missed no message worth chasing — so reporting it as
+  // an outage only causes churn downstream. Reported outages drive the poll
+  // rate, so an un-debounced flap is expensive: see scripts/test-flap-cost.js.
+  downGraceMs = 4000,
+  // How long a subscription must HOLD before it counts as healthy enough to
+  // forgive the retry backoff. See the subscribe handler.
+  stableMs = 15000
 }) {
   // /host does not know its room until create-room returns, and /tv does not
   // know its code until someone types one, so the key must be read at connect
@@ -53,14 +62,40 @@ function createDoorbell({
   }
   let client = null;
   let channel = null;
-  let live = false;
+  let live = false;           // the REPORTED state — what isLive() returns
   let stopped = true;
   let retries = 0;
   let retryTimer = null;
+  let downTimer = null;       // pending "it really is down" announcement
+  let stableTimer = null;     // pending "this connection has held" forgiveness
+  let channelSeq = 0;
+  let connecting = false;
 
+  // Asymmetric on purpose. Coming UP is announced immediately — there is no
+  // cost to believing good news early. Going DOWN is announced only after the
+  // socket has STAYED down for downGraceMs, because a momentary drop that heals
+  // is indistinguishable from a healthy connection from the game's point of
+  // view, and announcing it makes every listener react. A socket dropping and
+  // reconnecting once a second announced 7,200 transitions an hour, each one
+  // forcing a state fetch.
   function setLive(next) {
-    if (next === live) return;
-    live = next;
+    if (next) {
+      clearTimeout(downTimer);
+      downTimer = null;
+      if (live) return;
+      live = true;
+      announce();
+      return;
+    }
+    if (!live || downTimer) return;   // already down, or already counting down
+    downTimer = setTimeout(() => {
+      downTimer = null;
+      live = false;
+      announce();
+    }, downGraceMs);
+  }
+
+  function announce() {
     console.info(`[${label}] realtime ${live ? 'LIVE — polling drops to safety-net rate' : 'DOWN — falling back to polling'}`);
     if (onLiveChange) onLiveChange(live);
   }
@@ -72,8 +107,8 @@ function createDoorbell({
     return typeof window !== 'undefined' && window.supabase && typeof window.supabase.createClient === 'function';
   }
 
-  function connect() {
-    if (stopped) return;
+  async function connect() {
+    if (stopped || connecting) return;   // never build two channels at once
     if (!libraryPresent()) {
       console.warn(`[${label}] supabase bundle missing — staying on polling`);
       setLive(false);
@@ -87,6 +122,7 @@ function createDoorbell({
       scheduleRetry();
       return;
     }
+    connecting = true;
     try {
       if (!client) {
         client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -95,14 +131,26 @@ function createDoorbell({
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
       }
-      teardownChannel();
+      // AWAITED, unlike before. removeChannel is asynchronous — it has to tell
+      // the server the old subscription is going away — and the previous code
+      // started building the replacement immediately, while the outgoing
+      // channel was still registered under the same topic name. supabase-js
+      // keys its channel registry by topic, so the new subscription could
+      // collide with the corpse of the old one and be torn straight back down.
+      // That failure then triggered another retry, which built another
+      // colliding channel: a loop that sustains itself once it starts, which
+      // is the best explanation for a socket that subscribes and dies once a
+      // second all session. The unique suffix below makes the collision
+      // impossible even if a teardown is slow or silently fails.
+      await teardownChannel();
+      if (stopped) return;
 
       // Targeted on purpose: one table, filtered to this room. The Make It
       // Terrible repo subscribes with event:'*' / schema:'public' and filters
       // client-side, which wakes every client for every row in the database.
       // Do not copy that here.
       channel = client
-        .channel(`pulse:${key.value}`)
+        .channel(`pulse:${key.value}:${++channelSeq}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'salty_schooner', table: 'room_pulse', filter: `${key.column}=eq.${key.value}` },
@@ -121,9 +169,19 @@ function createDoorbell({
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            retries = 0;
             setLive(true);
+            // NOT `retries = 0` — that was the bug. Subscribing is not the same
+            // as being healthy: a channel that subscribes and dies a moment
+            // later reset the counter on every cycle, so the backoff below
+            // never grew past its first step and the client reconnected once a
+            // second, indefinitely, with no ceiling and no give-up. Forgiveness
+            // is now earned by HOLDING the connection (or, above, by actually
+            // delivering a message — the only other real proof of health).
+            clearTimeout(stableTimer);
+            stableTimer = setTimeout(() => { retries = 0; }, stableMs);
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            clearTimeout(stableTimer);
+            stableTimer = null;
             setLive(false);
             scheduleRetry();
           }
@@ -132,6 +190,8 @@ function createDoorbell({
       console.error(`[${label}] connect failed`, e);
       setLive(false);
       scheduleRetry();
+    } finally {
+      connecting = false;
     }
   }
 
@@ -144,11 +204,14 @@ function createDoorbell({
     retryTimer = setTimeout(() => { retryTimer = null; connect(); }, delay);
   }
 
-  function teardownChannel() {
-    if (channel && client) {
-      try { client.removeChannel(channel); } catch (e) { /* already gone */ }
+  async function teardownChannel() {
+    clearTimeout(stableTimer);
+    stableTimer = null;
+    const dying = channel;
+    channel = null;             // cleared first: nothing may reuse it mid-teardown
+    if (dying && client) {
+      try { await client.removeChannel(dying); } catch (e) { /* already gone */ }
     }
-    channel = null;
   }
 
   function start() {
@@ -161,8 +224,12 @@ function createDoorbell({
     stopped = true;
     clearTimeout(retryTimer);
     retryTimer = null;
+    clearTimeout(downTimer);
+    downTimer = null;
     teardownChannel();
-    setLive(false);
+    // Straight to the reported state — stopping is deliberate, so there is
+    // nothing to debounce and nobody to spare a spurious announcement.
+    if (live) { live = false; announce(); }
   }
 
   // A backgrounded phone gets its socket killed by the OS with no error event —

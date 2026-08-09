@@ -37,6 +37,16 @@ function createPoller({
   // — see the kick()/refresh() split below for the specific bug. This one cannot
   // be deferred, so a screen nobody is playing on always dies eventually.
   hardStopMs = 90 * 60 * 1000,
+  // Floor on FORCED polls. Every "fetch right now" path funnels through
+  // forceTick() and cannot beat this gap, whatever is calling it and however
+  // often. This is the backstop for the 2026-08-09 blowout: a Realtime socket
+  // that connected and died once a second poked this poller on every edge, and
+  // because each poke both fetched immediately and reset the backoff, the
+  // screen ran at ~2 fetches/second — ~7,200/hour against a 125,000/month cap —
+  // for an entire session, including 11 minutes when nobody was playing at all.
+  // The rates configured above meant nothing, because nothing was reading them.
+  // Reproduced in scripts/test-flap-cost.js.
+  minForcedGapMs = 900,
   onIdleStop = null,          // called when polling stops itself
   onError = null
 }) {
@@ -46,6 +56,8 @@ function createPoller({
   let unchangedCount = 0;
   let lastChangeAt = Date.now();
   let lastInteractionAt = Date.now();
+  let lastPollAt = 0;         // when the last poll FINISHED; the schedule hangs off this
+  let polling = false;        // a poll is in flight
 
   function currentDelay() {
     const base = Math.max(250, intervalFor());
@@ -61,14 +73,27 @@ function createPoller({
     return Math.min(ceiling, base * Math.pow(2, steps));
   }
 
+  // Deadline-based, not "delay from now". Every call converges on the same
+  // absolute next-poll time (last poll + current delay), so a caller that
+  // recomputes the schedule repeatedly can neither drag polls forward nor
+  // starve them by restarting the countdown on each call. The old version
+  // restarted the countdown, which made repeated rescheduling unsafe in both
+  // directions and is why connection changes had to force a fetch instead.
   function schedule() {
     clearTimeout(timer);
     if (!running || document.hidden) return;   // hidden tabs are not scheduled at all
-    timer = setTimeout(tick, currentDelay());
+    const due = lastPollAt + currentDelay();
+    timer = setTimeout(tick, Math.max(0, due - Date.now()));
   }
 
   async function tick() {
     if (!running || document.hidden) return;
+    // A forced poll can land while one is already in flight. Overlapping
+    // fetches cost double, race each other's render, and can apply an older
+    // view last. The in-flight one schedules the next tick on its way out, so
+    // dropping this one loses nothing.
+    if (polling) return;
+    polling = true;
     try {
       const sig = await poll();
       if (sig !== lastSignature) {
@@ -81,6 +106,9 @@ function createPoller({
     } catch (e) {
       if (onError) onError(e);
       unchangedCount++;   // a failing endpoint should back off too, not hammer
+    } finally {
+      polling = false;
+      lastPollAt = Date.now();
     }
     // Abandoned: nothing has changed and nobody has touched it in a long time.
     const now = Date.now();
@@ -121,7 +149,21 @@ function createPoller({
     if (!running) return;
     unchangedCount = 0;
     lastInteractionAt = Date.now();
+    forceTick();
+  }
+
+  // The single door every "fetch now" request goes through, and the only place
+  // the floor can be enforced. Callers ask for immediacy; this decides whether
+  // they get it. Under the floor the request is not dropped, just deferred to
+  // the earliest allowed moment — so a legitimate nudge still lands promptly,
+  // while a caller firing twice a second gets one poll per gap instead of two.
+  function forceTick() {
     clearTimeout(timer);
+    const since = Date.now() - lastPollAt;
+    if (since < minForcedGapMs) {
+      timer = setTimeout(tick, minForcedGapMs - since);
+      return;
+    }
     tick();
   }
   // Same immediate poll, but does NOT count as someone being present. For
@@ -131,8 +173,23 @@ function createPoller({
   function refresh() {
     if (!running) return;
     unchangedCount = 0;
-    clearTimeout(timer);
-    tick();
+    forceTick();
+  }
+
+  // Re-evaluate the delay under a CHANGED BASE RATE, fetching nothing and
+  // leaving the backoff alone. This is what a connection state change actually
+  // needs: losing the socket should restore fast polling now rather than after
+  // one more 45s wait, but a socket coming and going is not evidence that the
+  // GAME changed, and must not be allowed to imply it.
+  //
+  // Connection changes used to call refresh() instead, which fetched on every
+  // edge AND reset the backoff — so a flapping socket set the poll rate and the
+  // configured intervals were never consulted. That is the whole 2026-08-09
+  // bug in one line; keep these two functions distinct. (The same class of
+  // mistake as the kick()/refresh() split above, one layer down.)
+  function reschedule() {
+    if (!running) return;
+    schedule();
   }
   function noteInteraction() { lastInteractionAt = Date.now(); }
 
@@ -177,5 +234,5 @@ function createPoller({
   ['pointerdown', 'keydown'].forEach(ev =>
     document.addEventListener(ev, noteInteraction, { passive: true }));
 
-  return { start, stop, kick, refresh, announce, wake, noteInteraction, isRunning: () => running };
+  return { start, stop, kick, refresh, reschedule, announce, wake, noteInteraction, isRunning: () => running };
 }
