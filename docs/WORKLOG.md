@@ -4,14 +4,167 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-02 (Claude), end of a long session — see the HANDOFF
-section immediately below before doing anything. It corrects the stale claims
-in the rest of this file: almost everything the "NEXT SESSION" banner below
-called unbuilt has since been built.
+Last updated: 2026-08-07 (Claude), end of a long session — see the HANDOFF
+section immediately below before doing anything. The 2026-08-02 HANDOFF further
+down is now superseded; almost everything in it shipped during this session.
 
 ---
 
-## 🟢 HANDOFF (2026-08-02, end of session — read this first)
+## 🟢 HANDOFF (2026-08-07, end of session — read this first)
+
+Context window filled up; this is a deliberate stopping point, not a natural
+break. Everything below is verified against actual repo/production state at
+write time (git log, live curls against the deployed site, direct Supabase
+queries against production data), not recalled from memory.
+
+### Deploy state right now
+
+```
+git status: clean, nothing uncommitted
+HEAD and origin/multiplayer-prototype both at e2051d0
+Production is serving e2051d0 — verified by curling the deployed /tv and
+/shared/poller.js for code that only exists in this commit.
+```
+
+Nothing pending. No further push/deploy needed to pick up where this left off.
+
+### What shipped this session, in order
+
+1. **`/play` controller polish** — bigger hand cards, HOLD card resized twice
+   (first too small, then too big, settled at 10dvh — 62% of its frame), Port
+   badges resized twice (3x was too loud, backed off to ~2x), HOLD/Brig frames
+   made square (they were stretching a square frame asset into a non-square
+   box), runs enlarged, Menu moved into the turn bar and then to its left end,
+   turn bar fixed at 600px so the logo has room to actually read.
+
+2. **Tap-latency fix on `/play`** — `selectCard()` was calling full `render()`
+   (a complete innerHTML rebuild of the whole board) for a purely local,
+   zero-network selection change. That was cheap before the restyle, expensive
+   after it. Fixed with `paintSelection()`, a targeted class toggle. Measured
+   4x median improvement, worst-case spike eliminated.
+
+3. **Scoped optimistic play** — tapping a Run now fades the source card and
+   rings the target immediately, before the server responds, then reconciles
+   with whatever comes back. Deliberately does NOT fake `lastView` — a
+   rejected play just fades back in, never shows a board that disagrees with
+   the server. Kings/discard/draw excluded (Kings need a modal anyway; the
+   others have server-side consequences the client can't safely predict).
+
+4. **Netlify quota incident** — found and killed a `/tv` screen that had been
+   polling a dead LOBBY once/second for 17 hours (~61,000 invocations, roughly
+   half the monthly cap, on the 7th of the month). Root cause: `poller.kick()`
+   (which defers the 20-minute idle-stop) was wired to the Realtime
+   connect/disconnect handler, so a flapping socket reset the abandonment
+   timer forever. Fixed with a `refresh()`/`kick()` split — `kick()` now means
+   "a human did something," `refresh()` means "machinery triggered this" and
+   does NOT defer idle-stop — plus a hard 90-minute stop measured only from
+   the last real state change, which nothing can defer. **Getting the
+   kick/refresh distinction backwards is exactly what caused this incident —
+   read the comments in `app/shared/poller.js` before touching it.**
+
+5. **`/tv` full redesign** per `docs/TV_REDESIGN_SPEC.md` (spec is in the repo,
+   read it for full detail). Player rails now run down BOTH sides (was one
+   column on the right, couldn't fit 6 players without overflowing). Four
+   independent Run lanes around a centered Brig, replacing one big parchment
+   panel that claimed all available height regardless of how few cards were on
+   it. Run card overlap is *measured* against available lane width rather than
+   guessed from a card-count formula — Runs have no maximum length, since a
+   King can reverse a Run's direction and send it bouncing indefinitely. Hold
+   card enlarged then reduced 15% at Nick's request. SCORE row was DROPPED
+   from plaques to make room for the bigger Hold card. **This contradicts
+   `docs/TV_REDESIGN_SPEC.md`, which still requires score on every plaque and
+   a "NEEDS X OF SUIT OR Q" hint under each Run (also killed, per Nick: "no
+   hints, that was clarified after the mockup was made"). The spec doc itself
+   has not been edited to match either decision — do that if you're back in
+   this doc for other reasons, or just know the doc is stale on these two
+   specific points.**
+
+6. **`/tv` render latency** (final fix, commit `e2051d0`) — `/tv` was getting a
+   Realtime push saying "something changed," then making its OWN separate
+   `get-public-state` fetch to find out what — a full extra ~250-300ms round
+   trip on top of however long the play itself took, fetching data that was
+   already public. Fixed by embedding a public board snapshot directly in the
+   `room_pulse` row (new nullable `public_state` jsonb column via
+   `buildPublicSnapshot()` in `lib/views.js`), so `/tv` renders straight off
+   the push. **This REMOVES a function invocation per action per watching TV
+   — it does not add one**, which mattered given the quota situation above.
+   Verified on live production: the embedded snapshot has zero private data
+   (no hands, no Ports, no tokens) and is byte-identical in shape to what a
+   real fetch returns.
+
+7. **Brig overflow fix** (same commit) — deck size is one full deck PER
+   PLAYER (`engine.js` `makeDeck`), so a 6-player game has 24 Kings possible.
+   Nick saw 7 pile into the Brig during real play and they ran off the edge of
+   the frame. Root cause: the King row was missing `min-width:0`, so it sized
+   to its own content and ballooned past its container — same class of bug
+   `.runCards` already had a fix for. Now measures and shrinks Kings to fit
+   one row, falling back to wrap if even the size floor can't hold them.
+   Verified at 1, 3, 7, 12, 24, and 40 Kings.
+
+### Standing conventions from this session — follow without re-deriving
+
+- **`kick()` vs `refresh()` on the poller is load-bearing.** `kick()` = a human
+  did something, defers idle-stop. `refresh()` = machinery (socket
+  reconnecting, tab visibility), does NOT defer idle-stop. Mixing these up
+  caused the 17-hour polling incident above.
+- **`room_pulse` may ONLY ever carry `buildPublicSnapshot()`'s output.** That
+  table broadcasts to anyone with the Supabase publishable key. Never widen it
+  to include a hand, Ports, or any token — that is the one hard privacy
+  boundary in this whole pulse/doorbell system.
+- **The direction wash on Runs (green=up, red=down) is NOT a legality hint.**
+  It's public state already shown on `/tv` and doesn't depend on what's in
+  your hand — the no-legality-hints rule on `/play` still holds, this doesn't
+  violate it, don't let the two get confused.
+- **Nuking the DB is fine for this project.** Nick, this session: "these games
+  aren't real... if a game has to be killed off to protect my usage limits,
+  that's fine." Don't be precious about test/game data here.
+- Every other standing convention from the 2026-08-02 HANDOFF below still
+  holds (no legality hints on `/play`, hot-seat frozen, `/admin` PIN `allure`,
+  rules changes need a test against old code first, etc.) — this session
+  didn't change any of those, just added the ones above.
+
+### Genuinely open — ask Nick, don't assume
+
+1. **Player-selected colors on `/tv`** (spec §7). Plaques already call
+   `safePlayerColor(player)`, which prefers a validated `p.color` and falls
+   back to a deterministic per-seat color — so what's left is scoped to the
+   server/join side only: a `player_color` column, uniqueness enforcement
+   (`UNIQUE(room_id, player_color)`), `/join` UI to pick one, threading it
+   through the views. Plaque rendering needs no further changes.
+2. **`docs/TV_REDESIGN_SPEC.md` is stale** on the two points in item 5 above
+   (Run hints, plaque score) — not yet amended to match what actually shipped.
+3. **Nick wants to adjust the Brig's look "at some point."** If so:
+   `frame-brig.png` is a 512x512 SQUARE asset drawn at `100% 100%` — any
+   non-square box stretches it, the same trap that broke the old player
+   plaques. `.brigInner` is sized to 76% specifically because 70% clipped the
+   caption and wrapped Kings onto two rows — empirically tuned, re-derive if
+   the art changes.
+4. **Portrait remote-mode `/play`** — parked explicitly, see the
+   `salty-schooner-polish-backlog` memory (outside this repo). Pre-rebuild
+   reference version is at git commit `d0fdcc2~1`. Two fidelity options were
+   discussed and Nick deferred the CHOICE, not just the timing.
+5. Items 5-6 from the 2026-08-02 HANDOFF below (unratified rules ⚑ questions in
+   `docs/RULES.md`, and the unsound clinch-check) are both still open and
+   untouched by this session.
+
+### Where to pick up next
+
+No explicit next task was queued. The last open loop: Nick had not yet
+playtested whether the `/tv` and `/play` latency fixes actually feel better in
+real play — that's the natural first thing to check in on.
+
+---
+
+## 🔵 SUPERSEDED — 2026-08-02 HANDOFF
+**Everything actionable in the section below shipped during the 2026-08-07
+session above (`/play` polish, tap-latency fix, optimistic play, the polling
+incident and fix, the full `/tv` redesign, and the `/tv` render-latency +
+Brig-overflow fixes). Kept for historical context — its own "genuinely open"
+list is stale; the 2026-08-07 HANDOFF above has the current one. Its internal
+sub-sections (like the "host-as-a-seat" planning notes further down) were
+already marked superseded within this same block back in August.**
+
+## 🟢 HANDOFF (2026-08-02, end of session)
 
 Context window filled up; this is a deliberate stopping point, not a natural
 break. Everything in here is verified against the actual repo/production state
