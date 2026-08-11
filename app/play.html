@@ -211,6 +211,69 @@
                font-weight:800; display:flex; align-items:center; justify-content:center;
                box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
 
+  /* ---- REMOTE MODE ----------------------------------------------------------
+   * Same DOM, re-flowed for a portrait phone with no /tv beside it. Deliberately
+   * CSS-only off a data-mode attribute rather than a second markup tree or a
+   * second page: /host was split off from /play precisely because duplicating
+   * the playing UI guarantees the copies drift apart, and that applies just as
+   * much to two layouts of the same screen. Every handler, every render branch
+   * and every optimistic-play path is shared; only the arrangement differs.
+   *
+   * WHY vw HERE AND dvh EVERYWHERE ELSE: couch mode is landscape, where height
+   * is the scarce axis, so dvh sizes cards correctly. Portrait inverts that —
+   * 1dvh is more than twice as wide relative to the screen — so the couch card
+   * sizes would blow straight past the edge. Widths that must fit ACROSS the
+   * screen are therefore in vw here. Do not "unify" these units.
+   */
+  #gameUi[data-mode="remote"] { gap:.9dvh; padding:1dvh 2.5vw;
+                                /* Safety valve, not the plan: the layout below
+                                   is budgeted to fit 100dvh, but a 6-player
+                                   game or a Brig full of Kings must never put a
+                                   control out of reach. Overflow scrolls rather
+                                   than clipping. */
+                                overflow-y:auto; }
+  /* 2x2 rather than 4-across: four run tiles side by side in portrait leaves
+     each one narrower than a single card. */
+  #gameUi[data-mode="remote"] .runsRow { flex:0 0 auto; grid-template-columns:repeat(2,1fr); gap:1.4vw; }
+  #gameUi[data-mode="remote"] .run { min-height:0; padding:1vw; }
+  #gameUi[data-mode="remote"] .run .card { width:11vw; font-size:3.4vw; }
+  /* The whole mid section becomes one column: hand, then ports, then the
+     HOLD/Brig pair. */
+  #gameUi[data-mode="remote"] .midRow { grid-template-columns:1fr; gap:.9dvh; }
+  #gameUi[data-mode="remote"] .leftCol { gap:.9dvh; }
+  /* The one place the stack goes sideways again — HOLD and the Brig are both
+     square frames, so side by side they cost one row instead of two. */
+  #gameUi[data-mode="remote"] .rightCol { width:100%; flex-direction:row; gap:2vw;
+                                          height:26vw; }
+  #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
+                                             border-width:5vw;
+                                             border-image-width:5vw; }
+  #gameUi[data-mode="remote"] #handRow .card { width:15vw; font-size:4.6vw; }
+  #gameUi[data-mode="remote"] #drawBtn { font-size:3.2vw; padding:3vw 2.4vw; }
+  #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; gap:1.4vw; padding:1.4vw; }
+  #gameUi[data-mode="remote"] .port .card { width:12vw; font-size:3.6vw; }
+  #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
+  #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
+  #gameUi[data-mode="remote"] .holdInner .card { width:12vw; font-size:3.6vw; }
+  #gameUi[data-mode="remote"] .brigInner .card { width:8vw; font-size:2.6vw; }
+  /* A Jailbreak releases every King in the Brig at once and all of them must
+     stay reachable, so this one cannot be capped the way the waiting preview is
+     (see render()). Scrolling inside the frame is the honest fallback: it keeps
+     the frame's proportions — frame-brig.png is a 512x512 SQUARE asset and
+     stretching it is a known trap — while guaranteeing the 24th King is still
+     tappable. */
+  #gameUi[data-mode="remote"] .brigInner { overflow:auto; }
+  #gameUi[data-mode="remote"] .panelCount { font-size:2vw; }
+  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:2vw; }
+  #gameUi[data-mode="remote"] .topLogo { height:6dvh; }
+  #gameUi[data-mode="remote"] .turnPill { font-size:2.6dvh; padding:.3dvh 1.6dvh .3dvh .4dvh; }
+  #gameUi[data-mode="remote"] .pillMenu { font-size:2dvh; padding:1.6dvh 1.6dvh; }
+  #gameUi[data-mode="remote"] .turnPill .roundMeta { font-size:1.7dvh; }
+  /* Overlays are siblings of #gameUi, so they need the body-scoped mode. The
+     fan opens a whole Port pile, which has no maximum depth — it already wraps
+     and scrolls, this only stops each card being sized for landscape. */
+  body[data-mode="remote"] .portFanOverlay .card { width:14vw; font-size:4.2vw; }
+
   /* ---- Modals ---------------------------------------------------------------
    * The King direction question and the Menu are both dimmed-backdrop modals,
    * matching hot-seat's showModal(). The landscape layout claims every region of
@@ -381,9 +444,16 @@
   <button class="wide" id="portFanClose">Close</button>
 </div>
 
+<!-- The escape hatch matters: this overlay sits at z-index 60 across the whole
+     screen, so while it is up the Menu underneath cannot be tapped. Without a
+     way out from here, a player with no TV would have to rotate into couch mode
+     — a layout that deliberately shows no board — hunt for the Menu, and only
+     then find remote mode. Offer it where they actually are. -->
 <div id="rotatePrompt">
   <img src="/assets/logo-wide.png" alt="Salty Schooner">
   <p style="font-size:1.2rem;color:var(--gold-lt);">Turn your phone sideways to play.</p>
+  <p class="meta" style="max-width:34ch;">Couch mode expects a TV to be showing the board.</p>
+  <button id="rotateRemoteBtn" class="secondary">No TV? Play in remote mode</button>
 </div>
 
 <script src="/shared/api.js"></script>
@@ -942,7 +1012,19 @@ function render(view) {
     return;
   }
   showScreen('gameUi');
-  document.getElementById('rotatePrompt').classList.add('armed');
+  // Drives the whole remote layout from CSS (see the REMOTE MODE block). Read
+  // once here so every branch below agrees on the mode within a single render.
+  const remote = displayMode() === 'remote';
+  // Set on BOTH: the layout rules hang off #gameUi, but the Port fan and the
+  // modals are siblings of it (they are fixed overlays and have to be, or the
+  // board's stacking context would trap them), so a #gameUi-scoped selector
+  // cannot reach their card sizes. body carries the mode for those.
+  document.getElementById('gameUi').dataset.mode = remote ? 'remote' : 'couch';
+  document.body.dataset.mode = remote ? 'remote' : 'couch';
+  // Landscape is couch mode's designed orientation and the rotate prompt is
+  // right to insist on it. Remote mode is drawn FOR portrait, so arming it there
+  // would demand a rotation into a layout that does not exist.
+  document.getElementById('rotatePrompt').classList.toggle('armed', !remote);
 
   const bar = document.getElementById('turnBar');
   document.getElementById('turnText').textContent =
@@ -955,7 +1037,7 @@ function render(view) {
   // mode adds the card contents back, because then no TV is carrying them.
   // The direction- class is a different thing and stays in both modes: it states
   // the run's own direction, not whether your selection fits there.
-  const showCards = displayMode() === 'remote';
+  const showCards = remote;
   document.getElementById('runsGrid').innerHTML = view.runs.map((r, i) => {
     const cards = showCards
       ? `<div class="cardRow">${r.cards.slice(-3).map(c => cardHtml(c)).join('')}</div>`
@@ -1017,15 +1099,36 @@ function render(view) {
   // them, so this condition already scopes it to the right player.
   const b = view.brig;
   const mineToPlay = b.active && view.isYourTurn;
-  document.getElementById('brigStrip').innerHTML = mineToPlay
-    ? b.releasedKings.map(c => {
-        const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
-        return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
-      }).join('')
-    : '';
+  // Two different things share this frame, and only one of them is playable.
+  //
+  // Couch mode leaves it empty unless the Kings are YOURS to play, because the
+  // waiting Kings are public and /tv is already showing them. Remote mode has no
+  // /tv, so leaving it empty hides public board state from the only player who
+  // cannot see it any other way — how close the Brig is to a Jailbreak is
+  // information every other seat has. Waiting Kings are therefore drawn here,
+  // but WITHOUT data-jb: they are not yours, tapping one must do nothing, and
+  // the missing attribute is what makes that true rather than a check that could
+  // be forgotten later (see the tap-target note at the top of this file).
+  const jailbreakMine = mineToPlay ? b.releasedKings : [];
+  // Capped on purpose. The deck is one full deck PER PLAYER, so a 6-player game
+  // can put 24 Kings in the Brig — the same arithmetic that overflowed /tv's
+  // Brig frame in the 2026-08-07 session. These are context, not tap targets,
+  // and brigCount below states the true number, so drawing a bounded sample
+  // costs nothing and cannot overflow. Released Kings above are NOT capped:
+  // every one of them has to be playable.
+  const BRIG_PREVIEW_MAX = 6;
+  const brigWaiting = (!mineToPlay && remote)
+    ? (b.waitingKings || []).slice(0, BRIG_PREVIEW_MAX)
+    : [];
+  document.getElementById('brigStrip').innerHTML =
+    jailbreakMine.map(c => {
+      const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
+      return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+    }).join('')
+    + brigWaiting.map(c => `<span class="card">${c.rank}${c.suit}</span>`).join('');
   document.getElementById('brigCount').textContent = mineToPlay
     ? `JAILBREAK — play ${b.releasedKings.length}`
-    : '';
+    : (remote ? `${b.waitingCount} in the Brig` : '');
   document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
     el.addEventListener('click', () => {
       const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);
@@ -1155,6 +1258,9 @@ function openMenu() {
   on('mAdmin', () => { location.href = '/admin'; });
 }
 document.getElementById('menuBtn').addEventListener('click', openMenu);
+// setDisplayMode re-renders, and render() disarms the prompt in remote mode, so
+// this both switches the layout and dismisses the overlay in one tap.
+document.getElementById('rotateRemoteBtn').addEventListener('click', () => setDisplayMode('remote'));
 
 // Host-only controls. These live in static markup rather than being rebuilt per
 // render, so they are wired once here. They stay inert for non-hosts: the

@@ -10,6 +10,58 @@ below, then the 2026-08-07 HANDOFF under it (still current for everything else).
 
 ---
 
+## 🟢 REMOTE MODE BUILT (2026-08-10) — /play draws the board when there is no TV
+
+**Not yet playtested or deployed.** Built, parses, regression suite green; nobody
+has looked at it on a phone. Expect a sizing round — every visual pass in this
+project has needed one.
+
+**What was already there, contrary to the older notes:** the couch/remote
+**toggle already existed** in the Menu (`mCouch`/`mRemote` → `setDisplayMode`),
+and `render()` already showed run cards in remote mode. What was missing was the
+layout it switched into — so flipping to remote gave you a landscape couch
+controller with cards in the Runs and everything else still hidden. The
+2026-08-02 note ("the couch/remote switch is per-device only") described the
+switch as built; it is the *room-level default* that was never built, not the
+switch. **Still true: the default is hardcoded `'couch'` per device.**
+
+**Approach — one DOM, two layouts, CSS only.** Remote is a portrait re-flow off
+a `data-mode` attribute, not a second markup tree and not a second page. Same
+reasoning that moved the lobby onto `/play` in the first place: duplicating the
+playing UI guarantees the copies drift. Every handler, render branch and
+optimistic-play path is shared. **Verified in the diff that not one
+non-mode-scoped CSS rule was added — couch mode is provably untouched.**
+
+- **Units:** couch sizes cards in `dvh` (landscape → height is scarce). Portrait
+  inverts that, so remote sizes anything that must fit ACROSS the screen in
+  `vw`. Do not unify these.
+- **`data-mode` is set on BOTH `#gameUi` and `body`** — the Port fan and modals
+  are fixed overlays and siblings of `#gameUi`, so a `#gameUi`-scoped selector
+  cannot reach their card sizes.
+- **Rotate prompt is now mode-aware.** It was unconditional; remote is drawn for
+  portrait, so arming it there would demand rotating into a layout that does not
+  exist. It also gained a **"No TV? Play in remote mode" button** — that overlay
+  sits at `z-index:60` over the whole screen, so while it is up the Menu beneath
+  it cannot be tapped, and a TV-less player would otherwise have to rotate into
+  couch mode (which deliberately shows no board) to find the switch.
+- **The public Brig is now drawn in remote mode.** Couch leaves that frame empty
+  unless the Kings are yours to play, because `/tv` carries the waiting ones.
+  With no `/tv` that hides public state from the one player who cannot get it
+  any other way. Waiting Kings render **without `data-jb`** — they are not
+  yours, and the missing attribute is what makes tapping them inert, rather than
+  a check someone could later forget.
+- **Overflow guarded up front**, since deck size is one deck PER PLAYER (24
+  Kings possible at 6 players — the arithmetic that overflowed `/tv`'s Brig on
+  2026-08-07): the waiting preview is capped at 6 with `brigCount` carrying the
+  true number, released Kings are *not* capped (all must stay tappable) and
+  scroll inside the frame instead, and `#gameUi` scrolls as a last resort.
+
+**Known gap, deliberate:** remote players see opponents only via Menu → Scores,
+matching the pre-rebuild version. `/tv` shows every seat's HOLD count at a
+glance; remote costs a tap. Revisit if it annoys in real play.
+
+---
+
 ## 🔴 INCIDENT + FIX (2026-08-09) — a flapping socket set the poll rate
 
 **Symptom Nick reported:** the game "feels like it's struggling" — phone taps
