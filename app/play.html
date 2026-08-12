@@ -83,7 +83,7 @@
   .runsRow { flex:1 1 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:1.2dvh; }
   .run { background:var(--parch); color:#4a3418; border:.35dvh solid var(--gold);
          border-radius:1.4dvh; min-height:9dvh;
-         display:flex; align-items:center; justify-content:center;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.4dvh;
          font-family:var(--serif); font-size:2.6dvh; letter-spacing:.05em;
          box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45), inset 0 0 0 .18dvh rgba(240,208,137,.3);
          cursor:pointer; }
@@ -211,6 +211,13 @@
                font-weight:800; display:flex; align-items:center; justify-content:center;
                box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
 
+  /* What an empty run accepts. Deliberately quieter than the RUN label — it is
+     reference, not a call to action. */
+  .runOpener { font-size:2dvh; opacity:.7; letter-spacing:.04em; }
+
+  /* Opponents' HOLD piles — remote only; /tv carries these in couch mode. */
+  .oppStrip { display:none; }
+
   /* ---- REMOTE MODE ----------------------------------------------------------
    * Same DOM, re-flowed for a portrait phone with no /tv beside it. Deliberately
    * CSS-only off a data-mode attribute rather than a second markup tree or a
@@ -297,6 +304,26 @@
      fan opens a whole Port pile, which has no maximum depth — it already wraps
      and scrolls, this only stops each card being sized for landscape. */
   body[data-mode="remote"] .portFanOverlay .card { width:14vw; font-size:4.2vw; }
+  #gameUi[data-mode="remote"] .runOpener { font-size:3vw; }
+  /* Sized to still fit five opponents (the six-player maximum) across a phone:
+     each chip is content-width with min-width:0, so they compress rather than
+     push the row off the edge. */
+  #gameUi[data-mode="remote"] .oppStrip { display:flex; flex:0 0 auto; gap:2vw;
+                                          justify-content:center; align-items:stretch; }
+  #gameUi[data-mode="remote"] .opp { flex:0 1 auto; min-width:0; display:flex;
+                                     flex-direction:column; align-items:center; gap:.5vw;
+                                     padding:1vw 1.8vw; border-radius:1.4vw;
+                                     background:rgba(8,40,44,.55);
+                                     border:.3vw solid rgba(201,162,39,.4); }
+  #gameUi[data-mode="remote"] .opp.turn { border-color:var(--gold);
+                                          background:rgba(120,92,16,.35); }
+  #gameUi[data-mode="remote"] .opp .card { width:9vw; font-size:2.8vw; }
+  #gameUi[data-mode="remote"] .oppName { font-family:var(--serif); font-size:2.8vw;
+                                         color:var(--gold-lt); max-width:22vw;
+                                         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #gameUi[data-mode="remote"] .oppCount { font-size:2.2vw; color:rgba(240,208,137,.75);
+                                          white-space:nowrap; }
+  #gameUi[data-mode="remote"] .oppClear { font-size:2.4vw; color:var(--gold-lt); }
 
   /* ---- Modals ---------------------------------------------------------------
    * The King direction question and the Menu are both dimmed-backdrop modals,
@@ -414,6 +441,13 @@
     </div>
     <img class="topLogo" src="/assets/logo-wide.png" alt="Salty Schooner">
   </div>
+
+  <!-- Remote mode only. With no /tv there is nothing showing how close anyone
+       else is to going out, and a round is a race — the opponents' HOLD piles
+       are the single most important thing on the shared board. All public
+       (publicPlayers sends goalTop/goalCount; /tv puts the same two on every
+       plaque). Not tap targets: no data-id, so no listener ever binds. -->
+  <div class="oppStrip" id="oppStrip"></div>
 
   <div class="runsRow" id="runsGrid"></div>
 
@@ -1061,13 +1095,31 @@ function render(view) {
   // mode adds the card contents back, because then no TV is carrying them.
   // The direction- class is a different thing and stays in both modes: it states
   // the run's own direction, not whether your selection fits there.
+  // Opponents' HOLD piles. Couch mode leaves this empty because /tv carries the
+  // plaques; remote has no /tv, and without it the player cannot see the race
+  // they are in. Your own HOLD is already the big frame at the bottom, so only
+  // the other seats go here.
+  const oppStrip = document.getElementById('oppStrip');
+  oppStrip.innerHTML = remote
+    ? (view.players || []).filter(p => p.seat !== view.yourSeat).map(p =>
+        `<div class="opp ${p.seat === view.currentSeat ? 'turn' : ''}">`
+        + `<div class="oppName">${p.name}</div>`
+        + (p.goalTop ? cardHtml(p.goalTop) : '<span class="oppClear">Cleared!</span>')
+        + `<div class="oppCount">${p.goalCount} in HOLD</div></div>`).join('')
+    : '';
+
   const showCards = remote;
   document.getElementById('runsGrid').innerHTML = view.runs.map((r, i) => {
     const cards = showCards
       ? `<div class="cardRow">${r.cards.slice(-3).map(c => cardHtml(c)).join('')}</div>`
       : '';
+    // What an EMPTY run will accept. Public rule state, not a legality hint: it
+    // is the same for every player and does not depend on what is in your hand,
+    // so it sits with the direction wash rather than with the telegraphing Nick
+    // ruled out. Shown in both modes (Nick, 2026-08-10).
+    const opener = r.cards.length === 0 ? '<div class="runOpener">A or Q</div>' : '';
     return `<div class="run direction-${r.direction || 'unset'} ${showCards ? 'showCards' : ''}" data-run="${i}">`
-      + `<div>RUN ${i + 1}</div>${cards}</div>`;
+      + `<div>RUN ${i + 1}</div>${opener}${cards}</div>`;
   }).join('');
   document.querySelectorAll('#runsGrid .run').forEach(el => {
     el.addEventListener('click', () => attemptPlay(Number(el.dataset.run)));
