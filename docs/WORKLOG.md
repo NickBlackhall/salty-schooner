@@ -4,9 +4,137 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-08-09 (Claude) — a cost incident found during Nick's first
-playtest of the 2026-08-07 work, and its fix. Read the INCIDENT section directly
-below, then the 2026-08-07 HANDOFF under it (still current for everything else).
+Last updated: 2026-08-11 (Claude). Read the 🟢 HANDOFF directly below first;
+everything under it is still accurate history but is no longer the current state.
+
+---
+
+## 🟢 HANDOFF (2026-08-11, end of session — read this first)
+
+Stopping for context-window reasons, not a natural break. Everything below is
+verified against actual repo/production state at write time, not recalled.
+
+### Deploy state — READ CAREFULLY, prod and origin DIVERGE
+
+```
+branch:  multiplayer-prototype, clean, everything pushed
+origin:  178e474
+PRODUCTION: 982c729  ← FIVE COMMITS BEHIND origin
+```
+
+Nick deployed once this session, right after `982c729` (the polling fix), then
+playtested it. **Everything after that — all of remote mode — is pushed but NOT
+deployed.** Production today has the cost fix and none of the remote-mode work.
+
+To catch production up:
+```bash
+cd ~/repos/salty-schooner
+git pull origin multiplayer-prototype
+netlify deploy --prod --build      # must be run from Nick's machine; the agent
+                                   # container is policy-blocked from api.netlify.com
+```
+
+### What shipped this session, in order
+
+1. **`982c729` — the flapping-socket cost incident (deployed + verified in prod).**
+   Full write-up in the 🔴 INCIDENT section below. Short version: a Realtime
+   socket that connected and died once a second was driving ~2 state fetches per
+   second — **~7,200 invocations/hour against a 125,000/month cap**, sustained,
+   including 11 minutes when nobody was playing. Three compounding defects
+   (connection changes forcing a fetch *and* resetting the backoff; the retry
+   counter reset by a subscribe that immediately died; channels rebuilt under a
+   name the old one had not vacated). **Verified fixed in production** across a
+   real 45-minute two-player round: idle polling settled to the intended ~45s on
+   every screen, no flapping signature, action-driven traffic only.
+2. **`bf43dd6` → `2af3c45` — remote mode.** `/play` now draws the whole board in
+   portrait when there is no `/tv`. See the REMOTE MODE section below for the
+   full design rationale; it is current except where this handoff overrides it.
+3. **`178e474`** — docs only.
+
+### Standing conventions added this session — follow without re-deriving
+
+- **`kick()` vs `refresh()` vs `reschedule()` on the poller.** `kick()` = a human
+  acted (fetch now, defer idle-stop). `refresh()` = machinery wants fresh data
+  (fetch now, do NOT defer idle-stop). `reschedule()` = the base rate changed
+  (fetch NOTHING). These look interchangeable and are not — picking wrong has
+  now caused **two separate cost incidents**. **Only news about the GAME may
+  cost an invocation; a connection changing state is not news about the game.**
+- **Every forced poll goes through `forceTick()` and cannot beat
+  `minForcedGapMs`.** That floor is the backstop against any future caller
+  misbehaving. Do not add a path that calls `tick()` directly.
+- **Remote mode is CSS-only off a `data-mode` attribute, one DOM, one render
+  path.** Set on both `#gameUi` and `body` (overlays are siblings of `#gameUi`).
+  Never fork the markup — `/host` was split off `/play` precisely because
+  duplicating the playing UI guarantees drift.
+- **Couch sizes cards in `dvh`, remote in `vw`.** Landscape makes height scarce;
+  portrait inverts it. **Do not "unify" these units.**
+- **`min-width:0` on every flex/grid child in remote mode.** Missing it is what
+  pushed half the layout off-screen; it is the same class of bug that ballooned
+  `/tv`'s Brig row on 08-07, one axis over.
+- **Screenshot before believing a layout.** `scripts/shoot-play.js` (added this
+  session) renders `/play` at 390x844 in headless Chromium against a stubbed
+  view. It caught three real defects immediately. `npm i playwright` first.
+
+### Genuinely open — ask Nick, don't assume
+
+1. **⚠ TABLETOP TILT — the live thread, and where to pick up.** Nick had GPT
+   build a static 3D-tabletop mockup (`perspective` + `rotateX` on the runs,
+   Brig as a middle strip *between* the two run rows, wood-lip edges, opponent
+   rail as bordered plaques). **He approved the direction explicitly** — "i
+   really do like the 3d table foreshortening going on... we should lean into
+   that." Two pieces already landed (opponents' HOLD strip, empty-run "A or Q").
+   The tilt/perspective itself is **not started**.
+   - He knows the tilt only animates under a mouse and **is fine with that** —
+     static is enough until a possible Three.js/native rebuild ("...anyhoo").
+   - **`Draw Cards` placement is NOT settled.** It was reworked into a floating
+     pill; his verdict was **"that's not quite what i meant"** and "i thought we
+     would change that when we got the table top tilt." He considers the
+     hand/draw treatment part of the tilt work, not a separate finished thing.
+     **Ask what specifically was off before touching it again.** He also wants
+     hand cards "flat, not in a fan," full-width, out from under the HOLD.
+   - The mockup file is a throwaway demo shell (~300 real lines inside ~1,300 of
+     unrelated `codex-visualization` scaffolding), no data wiring, hand-fan
+     hardcoded to exactly 5 cards, tilt no-ops on touch. **Mine it, don't port it.**
+2. **`/tv` version of the same 3D direction** — raised by Nick, explicitly
+   deferred, zero scope. "Cross that bridge when we get there."
+3. **The entry flow is still janky and Nick has said so twice.** Separate URLs
+   for `/host` and `/join` bother him; he asked when multiplayer can take over
+   root `/` with hot-seat moving to `/hotseat`. **`/hotseat` already exists**
+   (redirect in `netlify.toml`); root still serves hot-seat because nothing is
+   built to replace it. The splash→menu→create/join shell was sketched on
+   2026-08-02 and never approved for building. **This matters more for remote
+   players than couch ones** — a couch player is standing next to you, a remote
+   player has to be told which URL to type. Not scoped; needs a design pass
+   before any code.
+4. **Orphaned branch with unmerged work:**
+   `origin/codespace-turbo-xylophone-97x757w74prgc7pgg`, last touched
+   2026-07-28, ~1,481 insertions **not on `main` or `multiplayer-prototype`** —
+   a build-17 hot-seat change to `app/index.html` (King declaration becomes a
+   recorded decision), a 779-line `SALTY_SCHOONER_MULTIPLAYER_ROADMAP.md`, a
+   soft-stall design doc, and playtest CSVs. Nick was asked keep/merge/discard
+   and **has not answered**. Do not delete it without his call.
+5. **Remote mode has never been seen on a real phone.** Everything is verified
+   by headless render only. Expect a sizing round.
+6. **Root cause of the socket drops is still unconfirmed** — the client's
+   *response* is now cheap either way, so it is no longer a cost risk, but
+   nobody knows why it dropped. The doorbell logs `[play] realtime LIVE/DOWN`
+   to the browser console on every reported transition; with the 4s debounce a
+   healthy session should print almost none. Checking that needs a desktop
+   browser, which Nick has not had to hand.
+7. Items 5–6 from the 2026-08-02 HANDOFF (three unratified ⚑ rules questions in
+   `docs/RULES.md`, and the provably unsound clinch-check) remain open and
+   untouched.
+
+### Where to pick up
+
+Nick's own stated next step is the **tabletop tilt** (open item 1) — it is the
+only thing he has actively asked for and left unfinished. Start by asking what
+was wrong with the Draw Cards pill, since that answer shapes the hand layout the
+tilt work has to accommodate.
+
+**Before any visual work: `npm i playwright` and run `node scripts/shoot-play.js`.**
+Looking at the render first is now the established loop here, and it has a
+three-for-three record of catching things reading the code did not.
 
 ---
 
