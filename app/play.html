@@ -232,30 +232,54 @@
                                    control out of reach. Overflow scrolls rather
                                    than clipping. */
                                 overflow-y:auto; }
+  /* EVERY flex/grid child in this layout needs min-width:0. Without it a child
+     cannot shrink below its own content, so one over-wide row (the hand, which
+     also carries the Draw button) silently widens the whole column and pushes
+     the Ports, the Brig and the logo off the right edge. This is the same
+     missing-min-width failure that let /tv's Brig row balloon past its frame on
+     2026-08-07 — same fix, one axis over. */
+  #gameUi[data-mode="remote"] .midRow,
+  #gameUi[data-mode="remote"] .leftCol,
+  #gameUi[data-mode="remote"] .rightCol,
+  #gameUi[data-mode="remote"] .handInner,
+  #gameUi[data-mode="remote"] .handRow { min-width:0; }
+  /* Portrait has no room for decoration beside the turn pill; the logo is the
+     first thing to go rather than the thing that pushes everything else out. */
+  #gameUi[data-mode="remote"] .topBar { gap:2vw; }
+  #gameUi[data-mode="remote"] .topLogo { display:none; }
   /* 2x2 rather than 4-across: four run tiles side by side in portrait leaves
-     each one narrower than a single card. */
-  #gameUi[data-mode="remote"] .runsRow { flex:0 0 auto; grid-template-columns:repeat(2,1fr); gap:1.4vw; }
-  #gameUi[data-mode="remote"] .run { min-height:0; padding:1vw; }
-  #gameUi[data-mode="remote"] .run .card { width:11vw; font-size:3.4vw; }
+     each one narrower than a single card. Grows into whatever the fixed rows
+     below leave over, so slack lands in the tap targets instead of pooling as
+     dead space at the bottom. */
+  #gameUi[data-mode="remote"] .runsRow { flex:1 1 auto; grid-template-columns:repeat(2,1fr); gap:1.4vw; }
+  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw; }
+  #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:4vw; }
   /* The whole mid section becomes one column: hand, then ports, then the
      HOLD/Brig pair. */
   #gameUi[data-mode="remote"] .midRow { grid-template-columns:1fr; gap:.9dvh; }
   #gameUi[data-mode="remote"] .leftCol { gap:.9dvh; }
   /* The one place the stack goes sideways again — HOLD and the Brig are both
-     square frames, so side by side they cost one row instead of two. */
-  #gameUi[data-mode="remote"] .rightCol { width:100%; flex-direction:row; gap:2vw;
-                                          height:26vw; }
+     square frames, so side by side they cost one row instead of two.
+     aspect-ratio, NOT a stretched width: frame-hold.png and frame-brig.png are
+     both 512x512 SQUARE art drawn at 100% 100%, and letting them fill a wide
+     half-row smears them — the documented trap that broke the old player
+     plaques. Sized off height and centred, so they stay square at any width. */
+  #gameUi[data-mode="remote"] .rightCol { width:100%; flex-direction:row; gap:3vw;
+                                          height:40vw; justify-content:center; }
+  #gameUi[data-mode="remote"] .holdBox,
+  #gameUi[data-mode="remote"] .brigBox { flex:0 0 auto; height:100%; aspect-ratio:1/1; }
   #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
-                                             border-width:5vw;
-                                             border-image-width:5vw; }
-  #gameUi[data-mode="remote"] #handRow .card { width:15vw; font-size:4.6vw; }
-  #gameUi[data-mode="remote"] #drawBtn { font-size:3.2vw; padding:3vw 2.4vw; }
+                                             border-width:3.5vw;
+                                             border-image-width:3.5vw; }
+  #gameUi[data-mode="remote"] .handRow { gap:1.2vw; flex-wrap:wrap; }
+  #gameUi[data-mode="remote"] #handRow .card { width:12.5vw; font-size:4vw; }
+  #gameUi[data-mode="remote"] #drawBtn { font-size:2.6vw; padding:2vw 1.6vw; }
   #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; gap:1.4vw; padding:1.4vw; }
-  #gameUi[data-mode="remote"] .port .card { width:12vw; font-size:3.6vw; }
+  #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
   #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
-  #gameUi[data-mode="remote"] .holdInner .card { width:12vw; font-size:3.6vw; }
-  #gameUi[data-mode="remote"] .brigInner .card { width:8vw; font-size:2.6vw; }
+  #gameUi[data-mode="remote"] .holdInner .card { width:14vw; font-size:4.2vw; }
+  #gameUi[data-mode="remote"] .brigInner .card { width:7vw; font-size:2.4vw; }
   /* A Jailbreak releases every King in the Brig at once and all of them must
      stay reachable, so this one cannot be capped the way the waiting preview is
      (see render()). Scrolling inside the frame is the honest fallback: it keeps
