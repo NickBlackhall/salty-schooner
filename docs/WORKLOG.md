@@ -60,6 +60,30 @@ non-mode-scoped CSS rule was added — couch mode is provably untouched.**
 matching the pre-rebuild version. `/tv` shows every seat's HOLD count at a
 glance; remote costs a tap. Revisit if it annoys in real play.
 
+**2026-08-11 — GPT mockup reviewed, two pieces landed, one deferred on purpose.**
+Nick had GPT build a static 3D-tabletop mockup (`perspective`/`rotateX` on the
+runs+Brig, fanned/rotated hand cards, opponent rail as bordered plaques). Not
+usable as-is — it's a throwaway demo-canvas shell around ~300 real lines, no
+data wiring, a hand-fan hardcoded to exactly 5 cards, and its tilt interaction
+explicitly no-ops on touch (`if (pointerType === 'touch') return`) — but the
+DIRECTION is approved and two pieces were pulled into the real code:
+- Opponents' HOLD strip above the Runs (already shipped, see above).
+- Empty-run "A or Q" opener text, now in BOTH modes (already shipped, see above).
+
+**Draw Cards was reworked into a floating pill** (`position:absolute` over
+`#handSection`, pulled out of `.handInner`'s flex flow so `.handRow` claims
+full width whether the pill is shown or hidden) — but **Nick's read, after
+seeing it: "that's not quite what i meant."** He said leave it rather than
+iterate now, because he considers this bundled with the still-undone
+**tabletop tilt** work (`perspective`/`rotateX` on the runs, likely restoring
+the Brig-as-middle-strip layout from the mockup) — the two were one idea in his
+head, not two, and the hand/draw treatment should be revisited alongside that,
+not treated as separately finished. **Do not consider Draw Cards' placement
+settled** — ask what specifically was off before touching it again.
+
+**Also raised, explicitly deferred:** whether `/tv` gets a version of the same
+3D-tabletop direction. Zero scope yet — "cross that bridge when we get there."
+
 ---
 
 ## 🔴 INCIDENT + FIX (2026-08-09) — a flapping socket set the poll rate
