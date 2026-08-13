@@ -625,18 +625,34 @@ const Perf = {
   // A press that MOVES is a drag or a scroll, not a lost tap, so it is excluded
   // by distance rather than left to inflate the number.
   noteTapGesture(lost) { this.counts.tapGestures++; if (lost) this.counts.lostTaps++; },
-  noteSwallowed() { this.counts.swallowed++; },
+  // A refused tap is not one thing. It matters whether input was held by a
+  // non-predictable action mid-flight, by the predicted queue still draining, or
+  // by an old-style pending play — those have different fixes, and a bare count
+  // cannot tell them apart.
+  busyReasons: {},
+  noteSwallowed(reason) {
+    this.counts.swallowed++;
+    const k = reason || 'unknown';
+    this.busyReasons[k] = (this.busyReasons[k] || 0) + 1;
+  },
 
   pct(arr, p) {
     if (!arr.length) return null;
     const s = arr.slice().sort((a, b) => a - b);
     return Math.round(s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]);
   },
-  spans() {
-    // Kings only — 'play-king' — are excluded: their path opens a direction
-    // modal, so tap→feedback would be measuring how long a human took to decide
-    // and would swamp every percentile here.
-    const ok = this.actions.filter(a => a.outcome === 'accepted' && a.kind === 'play');
+  // Split by kind rather than pooled. Kings ('play-king') are excluded from both
+  // because their path opens a direction modal, so tap→feedback would measure
+  // how long a human took to decide and would swamp every percentile.
+  //
+  // Predicted and confirmed plays MUST be reported separately: the first phone
+  // readout after prediction shipped showed only the confirmed rows, because
+  // this filter excluded the predicted ones and nothing reported them — the
+  // table showed the plays that still wait and none of the ones that no longer
+  // do, which read as "no improvement" when ten plays had gone from ~400ms to
+  // about one.
+  spans(kind) {
+    const ok = this.actions.filter(a => a.outcome === 'accepted' && a.kind === kind);
     const pick = fn => ok.map(fn).filter(v => typeof v === 'number' && isFinite(v) && v >= 0);
     return {
       feedback: pick(a => a.t.feedback - a.t.tap),
@@ -645,17 +661,42 @@ const Perf = {
       locked:   pick(a => a.t.done - a.t.tap)
     };
   },
+  // Server stages come back as DURATIONS measured on the server's own clock, so
+  // nothing here differences two different clocks. "outside" is the part of the
+  // round trip the function did not account for — transit, cold start, queueing
+  // — which is where a 2-second tail would have to be hiding.
+  serverSpans() {
+    const w = this.actions.filter(a => a.server && typeof a.server.total === 'number');
+    const pick = fn => w.map(fn).filter(v => typeof v === 'number' && isFinite(v) && v >= 0);
+    return {
+      total:   pick(a => a.server.total),
+      reads:   pick(a => a.server.reads),
+      rules:   pick(a => a.server.rules),
+      write:   pick(a => a.server.write),
+      pulse:   pick(a => a.server.pulse),
+      outside: pick(a => (a.t.response - a.t.request) - a.server.total)
+    };
+  },
   summary() {
-    const s = this.spans();
+    const pred = this.spans('play-predicted');
+    const conf = this.spans('play');
+    const srv = this.serverSpans();
     const row = (m, arr) => ({ metric: m, n: arr.length, p50: this.pct(arr, 50), p75: this.pct(arr, 75), p95: this.pct(arr, 95) });
     return {
       device: this.device,
       counts: Object.assign({}, this.counts),
+      busyReasons: Object.assign({}, this.busyReasons),
       ms: [
-        row('tap→feedback', s.feedback),
-        row('tap→card in run', s.inRun),
-        row('request→response', s.network),
-        row('tap→input unlocked', s.locked),
+        row('PREDICTED tap→card in run', pred.inRun),
+        row('waited   tap→card in run', conf.inRun),
+        row('waited   tap→feedback', conf.feedback),
+        row('request→response', pred.network.concat(conf.network)),
+        row('server: total in function', srv.total),
+        row('server:   db reads', srv.reads),
+        row('server:   rules', srv.rules),
+        row('server:   db write', srv.write),
+        row('server:   pulse', srv.pulse),
+        row('outside function', srv.outside),
         row('render duration', this.renders.map(r => r.ms))
       ]
     };
@@ -665,7 +706,8 @@ const Perf = {
     const n = v => (v == null ? '—' : v + 'ms');
     return `device: ${s.device}\n`
       + `taps on a target: ${s.counts.tapGestures}, lost (no click): ${s.counts.lostTaps}\n`
-      + `taps refused while busy: ${s.counts.swallowed}\n`
+      + `taps refused while busy: ${s.counts.swallowed}`
+      + ` (${Object.keys(s.busyReasons).map(k => k + ' ' + s.busyReasons[k]).join(', ') || 'none'})\n`
       + `predicted plays: ${s.counts.predicted || 0}, resyncs: ${s.counts.resyncs || 0}\n`
       + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
       + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
@@ -982,10 +1024,15 @@ async function drainQueue() {
     while (playQueue.length) {
       const a = playQueue[0];
       let res;
+      // Marked HERE, not when the card was tapped: a play queued behind another
+      // waits for it, and folding that wait into "request→response" would report
+      // the queue's own depth as network latency.
+      Perf.mark(a.rec, 'request');
       try {
         res = await Api.submitAction({
           roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
           action: { type: 'PLAY_CARD', cardId: a.cardId, runIndex: a.runIndex },
+          clientActionId: a.id,
           // Each send uses the version the PREVIOUS confirmation returned, so a
           // burst of taps is a chain of compare-and-swaps rather than a race.
           expectedVersion: lastView.stateVersion
@@ -996,6 +1043,7 @@ async function drainQueue() {
         return;
       }
       Perf.mark(a.rec, 'response');
+      if (a.rec && res && res.timing) a.rec.server = res.timing;
       Perf.finish(a.rec, 'accepted');
       playQueue.shift();
       applyView(res.view, 'action');
@@ -1065,8 +1113,16 @@ async function withActionLock(fn) {
 // the likely case).
 let busyTaps = 0;
 let busyTapTimer = null;
+// Derived here rather than passed in by each caller, so every refusal is
+// categorised the same way and no call site can forget to say why.
+function busyReason() {
+  if (pendingPlay) return 'awaiting-play';
+  if (actionInFlight) return 'action-in-flight';
+  if (draining || playQueue.length) return 'queue-draining';
+  return 'unknown';
+}
 function noteBusyTap() {
-  Perf.noteSwallowed();
+  Perf.noteSwallowed(busyReason());
   Sfx.play('ui');                     // soft cue, NOT 'illegal' — nothing is wrong
   busyTaps++;
   if (busyTaps >= 2) showToast('Still working on your last move…');
@@ -1304,7 +1360,6 @@ async function attemptPlay(runIndex) {
     render(shownView(), 'predict');
     Perf.mark(rec, 'feedback');
     Perf.mark(rec, 'rendered');   // the card is on the run NOW, not after the server agrees
-    Perf.mark(rec, 'request');
     drainQueue();
     return;
   }
@@ -1388,9 +1443,11 @@ async function sendPlay(cardId, runIndex, kingChoice, rec) {
     const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
       action: { type: 'PLAY_CARD', cardId, runIndex, kingChoice },
+      clientActionId: rec ? rec.id : undefined,
       expectedVersion: lastView.stateVersion
     }));
     Perf.mark(rec, 'response');
+    if (rec && res && res.timing) rec.server = res.timing;
     selected = null;
     // Cleared BEFORE applyView so render()'s paintPending has nothing to
     // re-apply — the authoritative view already has the card in the run.
