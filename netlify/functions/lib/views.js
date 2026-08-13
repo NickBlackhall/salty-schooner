@@ -27,6 +27,12 @@ function baseView(room, state) {
     roomCode: room.room_code,
     status: room.status,
     stateVersion: room.state_version,
+    // Which rules build the server is actually running. The phone predicts
+    // ordinary run plays against its own copy of the engine and will not
+    // predict at all unless this matches what it has — so a client left open
+    // across a rules deploy degrades to waiting for the server, rather than
+    // drawing a board the server would disagree with.
+    engineRules: engine.RULES_VERSION,
     round: state.round,
     maxRounds: matchConfig.rounds,
     holdCards: matchConfig.holdCards,

@@ -14,6 +14,19 @@
 //
 // Every function here is pure/state-in-state-out. No DOM, no globals besides `uid`.
 
+// Bump this in the SAME commit as any rules change, alongside the RULES.md §13
+// change-log entry. The phone predicts ordinary run plays locally using this
+// file; the server reports the version it is running, and the phone refuses to
+// predict at all unless the two match. A stale client then simply waits for the
+// server like it always did — slower, never wrong.
+//
+// This is the guard against the one failure mode that actually threatens
+// prediction here: not an opponent racing you (they cannot act on your turn),
+// but this file and its server copy drifting apart. scripts/test-engine-sync.js
+// additionally asserts the two copies are byte-identical, which catches the
+// forgotten `cp` even when nobody remembers to bump this string.
+const RULES_VERSION = '2026-08-02';
+
 const VALUES = { A:1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, J:11, Q:12, K:13 };
 const VALUE_NAMES = {1:'A',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K'};
 const SUITS = ['♠','♥','♦','♣'];
@@ -569,6 +582,7 @@ function applyDiscardToPort(state, action) {
 }
 
 const Engine = {
+  RULES_VERSION,
   VALUES, VALUE_NAMES, SUITS, RED, MATCH_LIMITS,
   RuleError,
   normalizeMatchConfig, activeMatchConfig,

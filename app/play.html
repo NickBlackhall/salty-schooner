@@ -577,7 +577,8 @@ const Perf = {
   actions: [],
   renders: [],
   seq: 0,
-  counts: { pointerDown: 0, click: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0 },
+  counts: { tapGestures: 0, lostTaps: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0,
+            predicted: 0, resyncs: 0 },
   // Renders split by what asked for them, and every poll tagged with whether
   // the doorbell was live at the time. Without this it is impossible to tell a
   // screen sitting on the 45s safety net from one that has silently fallen back
@@ -611,13 +612,19 @@ const Perf = {
   },
   notePoll(live) { this.polls[live ? 'live' : 'down']++; },
 
-  // Suspect (2) leaves a specific fingerprint: a pointerdown on the board with
-  // no click behind it. Counted apart from swallowed taps (suspect 1), which DO
-  // click and are then refused. Drags and scrolls also land here, so read the
-  // gap as an upper bound and compare it before/after the render guard rather
-  // than treating a nonzero value as proof on its own.
-  noteDown() { this.counts.pointerDown++; },
-  noteClick() { this.counts.click++; },
+  // Suspect (2) leaves a specific fingerprint: a press on a tap target that
+  // never produces a click.
+  //
+  // This was FIRST WRITTEN as two global counters subtracted from each other,
+  // which was wrong and produced a nonsense reading in the field (-4 unmatched:
+  // more clicks than presses, which cannot describe lost taps). Two counters
+  // over different event scopes cannot be differenced — a click arriving
+  // without a matching press silently cancelled out a real loss. Each gesture
+  // is now correlated individually: one press, did its own click arrive.
+  //
+  // A press that MOVES is a drag or a scroll, not a lost tap, so it is excluded
+  // by distance rather than left to inflate the number.
+  noteTapGesture(lost) { this.counts.tapGestures++; if (lost) this.counts.lostTaps++; },
   noteSwallowed() { this.counts.swallowed++; },
 
   pct(arr, p) {
@@ -643,7 +650,7 @@ const Perf = {
     const row = (m, arr) => ({ metric: m, n: arr.length, p50: this.pct(arr, 50), p75: this.pct(arr, 75), p95: this.pct(arr, 95) });
     return {
       device: this.device,
-      counts: Object.assign({ unmatchedDowns: this.counts.pointerDown - this.counts.click }, this.counts),
+      counts: Object.assign({}, this.counts),
       ms: [
         row('tap→feedback', s.feedback),
         row('tap→card in run', s.inRun),
@@ -657,9 +664,9 @@ const Perf = {
     const s = this.summary();
     const n = v => (v == null ? '—' : v + 'ms');
     return `device: ${s.device}\n`
-      + `pointerdowns ${s.counts.pointerDown} / clicks ${s.counts.click}`
-      + ` (unmatched ${s.counts.unmatchedDowns})\n`
+      + `taps on a target: ${s.counts.tapGestures}, lost (no click): ${s.counts.lostTaps}\n`
       + `taps refused while busy: ${s.counts.swallowed}\n`
+      + `predicted plays: ${s.counts.predicted || 0}, resyncs: ${s.counts.resyncs || 0}\n`
       + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
       + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
       + `polls while realtime live: ${this.polls.live}, while down: ${this.polls.down}\n`
@@ -708,12 +715,32 @@ const FLUSH_GRACE_MS = 350;
 // out a genuinely lost tap on a card.
 const TAP_TARGETS = '[data-run],[data-id],[data-port],[data-jb],#holdTop';
 
-function beginGesture() {
+// The gesture currently under a finger, correlated individually so a lost tap
+// is measured per press rather than inferred by subtracting global totals.
+let gesture = null;   // { onTarget, matched, x, y, moved }
+
+function beginGesture(e) {
   pointerActive = true;
+  gesture = {
+    onTarget: !!(e && e.target.closest && e.target.closest(TAP_TARGETS)),
+    matched: false,
+    x: e ? e.clientX : 0,
+    y: e ? e.clientY : 0,
+    moved: 0
+  };
   clearTimeout(flushGraceTimer);
   flushGraceTimer = null;
   clearTimeout(pointerGuardTimer);
   pointerGuardTimer = setTimeout(() => endGesture(true), POINTER_GUARD_MAX_MS);
+}
+
+// Only a press that stayed put and produced no click counts as lost; anything
+// that travelled was a scroll or a drag and never wanted a click.
+const TAP_SLOP_PX = 12;
+function scoreGesture() {
+  if (!gesture) return;
+  if (gesture.onTarget) Perf.noteTapGesture(!gesture.matched && gesture.moved <= TAP_SLOP_PX);
+  gesture = null;
 }
 
 function endGesture(fromTimeout) {
@@ -734,23 +761,22 @@ function endGesture(fromTimeout) {
 function flushDeferredRender() {
   clearTimeout(flushGraceTimer);
   flushGraceTimer = null;
-  if (pointerActive || !renderPending) return;
+  if (pointerActive) return;
+  scoreGesture();
+  if (!renderPending) return;
   renderPending = false;
   const cause = pendingCause;
   pendingCause = null;
-  if (lastView) render(lastView, (cause ? cause + '+' : '') + 'deferred');
+  if (lastView) render(shownView(), (cause ? cause + '+' : '') + 'deferred');
 }
 
 // Bound once, on the persistent container — #gameUi itself is never rebuilt,
 // only its children are. Capture phase so this is seen even if a handler below
 // stops propagation (the Port badge does).
 const gameUiEl = document.getElementById('gameUi');
-gameUiEl.addEventListener('pointerdown', (e) => {
-  if (e.target.closest(TAP_TARGETS)) Perf.noteDown();
-  beginGesture();
-}, true);
+gameUiEl.addEventListener('pointerdown', beginGesture, true);
 gameUiEl.addEventListener('click', (e) => {
-  if (e.target.closest(TAP_TARGETS)) Perf.noteClick();
+  if (gesture && e.target.closest(TAP_TARGETS)) gesture.matched = true;
   // Capture phase runs BEFORE the card's own handler, so yielding one task lets
   // that handler finish — and paint its optimistic feedback — before the board
   // is rebuilt underneath it.
@@ -758,6 +784,11 @@ gameUiEl.addEventListener('click', (e) => {
 }, true);
 // pointerup can land outside the element — or outside the window — so the
 // release is watched on the document, not on #gameUi.
+document.addEventListener('pointermove', (e) => {
+  if (!gesture) return;
+  gesture.moved = Math.max(gesture.moved,
+    Math.abs(e.clientX - gesture.x) + Math.abs(e.clientY - gesture.y));
+}, true);
 document.addEventListener('pointerup', () => endGesture(false), true);
 document.addEventListener('pointercancel', () => endGesture(false), true);
 window.addEventListener('blur', () => endGesture(true));
@@ -793,7 +824,7 @@ function beginPendingPlay(cardId, runIndex) {
   pendingTimer = setTimeout(() => {
     if (!pendingPlay) return;
     clearPendingPlay();
-    if (lastView) render(lastView);
+    if (lastView) render(shownView());
     showToast('Still waiting on the server — try again.');
   }, PENDING_TIMEOUT_MS);
 }
@@ -818,6 +849,171 @@ function paintPending() {
   if (run) run.classList.add('pendingTarget');
 }
 
+// ---- Scoped optimistic play -------------------------------------------------
+// Measured on a real phone, 2026-08-13: tap→feedback 19ms, render 1-3ms, but
+// tap→card-in-run p50 439ms / p95 2087ms — and request→response accounted for
+// 429ms of that 439ms. The board was not slow to draw; it was deliberately
+// waiting for the server before drawing anything. No amount of render tuning
+// reaches that, so ordinary plays now land LOCALLY and the request follows.
+//
+// WHAT MAY BE PREDICTED, and why the boundary sits exactly here. The client
+// holds a VIEW, not the game state — no deck, no other hands, and only the TOP
+// of its own HOLD pile. So a play may be predicted only when its full effect is
+// derivable from the view alone:
+//   - ordinary (non-King) card. Kings open a direction modal and can trigger a
+//     Jailbreak, releasing Brig Kings the view cannot enumerate.
+//   - from HAND or a PORT. NOT from HOLD: the card under the top one is unknown,
+//     so the new HOLD top cannot be drawn. NOT a released Jailbreak King.
+//   - the play must not COMPLETE the run: completion recycles the non-Kings,
+//     sends Kings to the Brig and empties the run (engine checkComplete), and
+//     the recycle pile is not in the view.
+//   - no active Jailbreak, and HOLD not already empty — with an empty HOLD,
+//     runAfterPlay can END THE ROUND, which is not a board change to guess at.
+// Anything outside that set falls back to the old wait-for-the-server path,
+// which is unchanged and still correct.
+//
+// THE HARD RULE IS UNCHANGED: lastView stays authoritative and is never
+// mutated. Predictions live in a separate view that is rebuilt from lastView on
+// every confirmation, so the server can never be contradicted for longer than
+// one round trip, and a rejection repaints authoritative state rather than
+// leaving a board only the client believes in.
+let predicted = null;            // the view being SHOWN while plays are outstanding
+const playQueue = [];            // ordered predicted plays, oldest first
+let draining = false;
+let optimisticOff = false;       // latched off after repeated rejections
+let resyncCount = 0;
+const MAX_RESYNCS = 3;
+let actionSeq = 0;
+
+function shownView() { return predicted || lastView; }
+
+// Prediction requires that the phone's rules and the server's rules ARE THE
+// SAME RULES. A server that does not report its version is one that predates
+// this feature, so prediction stays off — the feature switches itself on only
+// once both halves are deployed.
+function engineInSync() {
+  return !!(lastView && lastView.engineRules && lastView.engineRules === Engine.RULES_VERSION);
+}
+
+// Mirrors engine.checkComplete's trigger condition, which is decidable from the
+// run alone: a non-King top card at the far end of the run's direction.
+function wouldCompleteRun(card, run) {
+  if (card.rank === 'K') return false;
+  let dir = run.direction;
+  if (!dir) {
+    if (run.cards.length === 0) dir = card.value === 1 ? 'up' : (card.value === 12 ? 'down' : null);
+    else {
+      const nexts = Engine.nextValuesForRun(run).filter(n => n.value === card.value);
+      dir = nexts.length ? nexts[0].dir : null;
+    }
+  }
+  return (dir === 'up' && card.value === 12) || (dir === 'down' && card.value === 1);
+}
+
+function canPredictPlay(card, zone, runIndex) {
+  if (optimisticOff || !engineInSync()) return false;
+  const v = shownView();
+  if (!v || v.status !== 'IN_ROUND' || !v.isYourTurn) return false;
+  if (card.rank === 'K') return false;
+  if (zone !== 'hand' && zone !== 'discard') return false;
+  if (v.brig && v.brig.active) return false;
+  if (!v.yourGoalCount) return false;
+  const run = v.runs[runIndex];
+  if (!run || !Engine.canPlayCardOnRun(card, run)) return false;
+  return !wouldCompleteRun(card, run);
+}
+
+// The non-King branch of engine.applyPlayCard, expressed against a view.
+// Returns false if the card is not where it was expected — which is how a
+// prediction that has been overtaken by real state gives up rather than
+// duplicating a card that has already moved.
+function applyPredictedPlay(v, cardId, runIndex) {
+  let card = null;
+  const hi = v.yourHand.findIndex(c => c.id === cardId);
+  if (hi >= 0) card = v.yourHand.splice(hi, 1)[0];
+  else {
+    for (const pile of v.yourPorts) {
+      if (pile.length && pile[pile.length - 1].id === cardId) { card = pile.pop(); break; }
+    }
+  }
+  const run = v.runs[runIndex];
+  if (!card || !run) return false;
+  if (run.cards.length === 0) {
+    if (card.value === 1) run.direction = 'up';
+    if (card.value === 12) run.direction = 'down';
+  } else if (!run.direction) {
+    const nexts = Engine.nextValuesForRun(run).filter(n => n.value === card.value);
+    if (nexts.length) run.direction = nexts[0].dir;
+  }
+  run.cards.push(card);
+  return true;
+}
+
+// Rebuilt from authoritative state every time, never patched incrementally, so
+// a confirmed play and a predicted one can never drift into disagreeing.
+function rebuildPredicted() {
+  if (!playQueue.length || !lastView) { predicted = null; return; }
+  const v = JSON.parse(JSON.stringify(lastView));
+  for (const a of playQueue) {
+    if (!applyPredictedPlay(v, a.cardId, a.runIndex)) { predicted = null; return; }
+  }
+  predicted = v;
+}
+
+async function drainQueue() {
+  if (draining) return;
+  draining = true;
+  try {
+    while (playQueue.length) {
+      const a = playQueue[0];
+      let res;
+      try {
+        res = await Api.submitAction({
+          roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+          action: { type: 'PLAY_CARD', cardId: a.cardId, runIndex: a.runIndex },
+          // Each send uses the version the PREVIOUS confirmation returned, so a
+          // burst of taps is a chain of compare-and-swaps rather than a race.
+          expectedVersion: lastView.stateVersion
+        });
+      } catch (e) {
+        Perf.finish(a.rec, 'server-rejected');
+        await reconcile(e.message);
+        return;
+      }
+      Perf.mark(a.rec, 'response');
+      Perf.finish(a.rec, 'accepted');
+      playQueue.shift();
+      applyView(res.view, 'action');
+    }
+    poller.kick();
+  } finally { draining = false; }
+}
+
+// A rejected prediction means the board on screen is not the board the server
+// has. Everything after it was predicted on top of a wrong assumption, so the
+// whole queue goes; authoritative state is re-fetched and repainted, and the
+// player is told plainly rather than left to notice a card moving back.
+async function reconcile(msg) {
+  playQueue.length = 0;
+  predicted = null;
+  resyncCount++;
+  Perf.counts.resyncs++;
+  Sfx.play('illegal');
+  showToast(msg ? msg + ' — board resynced.' : 'That play was refused — board resynced.');
+  try {
+    const v = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
+    lastView = v;
+  } catch (e) { /* the poller will catch up on its own */ }
+  // Repeated rejections mean the phone's rules and the server's disagree in a
+  // way the version check did not catch. Stop predicting for the session rather
+  // than keep showing plays that get taken back.
+  if (resyncCount >= MAX_RESYNCS) {
+    optimisticOff = true;
+    showToast('Switching to server-confirmed plays for the rest of this game.');
+  }
+  render(shownView(), 'reconcile');
+}
+
 // True while ANY action POST is outstanding, not just an optimistic run play.
 // pendingPlay alone covered only the run path, so a second tap on Draw or on a
 // Port sent a second request against the same expectedVersion: the server's
@@ -830,6 +1026,12 @@ let actionInFlight = false;
 // Every gameplay entry point checks this, rather than blanket pointer-events:none
 // on the board — the Menu, the Port fan and the rotate prompt must stay live.
 function inputLocked() { return pendingPlay !== null || actionInFlight; }
+
+// Anything that is NOT a predicted run play — a discard, a draw, a King, a play
+// from HOLD — must also stand aside while the predicted queue is draining, or
+// it would race the same expectedVersion the queue is chaining through. Selecting
+// a card is deliberately not covered: that is local and must stay instant.
+function nonPredictBlocked() { return inputLocked() || playQueue.length > 0 || draining; }
 
 // Wraps an action POST so the in-flight flag is always cleared, including on
 // the throw paths. Returns whatever the action returns.
@@ -997,12 +1199,12 @@ function renderPortFan() {
   const overlay = document.getElementById('portFanOverlay');
   // yourPorts is absent from a LOBBY view, so guard on it rather than on lastView
   // alone — a host reset can swap the view out while the fan is open.
-  if (fannedPort === null || !lastView || !lastView.yourPorts) {
+  if (fannedPort === null || !lastView || !shownView().yourPorts) {
     fannedPort = null;
     overlay.classList.add('hidden');
     return;
   }
-  const pile = lastView.yourPorts[fannedPort] || [];
+  const pile = shownView().yourPorts[fannedPort] || [];
   if (pile.length === 0) { fannedPort = null; overlay.classList.add('hidden'); return; }
   document.getElementById('portFanTitle').textContent = `Port ${fannedPort + 1} (${pile.length} card${pile.length === 1 ? '' : 's'})`;
   document.getElementById('portFanRow').innerHTML = pile.map((c, idx) => {
@@ -1034,7 +1236,7 @@ function paintSelection() {
 }
 
 function selectCard(zone, card, index) {
-  if (!lastView.isYourTurn) return;
+  if (!shownView().isYourTurn) return;
   if (inputLocked()) { noteBusyTap(); return; }
   // Picking a different card abandons any King direction question still on
   // screen — that question belongs to the card you were playing a moment ago.
@@ -1051,10 +1253,10 @@ function selectCard(zone, card, index) {
 // Mirrors window.portTap() in app/index.html: a Port tile is both the discard
 // target AND the way to pick a card back out of a Port to play it to a Run.
 function portTap(portIndex) {
-  if (!lastView.isYourTurn) return;
+  if (!shownView().isYourTurn) return;
   if (inputLocked()) { noteBusyTap(); return; }
   if (selected && selected.zone === 'hand') return discardTo(portIndex);
-  const pile = lastView.yourPorts[portIndex] || [];
+  const pile = shownView().yourPorts[portIndex] || [];
   const top = pile[pile.length - 1];
   if (top) return selectCard('discard', top, portIndex);
   showToast('Select a hand card first to discard here.');
@@ -1070,12 +1272,35 @@ async function attemptPlay(runIndex) {
   // sends two plays, and the second comes back as a version conflict — a
   // confusing "someone else already acted" for a solo player.
   if (!selected) return;
-  if (inputLocked()) { noteBusyTap(); return; }
+  const card = selected.card;
+  const zone = selected.zone;
+
+  // A predicted play does not wait on anything, so it is not gated by the
+  // in-flight lock — that lock exists to stop two requests racing the same
+  // expectedVersion, and the queue serialises them instead. It must still stand
+  // aside for a NON-predicted action already in flight.
+  if (canPredictPlay(card, zone, runIndex) && !inputLocked()) {
+    const rec = Perf.startAction('play-predicted');
+    selected = null;
+    playQueue.push({ id: ++actionSeq, cardId: card.id, runIndex, rec });
+    Perf.counts.predicted++;
+    rebuildPredicted();
+    Sfx.play('place');
+    render(shownView(), 'predict');
+    Perf.mark(rec, 'feedback');
+    Perf.mark(rec, 'rendered');   // the card is on the run NOW, not after the server agrees
+    Perf.mark(rec, 'request');
+    drainQueue();
+    return;
+  }
+
+  // Everything else keeps the original behaviour: one action at a time, and the
+  // board waits for the server before it changes.
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
   // Opened AFTER the lock check, so a refused tap is counted by noteBusyTap()
   // rather than becoming a timing row with nothing behind it.
-  const rec = Perf.startAction(selected.card.rank === 'K' ? 'play-king' : 'play');
-  const card = selected.card;
-  const run = lastView.runs[runIndex];
+  const rec = Perf.startAction(card.rank === 'K' ? 'play-king' : 'play');
+  const run = shownView().runs[runIndex];
   if (!Engine.canPlayCardOnRun(card, run)) {
     Perf.finish(rec, 'illegal-local');
     Sfx.play('illegal'); showToast('Illegal play.'); return;
@@ -1171,7 +1396,7 @@ async function sendPlay(cardId, runIndex, kingChoice, rec) {
     Sfx.play('illegal');
     showToast(e.message);
     selected = null;
-    render(lastView);
+    render(shownView());
   }
 }
 
@@ -1179,7 +1404,7 @@ async function discardTo(portIndex) {
   if (!selected || selected.zone !== 'hand') { Sfx.play('illegal'); showToast('Select a card from your hand first.'); return; }
   // Discard had no in-flight guard at all: a double-tap on a Port fired two
   // POSTs, and the loser came back as "someone else already acted".
-  if (inputLocked()) { noteBusyTap(); return; }
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
   try {
     const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
@@ -1200,7 +1425,7 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
   // Draw is not itself optimistic (requirement 8), but it must not fire while a
   // play is in flight — it would race the same expectedVersion and lose. Since
   // actionInFlight now covers draws too, this also stops Draw racing ITSELF.
-  if (inputLocked()) { noteBusyTap(); return; }
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
   try {
     const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
@@ -1494,6 +1719,11 @@ function applyView(view, cause) {
     && lastView.status === view.status;
 
   lastView = view;
+  // Predictions are re-derived from the new authoritative state, never carried
+  // forward as patches. A play the server has now confirmed drops out of the
+  // queue naturally; one that has been overtaken makes rebuildPredicted give up
+  // and fall back to authoritative state rather than show a duplicate card.
+  rebuildPredicted();
 
   if (unchanged) { Perf.counts.rendersSuppressed++; Perf.bump(cause, 'skipped'); return; }
 
@@ -1508,7 +1738,7 @@ function applyView(view, cause) {
     return;
   }
 
-  render(view, cause);
+  render(shownView(), cause);
 }
 
 async function poll() {
@@ -1560,7 +1790,7 @@ const MODE_KEY = 'salty-display-mode';
 function displayMode() { return localStorage.getItem(MODE_KEY) || 'couch'; }
 function setDisplayMode(m) {
   localStorage.setItem(MODE_KEY, m);
-  if (lastView) render(lastView);
+  if (lastView) render(shownView());
 }
 
 // ---- Menu -------------------------------------------------------------------
