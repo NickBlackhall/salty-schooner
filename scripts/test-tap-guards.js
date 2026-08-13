@@ -137,9 +137,15 @@ const CASES = [
 
   // The old build comes straight out of git, so "before" is the real committed
   // code and not a hand-made approximation of it.
+  //
+  // PINNED, deliberately, to the commit before the guards landed. HEAD is wrong
+  // here — the moment the fix is committed, HEAD carries it, "OLD" becomes the
+  // fixed build, every case passes and the test quietly stops proving anything.
+  // That is exactly what happened the first time this was run after committing.
+  const BASELINE = process.env.BASELINE || 'a7a00b7';
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schooner-old-'));
   const oldFile = path.join(tmp, 'play.html');
-  fs.writeFileSync(oldFile, execFileSync('git', ['show', 'HEAD:app/play.html'],
+  fs.writeFileSync(oldFile, execFileSync('git', ['show', BASELINE + ':app/play.html'],
     { cwd: path.join(__dirname, '..'), maxBuffer: 1 << 26 }));
 
   const results = {};

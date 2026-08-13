@@ -578,6 +578,13 @@ const Perf = {
   renders: [],
   seq: 0,
   counts: { pointerDown: 0, click: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0 },
+  // Renders split by what asked for them, and every poll tagged with whether
+  // the doorbell was live at the time. Without this it is impossible to tell a
+  // screen sitting on the 45s safety net from one that has silently fallen back
+  // to fast polling — which changes the diagnosis completely, and is the
+  // difference between "rebuilds are rare" and "rebuilds are constant".
+  byCause: {},
+  polls: { live: 0, down: 0 },
   device: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse',
   now() { return performance.now(); },
   cap(a) { if (a.length > this.MAX) a.splice(0, a.length - this.MAX); },
@@ -593,7 +600,16 @@ const Perf = {
   },
   mark(rec, name) { if (rec) rec.t[name] = this.now(); },
   finish(rec, outcome) { if (rec) { rec.outcome = outcome; rec.t.done = this.now(); } },
-  noteRender(ms, deferred) { this.renders.push({ ms, deferred: !!deferred }); this.cap(this.renders); },
+  bump(cause, kind) {
+    const k = cause || 'unknown';
+    (this.byCause[k] || (this.byCause[k] = { drawn: 0, skipped: 0 }))[kind]++;
+  },
+  noteRender(ms, cause) {
+    this.renders.push({ ms, cause: cause || 'unknown' });
+    this.cap(this.renders);
+    this.bump(cause, 'drawn');
+  },
+  notePoll(live) { this.polls[live ? 'live' : 'down']++; },
 
   // Suspect (2) leaves a specific fingerprint: a pointerdown on the board with
   // no click behind it. Counted apart from swallowed taps (suspect 1), which DO
@@ -645,7 +661,10 @@ const Perf = {
       + ` (unmatched ${s.counts.unmatchedDowns})\n`
       + `taps refused while busy: ${s.counts.swallowed}\n`
       + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
-      + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n\n`
+      + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
+      + `polls while realtime live: ${this.polls.live}, while down: ${this.polls.down}\n`
+      + 'by cause: ' + (Object.keys(this.byCause).map(k =>
+          `${k} ${this.byCause[k].drawn}drawn/${this.byCause[k].skipped}skipped`).join(', ') || '—') + '\n\n'
       + s.ms.map(r => `${r.metric}  n=${r.n}  p50 ${n(r.p50)}  p75 ${n(r.p75)}  p95 ${n(r.p95)}`).join('\n');
   }
 };
@@ -665,15 +684,34 @@ window.Perf = Perf;   // so a desktop console can reach it too
 // arrived, and coalescing keeps this from queueing up work.
 let pointerActive = false;
 let renderPending = false;
+let pendingCause = null;
 let pointerGuardTimer = null;
+let flushGraceTimer = null;
+// What triggered the next fetch, so a render can be attributed to a doorbell
+// pulse rather than to the timer. Reset to 'timer' each time it is consumed.
+let nextPollCause = 'timer';
 // Nothing may freeze the board indefinitely. A pointer that never reports its
 // release (capture lost to a system gesture, a tab switched mid-touch) would
 // otherwise hold every render forever, which is a far worse bug than the one
 // this guard fixes.
 const POINTER_GUARD_MAX_MS = 1000;
+// How long to keep holding after a release that produces NO click — a drag, a
+// scroll, a press on bare board. Sized for mobile Safari, where the click after
+// a touch can be dispatched in a LATER task than pointerup rather than beside
+// it: a setTimeout(0) flush would beat that click and destroy the element,
+// which is the exact bug this guard exists to prevent. Real taps do not wait
+// this out — they flush on their own click, below.
+const FLUSH_GRACE_MS = 350;
+// One definition of "a thing you can tap", used for both the pointerdown and
+// the click counter. Counting different sets on each side would make the
+// unmatched-pointerdown figure meaningless — a click on bare board would cancel
+// out a genuinely lost tap on a card.
+const TAP_TARGETS = '[data-run],[data-id],[data-port],[data-jb],#holdTop';
 
 function beginGesture() {
   pointerActive = true;
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = null;
   clearTimeout(pointerGuardTimer);
   pointerGuardTimer = setTimeout(() => endGesture(true), POINTER_GUARD_MAX_MS);
 }
@@ -683,19 +721,24 @@ function endGesture(fromTimeout) {
   pointerActive = false;
   clearTimeout(pointerGuardTimer);
   pointerGuardTimer = null;
-  // setTimeout(0), NOT a direct call. pointerup and click are dispatched back to
-  // back within the same task, so flushing here would still replace the node
-  // before click fires — precisely the bug being guarded against. Yielding once
-  // lets click dispatch, and lets the synchronous part of the action handler
-  // (which paints the optimistic feedback) run, before the DOM is rebuilt.
-  if (fromTimeout) flushDeferredRender();
-  else setTimeout(flushDeferredRender, 0);
+  // The safety timeout fires between tasks by definition, so it cannot land in
+  // the pointerup→click gap and may draw at once.
+  if (fromTimeout) { flushDeferredRender(); return; }
+  // A normal release waits for the click it is about to produce (see
+  // FLUSH_GRACE_MS). The click handler below flushes as soon as it arrives, so
+  // this timer only ever pays out for gestures that were not taps.
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = setTimeout(flushDeferredRender, FLUSH_GRACE_MS);
 }
 
 function flushDeferredRender() {
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = null;
   if (pointerActive || !renderPending) return;
   renderPending = false;
-  if (lastView) render(lastView);
+  const cause = pendingCause;
+  pendingCause = null;
+  if (lastView) render(lastView, (cause ? cause + '+' : '') + 'deferred');
 }
 
 // Bound once, on the persistent container — #gameUi itself is never rebuilt,
@@ -703,10 +746,16 @@ function flushDeferredRender() {
 // stops propagation (the Port badge does).
 const gameUiEl = document.getElementById('gameUi');
 gameUiEl.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('[data-run],[data-id],[data-port],[data-jb],#holdTop')) Perf.noteDown();
+  if (e.target.closest(TAP_TARGETS)) Perf.noteDown();
   beginGesture();
 }, true);
-gameUiEl.addEventListener('click', () => Perf.noteClick(), true);
+gameUiEl.addEventListener('click', (e) => {
+  if (e.target.closest(TAP_TARGETS)) Perf.noteClick();
+  // Capture phase runs BEFORE the card's own handler, so yielding one task lets
+  // that handler finish — and paint its optimistic feedback — before the board
+  // is rebuilt underneath it.
+  setTimeout(flushDeferredRender, 0);
+}, true);
 // pointerup can land outside the element — or outside the window — so the
 // release is watched on the document, not on #gameUi.
 document.addEventListener('pointerup', () => endGesture(false), true);
@@ -867,7 +916,10 @@ const doorbell = createDoorbell({
   // A real pulse means a human played, so it may restart a paused screen. The
   // visibility nudge is machinery and routes to refresh(), which no-ops when
   // stopped — otherwise a phone waking in a pocket revives a dead game.
-  onChange: (version, meta) => (meta && meta.programmatic) ? poller.refresh() : poller.wake(),
+  onChange: (version, meta) => {
+    nextPollCause = (meta && meta.programmatic) ? 'visibility' : 'doorbell';
+    return (meta && meta.programmatic) ? poller.refresh() : poller.wake();
+  },
   // Recompute the delay on a connection change, so losing the socket restores
   // fast polling rather than waiting out one more 45s safety-net tick.
   //
@@ -1104,7 +1156,7 @@ async function sendPlay(cardId, runIndex, kingChoice, rec) {
     // re-apply — the authoritative view already has the card in the run.
     clearPendingPlay();
     if (!wasOptimistic) Sfx.play('place');
-    applyView(res.view);
+    applyView(res.view, 'action');
     // applyView can defer the draw if a finger is still down; that is rare this
     // late in a play and is counted separately as rendersDeferred, so read this
     // mark as "the board was told", not always "pixels changed".
@@ -1136,7 +1188,7 @@ async function discardTo(portIndex) {
     }));
     selected = null;
     Sfx.play('discard');
-    applyView(res.view);
+    applyView(res.view, 'action');
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
     Sfx.play('illegal');
@@ -1156,7 +1208,7 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
       expectedVersion: lastView.stateVersion
     }));
     Sfx.play('ui');
-    applyView(res.view);
+    applyView(res.view, 'action');
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) { Sfx.play('illegal'); showToast(e.message); }
 });
@@ -1243,10 +1295,10 @@ async function doReset() {
 // Timing wrapper. render() is called from a dozen places; measuring it here
 // rather than at each call site is what makes "is the rebuild itself expensive,
 // or is it only expensive when it collides with a touch?" answerable.
-function render(view) {
+function render(view, cause) {
   const t0 = Perf.now();
   try { renderImpl(view); }
-  finally { Perf.noteRender(Perf.now() - t0); }
+  finally { Perf.noteRender(Perf.now() - t0, cause || 'other'); }
 }
 
 function renderImpl(view) {
@@ -1416,7 +1468,7 @@ function renderImpl(view) {
   paintPending();
 }
 
-function applyView(view) {
+function applyView(view, cause) {
   // Drop a view that is older than what we already show. A poll GET issued just
   // before an action's POST commits will answer with pre-action state and arrive
   // afterwards, briefly reverting the board — your card visibly jumps back into
@@ -1443,20 +1495,29 @@ function applyView(view) {
 
   lastView = view;
 
-  if (unchanged) { Perf.counts.rendersSuppressed++; return; }
+  if (unchanged) { Perf.counts.rendersSuppressed++; Perf.bump(cause, 'skipped'); return; }
 
   // A real change, but a finger is on the board: hold it. Only the newest view
   // matters, so this is a flag rather than a queue — flushDeferredRender()
-  // draws whatever lastView has become by the time the gesture ends.
-  if (pointerActive) { renderPending = true; Perf.counts.rendersDeferred++; return; }
+  // draws whatever lastView has become by the time the gesture ends, which is
+  // also why a later action response cannot be overtaken by an earlier poll.
+  if (pointerActive) {
+    renderPending = true;
+    pendingCause = cause;
+    Perf.counts.rendersDeferred++;
+    return;
+  }
 
-  render(view);
+  render(view, cause);
 }
 
 async function poll() {
   try {
     const view = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
-    applyView(view);
+    Perf.notePoll(doorbell.isLive());
+    const cause = nextPollCause;
+    nextPollCause = 'timer';
+    applyView(view, 'poll:' + cause);
     // Signature the poller compares to decide whether anything actually moved.
     // LOBBY views carry no stateVersion, hence the status fallback.
     return (view.status || '') + ':' + (view.stateVersion == null ? '' : view.stateVersion);
