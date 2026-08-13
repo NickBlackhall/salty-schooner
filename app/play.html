@@ -951,10 +951,25 @@ function applyPredictedPlay(v, cardId, runIndex) {
 
 // Rebuilt from authoritative state every time, never patched incrementally, so
 // a confirmed play and a predicted one can never drift into disagreeing.
+//
+// The subtle case this has to survive: a poll can land carrying a play the
+// server has ALREADY committed while that play is still sitting in the queue
+// waiting for its own response. Replaying it would then fail to find the card
+// (it is no longer in hand), and treating that as "give up on predicting" would
+// throw away every LATER prediction too — the board would visibly snap
+// backwards, undoing a card the player already saw land. So an action that is
+// already reflected in authoritative state is skipped, not treated as a
+// failure; only a genuinely unreplayable queue falls back.
+function alreadyApplied(v, a) {
+  const run = v.runs[a.runIndex];
+  return !!(run && run.cards.some(c => c.id === a.cardId));
+}
+
 function rebuildPredicted() {
   if (!playQueue.length || !lastView) { predicted = null; return; }
   const v = JSON.parse(JSON.stringify(lastView));
   for (const a of playQueue) {
+    if (alreadyApplied(v, a)) continue;
     if (!applyPredictedPlay(v, a.cardId, a.runIndex)) { predicted = null; return; }
   }
   predicted = v;

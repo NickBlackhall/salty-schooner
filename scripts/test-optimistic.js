@@ -86,6 +86,8 @@ async function boot(browser, tweak) {
       return new Promise((resolve, reject) => window.__pending.push({ resolve, reject }));
     };
     Api.getPlayerState = () => Promise.resolve(window.__resyncView || v);
+    // A pristine copy of the opening state, for replaying a stale poll later.
+    window.VIEW_SNAPSHOT = JSON.parse(JSON.stringify(v));
     lastView = v;
     render(v);
   }, view);
@@ -213,6 +215,67 @@ async function versionMismatchDisables(page) {
   return { pass: predicted === 0 && sent === 1, detail: `predicted=${predicted} sent=${sent}` };
 }
 
+// A stale poll landing between two predictions must not undo either of them.
+// Sequence: predict A, predict B, an OLD authoritative view arrives, then A
+// confirms, then B confirms. The run must only ever grow.
+async function stalePollDoesNotSnapBack(page) {
+  await tapCard(page, '1'); await tapRun(page, 0);      // A: 8♠
+  await page.waitForTimeout(40);
+  await tapCard(page, '2'); await tapRun(page, 0);      // B: 9♥
+  await page.waitForTimeout(40);
+  const afterPredict = await runLen(page, 0);
+
+  // A poll answering with PRE-play state, arriving late.
+  await page.evaluate(() => applyView(JSON.parse(JSON.stringify(window.VIEW_SNAPSHOT)), 'poll:timer'));
+  const afterStalePoll = await runLen(page, 0);
+
+  // Now A's own response lands, carrying A but not yet B.
+  await page.evaluate(() => {
+    const v = JSON.parse(JSON.stringify(lastView));
+    v.stateVersion = 43;
+    v.yourHand = v.yourHand.filter(c => c.id !== '1');
+    v.runs[0].cards.push({ id: '1', rank: '8', suit: '♠', value: 8 });
+    window.__pending.shift().resolve({ view: v });
+  });
+  await page.waitForTimeout(150);
+  const afterA = await runLen(page, 0);
+  const topAfterA = await runTop(page, 0);
+
+  return {
+    pass: afterPredict === 5 && afterStalePoll === 5 && afterA === 5 && topAfterA === '9♥',
+    detail: `predicted=${afterPredict} afterStalePoll=${afterStalePoll} afterAconfirm=${afterA} top=${topAfterA}`
+  };
+}
+
+// Playing the LAST hand card. The engine does not auto-refill (build 14 removed
+// that; drawing is an explicit DRAW_HAND action), so this is safe to predict —
+// but the draw allowance is computed server-side, so the Draw button must stay
+// hidden until the server says so rather than being guessed at.
+async function lastHandCardIsSafe(page) {
+  for (const id of ['1', '2', '3', '4']) {              // empty the hand down to one
+    await page.evaluate(id => {
+      lastView.yourHand = lastView.yourHand.filter(c => c.id !== id);
+      render(lastView);
+    }, id);
+  }
+  await page.waitForTimeout(50);
+  const handBefore = await handCards(page);
+  await page.evaluate(() => {
+    // leave a single legal card: 8♠ onto run 0
+    lastView.yourHand = [{ id: '1', rank: '8', suit: '♠', value: 8 }];
+    render(lastView);
+  });
+  await tapCard(page, '1'); await tapRun(page, 0);
+  await page.waitForTimeout(80);
+  const predictedCount = await page.evaluate(() => Perf.counts.predicted);
+  const handAfter = await handCards(page);
+  const drawShown = await page.evaluate(() =>
+    !document.getElementById('drawBtn').classList.contains('hidden'));
+  // Predicted, hand visibly empty, and NO draw offer invented locally.
+  return { pass: predictedCount === 1 && handAfter === 0 && drawShown === false,
+           detail: `handBefore=${handBefore} predicted=${predictedCount} handAfter=${handAfter} drawButtonShown=${drawShown}` };
+}
+
 const CASES = [
   ['lands before server',      landsBeforeServer,        null,
     'the card is on the run while the request is still outstanding'],
@@ -231,7 +294,11 @@ const CASES = [
   ['jailbreak excluded',       emptyHoldNotPredicted,    v => { v.brig.active = true; v.brig.releasedKings = [card(301,'K','♦')]; return v; },
     'an active Jailbreak waits for the server'],
   ['version mismatch',         versionMismatchDisables,  v => { v.engineRules = 'something-else'; return v; },
-    'a client on different rules never predicts']
+    'a client on different rules never predicts'],
+  ['stale poll mid-queue',     stalePollDoesNotSnapBack, null,
+    'an old poll between two predictions never undoes them'],
+  ['last hand card',           lastHandCardIsSafe,       null,
+    'emptying the hand predicts, and invents no draw offer']
 ];
 
 (async () => {
