@@ -553,6 +553,166 @@ let selected = null; // {zone, card, index}
 let lastView = null;
 let fannedPort = null; // index of the Port currently spread open, or null
 
+// ---- Instrumentation --------------------------------------------------------
+// Added 2026-08-13 to settle with numbers, not theory, why taps feel laggy and
+// inconsistent — and worse on a phone than on a desktop. Three suspects were on
+// the table, they need different fixes, so they have to be measured APART:
+//   1. the input lock refusing a tap that arrives while a request is in flight
+//      (produces a click that inputLocked() then drops),
+//   2. a full-board innerHTML rebuild replacing the card element BETWEEN a touch
+//      going down and coming up, which loses the tap before a click ever fires,
+//   3. plain network/server latency before the card appears in the run.
+//
+// Client durations only ever subtract two performance.now() readings from the
+// SAME clock. Server-side timings are reported separately and never differenced
+// against client time: the clocks are unrelated, and subtracting them gives a
+// number that looks precise and means nothing.
+//
+// Percentiles, not averages: the complaint is intermittent, so the tail is the
+// whole story and a mean hides it.
+//
+// A phone has no console, which is where this has to be read — Menu → Timings.
+const Perf = {
+  MAX: 400,
+  actions: [],
+  renders: [],
+  seq: 0,
+  counts: { pointerDown: 0, click: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0 },
+  device: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse',
+  now() { return performance.now(); },
+  cap(a) { if (a.length > this.MAX) a.splice(0, a.length - this.MAX); },
+
+  // One row per attempted play, carrying a unique id. The id is what lets a
+  // response be matched to the tap that caused it rather than to whatever
+  // happens to be in flight when it lands, and what would make a duplicate or
+  // retried send identifiable if the optimistic queue is built later.
+  startAction(kind) {
+    const rec = { id: ++this.seq, kind, device: this.device, outcome: 'pending', t: { tap: this.now() } };
+    this.actions.push(rec); this.cap(this.actions);
+    return rec;
+  },
+  mark(rec, name) { if (rec) rec.t[name] = this.now(); },
+  finish(rec, outcome) { if (rec) { rec.outcome = outcome; rec.t.done = this.now(); } },
+  noteRender(ms, deferred) { this.renders.push({ ms, deferred: !!deferred }); this.cap(this.renders); },
+
+  // Suspect (2) leaves a specific fingerprint: a pointerdown on the board with
+  // no click behind it. Counted apart from swallowed taps (suspect 1), which DO
+  // click and are then refused. Drags and scrolls also land here, so read the
+  // gap as an upper bound and compare it before/after the render guard rather
+  // than treating a nonzero value as proof on its own.
+  noteDown() { this.counts.pointerDown++; },
+  noteClick() { this.counts.click++; },
+  noteSwallowed() { this.counts.swallowed++; },
+
+  pct(arr, p) {
+    if (!arr.length) return null;
+    const s = arr.slice().sort((a, b) => a - b);
+    return Math.round(s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]);
+  },
+  spans() {
+    // Kings only — 'play-king' — are excluded: their path opens a direction
+    // modal, so tap→feedback would be measuring how long a human took to decide
+    // and would swamp every percentile here.
+    const ok = this.actions.filter(a => a.outcome === 'accepted' && a.kind === 'play');
+    const pick = fn => ok.map(fn).filter(v => typeof v === 'number' && isFinite(v) && v >= 0);
+    return {
+      feedback: pick(a => a.t.feedback - a.t.tap),
+      inRun:    pick(a => a.t.rendered - a.t.tap),
+      network:  pick(a => a.t.response - a.t.request),
+      locked:   pick(a => a.t.done - a.t.tap)
+    };
+  },
+  summary() {
+    const s = this.spans();
+    const row = (m, arr) => ({ metric: m, n: arr.length, p50: this.pct(arr, 50), p75: this.pct(arr, 75), p95: this.pct(arr, 95) });
+    return {
+      device: this.device,
+      counts: Object.assign({ unmatchedDowns: this.counts.pointerDown - this.counts.click }, this.counts),
+      ms: [
+        row('tap→feedback', s.feedback),
+        row('tap→card in run', s.inRun),
+        row('request→response', s.network),
+        row('tap→input unlocked', s.locked),
+        row('render duration', this.renders.map(r => r.ms))
+      ]
+    };
+  },
+  text() {
+    const s = this.summary();
+    const n = v => (v == null ? '—' : v + 'ms');
+    return `device: ${s.device}\n`
+      + `pointerdowns ${s.counts.pointerDown} / clicks ${s.counts.click}`
+      + ` (unmatched ${s.counts.unmatchedDowns})\n`
+      + `taps refused while busy: ${s.counts.swallowed}\n`
+      + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
+      + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n\n`
+      + s.ms.map(r => `${r.metric}  n=${r.n}  p50 ${n(r.p50)}  p75 ${n(r.p75)}  p95 ${n(r.p95)}`).join('\n');
+  }
+};
+window.Perf = Perf;   // so a desktop console can reach it too
+
+// ---- Gesture-safe rendering -------------------------------------------------
+// render() replaces the runs, hand, Ports, HOLD and Brig via innerHTML and
+// rebinds every listener. Every gameplay tap target is bound with 'click', and a
+// click only fires when the press and the release resolve to the same element —
+// so a render landing between a finger going down and coming up DESTROYS the
+// element the press landed on and the tap is lost outright. No CPU slowness is
+// needed to produce this; it is pure DOM timing, and a touch is held longer than
+// a mouse click, which is why a phone would feel it more than a desktop.
+//
+// So: while a pointer is down on the board, hold renders. Only the NEWEST view
+// is kept — an older one that never got drawn has no value once a newer one has
+// arrived, and coalescing keeps this from queueing up work.
+let pointerActive = false;
+let renderPending = false;
+let pointerGuardTimer = null;
+// Nothing may freeze the board indefinitely. A pointer that never reports its
+// release (capture lost to a system gesture, a tab switched mid-touch) would
+// otherwise hold every render forever, which is a far worse bug than the one
+// this guard fixes.
+const POINTER_GUARD_MAX_MS = 1000;
+
+function beginGesture() {
+  pointerActive = true;
+  clearTimeout(pointerGuardTimer);
+  pointerGuardTimer = setTimeout(() => endGesture(true), POINTER_GUARD_MAX_MS);
+}
+
+function endGesture(fromTimeout) {
+  if (!pointerActive) return;
+  pointerActive = false;
+  clearTimeout(pointerGuardTimer);
+  pointerGuardTimer = null;
+  // setTimeout(0), NOT a direct call. pointerup and click are dispatched back to
+  // back within the same task, so flushing here would still replace the node
+  // before click fires — precisely the bug being guarded against. Yielding once
+  // lets click dispatch, and lets the synchronous part of the action handler
+  // (which paints the optimistic feedback) run, before the DOM is rebuilt.
+  if (fromTimeout) flushDeferredRender();
+  else setTimeout(flushDeferredRender, 0);
+}
+
+function flushDeferredRender() {
+  if (pointerActive || !renderPending) return;
+  renderPending = false;
+  if (lastView) render(lastView);
+}
+
+// Bound once, on the persistent container — #gameUi itself is never rebuilt,
+// only its children are. Capture phase so this is seen even if a handler below
+// stops propagation (the Port badge does).
+const gameUiEl = document.getElementById('gameUi');
+gameUiEl.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('[data-run],[data-id],[data-port],[data-jb],#holdTop')) Perf.noteDown();
+  beginGesture();
+}, true);
+gameUiEl.addEventListener('click', () => Perf.noteClick(), true);
+// pointerup can land outside the element — or outside the window — so the
+// release is watched on the document, not on #gameUi.
+document.addEventListener('pointerup', () => endGesture(false), true);
+document.addEventListener('pointercancel', () => endGesture(false), true);
+window.addEventListener('blur', () => endGesture(true));
+
 // ---- Optimistic play feedback ----------------------------------------------
 // A play costs a ~300ms server round-trip that no amount of tuning removes (the
 // DB work measured as a rounding error; it is invocation and network), so the
@@ -640,6 +800,7 @@ async function withActionLock(fn) {
 let busyTaps = 0;
 let busyTapTimer = null;
 function noteBusyTap() {
+  Perf.noteSwallowed();
   Sfx.play('ui');                     // soft cue, NOT 'illegal' — nothing is wrong
   busyTaps++;
   if (busyTaps >= 2) showToast('Still working on your last move…');
@@ -858,9 +1019,15 @@ async function attemptPlay(runIndex) {
   // confusing "someone else already acted" for a solo player.
   if (!selected) return;
   if (inputLocked()) { noteBusyTap(); return; }
+  // Opened AFTER the lock check, so a refused tap is counted by noteBusyTap()
+  // rather than becoming a timing row with nothing behind it.
+  const rec = Perf.startAction(selected.card.rank === 'K' ? 'play-king' : 'play');
   const card = selected.card;
   const run = lastView.runs[runIndex];
-  if (!Engine.canPlayCardOnRun(card, run)) { Sfx.play('illegal'); showToast('Illegal play.'); return; }
+  if (!Engine.canPlayCardOnRun(card, run)) {
+    Perf.finish(rec, 'illegal-local');
+    Sfx.play('illegal'); showToast('Illegal play.'); return;
+  }
   if (card.rank === 'K') {
     let choices;
     if (!run.direction) {
@@ -873,14 +1040,15 @@ async function attemptPlay(runIndex) {
     // moment a choice was tapped, so changing selection while the question was
     // on screen answered it with the wrong card — committing a King and then
     // touching a hand card played the hand card instead, King untouched.
-    showChoiceBar(choices, (choice) => sendPlay(card.id, runIndex, { value: choice.value, dir: choice.dir }));
+    showChoiceBar(choices, (choice) => sendPlay(card.id, runIndex, { value: choice.value, dir: choice.dir }, rec));
     return;
   }
   // Non-King, already checked legal by the same engine the server runs: give the
   // feedback now, then send. Kings above deliberately skip this — they go
   // through a modal, so there is no unanswered tap to cover.
   beginPendingPlay(card.id, runIndex);
-  sendPlay(card.id, runIndex, undefined);
+  Perf.mark(rec, 'feedback');
+  sendPlay(card.id, runIndex, undefined, rec);
 }
 
 // ---- Modal ------------------------------------------------------------------
@@ -919,24 +1087,32 @@ function showChoiceBar(choices, onPick) {
   );
 }
 
-async function sendPlay(cardId, runIndex, kingChoice) {
+async function sendPlay(cardId, runIndex, kingChoice, rec) {
   // Whether the tap already got its feedback. The King path does not call
   // beginPendingPlay, so it still needs the sound on success.
   const wasOptimistic = pendingPlay !== null;
   try {
+    Perf.mark(rec, 'request');
     const res = await withActionLock(() => Api.submitAction({
       roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
       action: { type: 'PLAY_CARD', cardId, runIndex, kingChoice },
       expectedVersion: lastView.stateVersion
     }));
+    Perf.mark(rec, 'response');
     selected = null;
     // Cleared BEFORE applyView so render()'s paintPending has nothing to
     // re-apply — the authoritative view already has the card in the run.
     clearPendingPlay();
     if (!wasOptimistic) Sfx.play('place');
     applyView(res.view);
+    // applyView can defer the draw if a finger is still down; that is rare this
+    // late in a play and is counted separately as rendersDeferred, so read this
+    // mark as "the board was told", not always "pixels changed".
+    Perf.mark(rec, 'rendered');
+    Perf.finish(rec, 'accepted');
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
+    Perf.finish(rec, 'server-rejected');
     // Requirement 6: fall back to the untouched authoritative view. Nothing was
     // faked, so this is just a repaint — the faded card comes back where it was.
     clearPendingPlay();
@@ -1064,7 +1240,16 @@ async function doReset() {
   } catch (e) { showToast(e.message); }
 }
 
+// Timing wrapper. render() is called from a dozen places; measuring it here
+// rather than at each call site is what makes "is the rebuild itself expensive,
+// or is it only expensive when it collides with a touch?" answerable.
 function render(view) {
+  const t0 = Perf.now();
+  try { renderImpl(view); }
+  finally { Perf.noteRender(Perf.now() - t0); }
+}
+
+function renderImpl(view) {
   // A LOBBY response is getLobbyView, not getPlayerView — no hand, HOLD or
   // Ports — so the board code below would throw on view.yourHand.map(...).
   // This is also the state a host reset drops everyone into mid-game.
@@ -1242,7 +1427,29 @@ function applyView(view) {
       && view.stateVersion < lastView.stateVersion) {
     return;
   }
+
+  // An UNCHANGED poll used to rebuild the entire board anyway. On your own turn
+  // that is a full innerHTML replacement of the runs, hand, Ports, HOLD and Brig
+  // roughly every 1.2s, forever, whether or not anything moved — wasted work at
+  // best, and at worst a rebuild landing in the middle of a touch (see the
+  // gesture guard above). Skip only the DRAW; the view itself is still adopted,
+  // because a same-version response can still carry fields the board does not
+  // paint, and dropping it wholesale would throw those away.
+  const unchanged = lastView
+    && typeof lastView.stateVersion === 'number'
+    && typeof view.stateVersion === 'number'
+    && view.stateVersion === lastView.stateVersion
+    && lastView.status === view.status;
+
   lastView = view;
+
+  if (unchanged) { Perf.counts.rendersSuppressed++; return; }
+
+  // A real change, but a finger is on the board: hold it. Only the newest view
+  // matters, so this is a flag rather than a queue — flushDeferredRender()
+  // draws whatever lastView has become by the time the gesture ends.
+  if (pointerActive) { renderPending = true; Perf.counts.rendersDeferred++; return; }
+
   render(view);
 }
 
@@ -1317,6 +1524,7 @@ function openMenu() {
       <button id="mCouch" class="${mode === 'couch' ? '' : 'secondary'}">Couch mode</button>
       <button id="mRemote" class="${mode === 'remote' ? '' : 'secondary'}">Remote mode</button>
       <button id="mSound" class="secondary">Sound: ${soundOn() ? 'on' : 'off'}</button>
+      <button id="mTimings" class="secondary">Timings</button>
     </div>
     <p class="meta" style="font-size:1.6dvh;margin-top:1dvh;">
       Couch mode hides the shared board because the TV is showing it.
@@ -1342,9 +1550,28 @@ function openMenu() {
     hideChoiceBar();
     openMenu();   // reopen so the label reflects the new state
   });
+  on('mTimings', () => { hideChoiceBar(); showTimings(); });
   on('mNextRound', () => { hideChoiceBar(); advanceRound(false, v); });
   on('mReset', () => { hideChoiceBar(); doReset(); });
   on('mAdmin', () => { location.href = '/admin'; });
+}
+// The whole point of the instrumentation is the PHONE, which has no console —
+// so the numbers have to be readable on the device that has the problem, and
+// copyable off it afterwards.
+function showTimings() {
+  showModal('Timings',
+    '<pre style="white-space:pre-wrap;font-size:1.5dvh;line-height:1.5;text-align:left;">'
+      + Perf.text() + '</pre>',
+    [{ label: 'Copy', action: copyTimings }, { label: 'Close', secondary: true }]);
+}
+function copyTimings() {
+  const txt = Perf.text() + '\n\n' + JSON.stringify(Perf.summary(), null, 2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt)
+      .then(() => showToast('Timings copied'), () => showToast('Could not copy'));
+  } else {
+    showToast('Clipboard unavailable here');
+  }
 }
 document.getElementById('menuBtn').addEventListener('click', openMenu);
 // setDisplayMode re-renders, and render() disarms the prompt in remote mode, so
