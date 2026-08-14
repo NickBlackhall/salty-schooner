@@ -248,6 +248,11 @@
                                    gap. This still tapers to zero at 320x568. */
                                 --remote-dock-lift:clamp(0px,calc(19.93dvh - 113.2px),90px);
                                 --remote-private-gap:clamp(2px,calc(2.17dvh - 10.3px),8px);
+                                /* The taller opponent rail contributes 15px of
+                                   the requested table movement at 390x844; this
+                                   remaining 5px makes the net move 20px. */
+                                --remote-table-nudge:clamp(0px,calc(1.81dvh - 10.3px),5px);
+                                --remote-opp-pad-grow:clamp(3px,calc(1.63dvh - 6.25px),7.5px);
                                 /* 30px off each side at 390w; no trim at 320w,
                                    where five 44px targets already fill the row. */
                                 --remote-hand-trim:clamp(0px,calc(85.7vw - 274.2px),60px);
@@ -314,6 +319,9 @@
   }
   #gameUi[data-mode="remote"][data-jailbreak="none"] .playfield {
     padding-top:var(--remote-stack-shift);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="none"] .tiltStage {
+    transform:translateY(var(--remote-table-nudge));
   }
   #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
                                            margin:0;
@@ -438,7 +446,7 @@
      height to the page. The Kings are visible reminders, but the whole group
      is one 44px-minimum source because every released card obeys the same rule. */
   #gameUi[data-mode="remote"][data-jailbreak="mine"] .playfield {
-    display:grid; grid-template-rows:clamp(78px,14dvh,116px) minmax(0,1fr);
+    display:grid; grid-template-rows:clamp(78px,14dvh,101px) minmax(0,1fr);
   }
   #gameUi[data-mode="remote"][data-jailbreak="other"] .playfield {
     display:grid; grid-template-rows:clamp(40px,7dvh,56px) minmax(0,1fr);
@@ -554,10 +562,20 @@
   /* DRAW CARDS keeps a permanent row in the private dock. It is contextual,
      but hiding it changes visibility rather than layout: hand/HOLD/Ports never
      jump when eligibility changes and the viewport never gains a scrollbar. */
-  #gameUi[data-mode="remote"] #drawBtn { width:100%; white-space:nowrap;
+  #gameUi[data-mode="remote"] #drawBtn { width:75%; justify-self:center; white-space:nowrap;
+                                         position:relative; isolation:isolate;
                                          height:44px; min-height:44px; font-size:clamp(11px,3vw,14px);
                                          line-height:1; padding:1.8vw 2vw;
-                                         border-radius:1.4vw; box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4); }
+                                         border:0; border-radius:1.4vw;
+                                         background:transparent; box-shadow:none; }
+  /* 29px visible banner, 44px real button. The extra transparent hit area keeps
+     this frequent control viable on iPhone while matching the requested shape. */
+  #gameUi[data-mode="remote"] #drawBtn::before {
+    content:""; position:absolute; z-index:-1; inset:7.5px 0;
+    border:.3dvh solid var(--gold); border-radius:1.4vw;
+    background:linear-gradient(rgba(120,92,16,.95),rgba(84,64,10,.95));
+    box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4);
+  }
   #gameUi[data-mode="remote"] #drawBtn.hidden {
     display:block; visibility:hidden; opacity:0; pointer-events:none;
   }
@@ -604,7 +622,7 @@
   /* 100px at the 390px reference: the 73.7px card, its count, panel padding
      and borders now fit as a unit instead of the face protruding above/below. */
   #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; height:100%; gap:1.4vw; padding:1.4vw; }
-  #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
+  #gameUi[data-mode="remote"] .port .card { width:12.15vw; font-size:3.7vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
   #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
   /* NOTE: the old `.holdInner .card { width:14vw }` and `.holdInner
@@ -633,7 +651,8 @@
                                           justify-content:center; align-items:stretch; }
   #gameUi[data-mode="remote"] .opp { flex:0 1 17.6vw; min-width:0; display:flex;
                                      flex-direction:column; align-items:center; gap:.5vw;
-                                     padding:.8vw .6vw; border-radius:1.4vw;
+                                     padding:calc(.8vw + var(--remote-opp-pad-grow)) .6vw;
+                                     border-radius:1.4vw;
                                      background:rgba(8,40,44,.55);
                                      border:.3vw solid rgba(201,162,39,.4); }
   #gameUi[data-mode="remote"] .opp.turn { border-color:var(--gold);

@@ -1404,3 +1404,23 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
     - Browser-verified normal and own-Jailbreak layouts at 320×568, 390×844 and
       430×932 with viewport-equal document dimensions and no console warnings
       or errors.
+
+28. `Remote rail, table and control sizing calibration` — **visual CSS only;
+    gameplay, interaction dispatch, server views, `/tv` and couch mode unchanged.**
+    - At the 390×844 reference, the opponent rail is exactly 15px taller and the
+      table panels land exactly 20px lower on screen. The rail growth tapers to
+      6px at 320×568, where a full 15px would consume needed playfield height.
+    - Draw Cards is visually 29px tall (15px shorter) and 75% of the controller
+      width. Its actual button remains a 44px-high target; the visible banner is
+      painted inside that transparent hit region, preserving frequent-control
+      usability without changing the requested silhouette.
+    - Port card faces are 10% smaller (`13.5vw` → `12.15vw`). At 390×844 they
+      measure 47.4×66.3px with 12.3px above and 21.4px below inside the 100px
+      panel. The whole Port tile remains the much larger play target.
+    - The taller rail initially caused the own-Jailbreak table to overlap Draw's
+      transparent hit area by 2.5px. The event shelf cap was reduced by 15px;
+      active Jailbreak now retains 12.5px between real targets and 20px between
+      the lower Runs and Draw's visible face.
+    - Browser-verified normal, own-Jailbreak and opponent-Jailbreak states at
+      320×568, 390×844 and 430×932. All remain exactly one viewport, hand/HOLD
+      targets remain at least 44px, and browser logs contain no errors/warnings.
