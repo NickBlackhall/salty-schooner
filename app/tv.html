@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { padding: clamp(12px, 2vw, 30px); min-height:100dvh; }
+  .hidden { display:none !important; }
+
+  /* ---- code entry (shown once, then never again on this screen) ---- */
+  #codeEntry { min-height:88vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(12px,2vh,26px); }
+  .logo { width:min(62vw, 620px); max-height:34vh; object-fit:contain; filter:drop-shadow(0 6px 18px rgba(0,0,0,.6)); }
+  #codeInput { font-family:var(--serif); font-size:clamp(2rem,6vw,4.5rem); width:min(90vw,7em); text-align:center;
+               letter-spacing:.25em; text-transform:uppercase; padding:.15em; border-radius:12px;
+               border:2px solid var(--gold); background:rgba(10,20,26,.85); color:var(--gold-lt); }
+  button { font-size:clamp(1rem,2vw,1.4rem); padding:.55em 1.5em; }
+  .err { color:#ff8a7a; min-height:1.4em; font-size:clamp(1rem,2vw,1.3rem); }
+  .hint { font-size:clamp(.95rem,1.8vw,1.3rem); }
+
+  /* ---- lobby ---- */
+  #lobby { text-align:center; }
+  #lobby .logo { max-height:22vh; margin-bottom:.2em; }
+  .bigCode { font-size:clamp(4rem,15vw,10rem); line-height:1; margin:.05em 0; }
+  .joinAt { font-size:clamp(1.05rem,2.6vw,2rem); color:var(--gold-lt); }
+  .joinAt b { color:#fff; font-family:var(--serif); }
+  .lobbyPlayers { display:flex; flex-wrap:wrap; gap:clamp(8px,1.5vw,18px); justify-content:center; margin-top:clamp(14px,3vh,34px); }
+  .chip { font-family:var(--serif); background:var(--teal); border:1px solid var(--gold); border-radius:999px;
+          padding:clamp(7px,1.1vw,15px) clamp(16px,2.4vw,32px); font-size:clamp(1.05rem,2.4vw,1.9rem);
+          font-weight:700; color:var(--gold-lt); }
+
+  /* ---- game ------------------------------------------------------------
+   * Sized in vh, not clamp(). /tv is a 16:9 television essentially always
+   * (Nick, 2026-08-02), so height alone determines the layout and everything
+   * scales with the screen. The clamp() ceilings this replaces were tuned for
+   * a 1080p monitor and capped a 4K panel at roughly 40% of intended size,
+   * leaving 56% of the screen empty. Do not reintroduce px ceilings here.
+   */
+  #game { height:100vh; display:flex; flex-direction:column; padding:1.4vh 1.6vh; gap:1vh; }
+  .tvHeader { text-align:center; flex:0 0 auto; }
+  /* No wordmark up here — the logo lives beside the Brig instead (Nick,
+     2026-08-02), which fills the otherwise empty band to the left of it and
+     gives the status line the full width of the top. */
+  .tvStatus { font-family:var(--serif); font-size:2.4vh; letter-spacing:.08em;
+              color:var(--gold-lt); text-shadow:0 .2vh .8vh rgba(0,0,0,.9); }
+  /* Command-deck composition (docs/TV_REDESIGN_SPEC.md §5): player rails down
+     BOTH edges with the four Runs and the Brig between them. Players used to run
+     down the right only, which could not fit six plaques — three per rail can.
+     The centre must NOT shrink as players join, so the rails are fixed-width and
+     the plaques adapt inside them. */
+  .tvStage { flex:1 1 auto; min-height:0; display:grid;
+             grid-template-columns:14vw minmax(0,1fr) 14vw; gap:1.2vw; }
+  .playerRail { display:flex; flex-direction:column; justify-content:space-evenly;
+                gap:1.2vh; min-height:0; min-width:0; }
+  /* Two Runs, the Brig, two Runs. auto on the middle row keeps the Brig at its
+     natural size and hands the leftover height to the Run lanes. */
+  .commandTable { min-width:0; min-height:0; display:grid;
+                  grid-template-columns:repeat(2, minmax(0,1fr));
+                  grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);
+                  grid-template-areas:"run1 run2" "brig brig" "run3 run4";
+                  gap:1.2vh 1vw; }
+  #run0 { grid-area:run1; } #run1 { grid-area:run2; }
+  #run2 { grid-area:run3; } #run3 { grid-area:run4; }
+  .brigWrap { grid-area:brig; display:flex; align-items:center; justify-content:center; }
+  /* Chrome now lives on each element: the runs are ONE framed panel with
+     internal dividers, the plaques and the Brig carry painted frames instead of
+     a CSS border. A shared border rule here would double up on the art. */
+
+  /* theme.css paints an OPAQUE navy on body, and per CSS paint order a
+     negative-z-index pseudo-element is drawn before its parent's background —
+     so body's navy covers .saltyBoard::before entirely. The board art has only
+     ever been visible where the page was SHORTER than the viewport (which is
+     why /play's lobby showed it at the bottom and a full-height /tv showed
+     none). Clearing it here lets the art through. The same one-line fix would
+     light up /host, /join and /play too — not applied there yet because it
+     changes how those screens look and that is Nick's call, not a side effect
+     of a /tv change. */
+  /* Padding moves off body and onto the two screens that want it. #game is
+     height:100vh, so body padding was added on TOP of a full-height child and
+     pushed the Brig 60px off the bottom of the screen. */
+  body { background: transparent; padding: 0; }
+  #codeEntry, #lobby, #results { padding: 2.5vh 2.5vw; }
+
+  /* The board photo is the mockup's background. theme.css dims it heavily so
+     text stays legible on the small screens; on a television that wash flattened
+     it to near-black and threw away the art entirely. Lift it here only — /play
+     and /join still want the darker treatment behind dense controls. */
+  .saltyBoard::before {
+    background-image:
+      linear-gradient(rgba(4,16,22,.18), rgba(4,16,22,.34)),
+      url("/assets/board-bg.webp") !important;
+  }
+
+  /* Captain plaques. The ornate frame-hold.png overlay is deliberately GONE:
+     it is a square asset drawn with background-size 100% 100%, so any plaque
+     that was not square visibly stretched its scrollwork, and forcing squareness
+     to protect it is what made six players overflow the rail. The plaque is now
+     free to size to its own content, with the player's colour carrying the
+     identity instead of gold filigree (spec §8). */
+  .seat { position:relative; width:100%; flex:0 0 auto; text-align:center;
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:.5vh; padding:1.4vh 1vh; border-radius:1.2vh; overflow:hidden;
+          background:linear-gradient(rgba(38,18,52,.86), rgba(38,18,52,.9)),
+                     url("/assets/tex-purple.webp") center / 300px;
+          box-shadow:inset 0 0 0 .28vh color-mix(in srgb, var(--player-color) 65%, #fff 15%),
+                     0 .5vh 2vh rgba(0,0,0,.55);
+          transition:filter .25s ease, transform .25s ease, box-shadow .25s ease; }
+  /* Waiting plaques recede but stay READABLE — the old saturate(.4)/brightness(.55)
+     treatment was severe enough that opponents' Hold cards were hard to read from
+     a sofa, which is most of what the TV is for (spec §6). */
+  .seat { filter:saturate(.82) brightness(.86); }
+  .seat.turn { filter:none; transform:scale(1.035); z-index:1;
+               box-shadow:inset 0 0 0 .34vh color-mix(in srgb, var(--player-color) 80%, #fff 20%),
+                          0 0 2.4vh color-mix(in srgb, var(--player-color) 80%, transparent),
+                          0 .7vh 2.2vh rgba(0,0,0,.65); }
+  /* The name sits on a colour band, as in the mockup — this is the player's
+     identity at a glance, and it is what makes the plaque readable across a room
+     before you have parsed any numbers. */
+  .seat .nm { font-family:var(--serif); font-size:2vh; line-height:1.15; letter-spacing:.04em;
+              width:100%; padding:.35vh .6vh; border-radius:.6vh; color:#1a1020;
+              background:color-mix(in srgb, var(--player-color) 78%, #fff 22%);
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .seat .stat { display:flex; justify-content:space-between; align-items:baseline; width:100%;
+                font-size:1.5vh; letter-spacing:.06em; color:rgba(240,208,137,.8); }
+  .seat .stat b { font-family:var(--serif); font-size:2vh; color:var(--gold-lt); }
+  /* Nearly double the base card. The Hold top card is the only board information
+     a plaque actually carries — everything else is a number — so it gets the
+     space the SCORE row gave up (Nick, 2026-08-07; this deliberately departs from
+     spec §17 criterion 5, which required score on every plaque. Score still
+     appears on the round- and game-results screens). Sized so three plaques
+     still clear a rail at six players; re-measure that if the rail changes. */
+  .seat .card { width:10.2vh; font-size:3.7vh; margin:.2vh 0; }
+  /* Turn state must never rest on colour alone (spec §2) — this label is the
+     non-colour signal that survives colour blindness and a bad TV picture. */
+  .seat .helm { font-family:var(--serif); font-size:1.25vh; letter-spacing:.12em;
+                color:#1a1020; background:color-mix(in srgb, var(--player-color) 85%, #fff 15%);
+                border-radius:.5vh; padding:.15vh .8vh; }
+  /* FOUR independent lanes on the dark deck, replacing the single cream panel
+     that used to span the screen (spec §9). The old panel was flex:1 1 auto, so
+     it claimed all leftover height whatever it held — early in a round that was
+     three cards adrift in a huge empty field. A lane sizes to its own contents
+     and the deck shows between them. */
+  .runLane { position:relative; min-width:0; min-height:0; display:flex; flex-direction:column;
+             gap:.8vh; padding:1.2vh 1vh; border-radius:1.2vh;
+             background:linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+                        url("/assets/tex-wood.webp") center / 320px;
+             box-shadow:inset 0 0 0 .22vh rgba(240,208,137,.34), 0 .5vh 1.8vh rgba(0,0,0,.5); }
+  /* Direction wash, still lifted verbatim from hot-seat's .run.direction-*, now
+     layered over the lane's own wood rather than shared parchment. */
+  .runLane.direction-up { background:
+      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.08) 58%, rgba(26,145,85,0)),
+      linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+      url("/assets/tex-wood.webp") center / 320px; }
+  .runLane.direction-down { background:
+      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.08) 42%, rgba(184,48,42,.34)),
+      linear-gradient(rgba(20,12,7,.42), rgba(20,12,7,.52)),
+      url("/assets/tex-wood.webp") center / 320px; }
+  /* Quiet when empty (spec §10) — present enough to hold its grid slot, dim
+     enough that a live lane beside it clearly reads as the active one. */
+  .runLane.empty { opacity:.62; box-shadow:inset 0 0 0 .18vh rgba(240,208,137,.2); }
+  .runHeader { display:flex; align-items:center; justify-content:center; gap:.9vh; flex:0 0 auto;
+               font-family:var(--serif); font-size:2vh; letter-spacing:.07em; color:var(--gold-lt); }
+  .dirBadge { font-family:var(--sans); font-size:1.4vh; font-weight:800; letter-spacing:.04em;
+              padding:.25vh .8vh; border-radius:.6vh; }
+  .dirBadge.up { color:#0f2e18; background:#7fd39a; }
+  .dirBadge.down { color:#2e0d0a; background:#e79180; }
+  .emptyRun { flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+              font-family:var(--serif); font-size:2vh; letter-spacing:.1em;
+              color:rgba(240,208,137,.72); }
+  .cardRow { display:flex; flex-wrap:wrap; gap:.6vh; }
+  /* Cards sit on one line and are allowed to escape the lane's padding box when
+     the top card lifts — hence overflow:visible rather than a clip. */
+  .runCards { flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+              min-width:0; overflow:visible; }
+  /* Older cards slide UNDER their neighbours so a long Run still fits, while the
+     newest four never overlap each other (spec §2). z-index rises with position
+     so the sequence reads left-to-right as a stack, newest on top. */
+  .runCard { position:relative; flex:0 0 auto; z-index:var(--card-index); }
+  /* --history-step is MEASURED per lane by fitRunCards() rather than guessed from
+     a card count. A Run is not capped at twelve cards: Kings can reverse a Run's
+     direction, so it can bounce and grow without bound (Nick, 2026-08-07). Any
+     formula keyed to length eventually overflows the lane; solving for the width
+     that is actually available cannot. The newest four are never affected. */
+  .runCard.history + .runCard.history,
+  .runCard.history + .runCard.visibleTail { margin-left:calc(-1 * var(--history-step, 9.6vh)); }
+  .runCard.visibleTail + .runCard.visibleTail { margin-left:.6vh; }
+  .runCard.top { transform:translateY(-.4vh) scale(1.08);
+                 filter:drop-shadow(0 .5vh .7vh rgba(0,0,0,.55)); }
+
+  /* 5:7 faces. Sized off viewport HEIGHT so a 4K panel scales up instead of
+     hitting a px ceiling — these are read from a sofa, not a desk. */
+  .card { width:6.2vh; aspect-ratio:5/7; font-size:2.4vh; border-radius:.6vh; }
+  .asBadge { font-size:1.1vh; }
+  /* Run cards are what the room is actually reading, so they run much larger than
+     the base card. The budget for this comes from squeezing the history down to
+     slivers (see fitRunCards) rather than from the lane, which has no more to
+     give. */
+  /* fitRunCards() always sets --run-card-w; the 11vh fallback is the same base
+     value it starts from (RUN_CARD_VH), kept here so the lane still looks right
+     if the script has not measured yet. Font scales off the card so a shrunk
+     card stays legible. */
+  .runCard .card { width:var(--run-card-w, 11vh); font-size:calc(var(--run-card-w, 11vh) * .38); }
+  .runCard .asBadge { font-size:calc(var(--run-card-w, 11vh) * .145); }
+
+  /* The Brig is now a compact SQUARE box centred under the runs, which is what
+     lets frame-brig.png be used at last. It was previously a ~10:1 letterbox
+     bar, and stretching a 512x512 iron frame across that would have smeared the
+     skull and lettering right across the screen. */
+  /* The Brig now sits BETWEEN the two pairs of Runs rather than under them, so
+     the most dangerous object on the board is also the centre of it (spec §11).
+     The wordmark that used to share this row is gone — spec §12 keeps the logo
+     off the active-game screen entirely. */
+  .brigBox { position:relative; width:27vh; height:27vh; border:none; border-radius:0;
+             display:flex; align-items:center; justify-content:center; }
+  .brigBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
+  /* 76% not 70%: at three Kings the narrower window wrapped them onto a second
+     row and clipped the caption mid-word ("3 Kings in The"). The cage art has
+     enough margin to give this back. */
+  .brigInner { position:relative; z-index:1; width:76%; height:76%;
+               display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.7vh;
+               padding:0 .4vh;
+               background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 220px; }
+  /* nowrap by default — fitBrigCards() shrinks the cards to fit N of them on one
+     row, which is what actually fixed the "3 Kings" clipping (that was really a
+     too-narrow panel, addressed by the 76% above). Deck size is ONE FULL DECK
+     PER PLAYER (engine.js makeDeck), so at 6 players there are 24 Kings in the
+     game — Nick saw 7 land in the Brig at once during play, and nowrap alone
+     just ran them off the edge of the frame. .wrap is the last-resort escape
+     hatch for whatever count still will not fit even at the size floor. */
+  /* min-width:0 overrides a flex item's default min-width:auto, which otherwise
+     lets an intrinsic-sized child grow PAST its container instead of respecting
+     it — with nowrap and enough Kings, the row was measuring its own ballooned
+     894px instead of the 148px .brigInner actually had, so every fit calculation
+     below thought there was room that did not exist. Same fix already applied
+     to .runCards for the same reason. */
+  .brigInner .cardRow { flex-wrap:nowrap; justify-content:center; row-gap:.4vh; min-width:0; max-width:100%; }
+  .brigInner .cardRow.wrap { flex-wrap:wrap; }
+  .brigCaption { font-family:var(--serif); font-size:1.5vh; line-height:1.15; color:var(--gold-lt);
+                 text-align:center; max-width:100%; }
+  .brigBox.active::after { filter:drop-shadow(0 0 2vh rgba(255,140,60,.9)) brightness(1.25); }
+  /* Kings only get theme.css's gold ring when they are WILD (standing in for a
+     value on a run). A King sitting in the Brig has no effective value, so it
+     rendered as a plain card. On a TV the Brig is a focal point, so give them
+     the ring here — it is the same treatment, applied by position rather than
+     by role. --brig-card-w is set by fitBrigCards(); the 4.6vh here is only the
+     value before JS has measured anything, same pattern as --run-card-w. */
+  .brigInner .card { width:var(--brig-card-w, 4.6vh); font-size:calc(var(--brig-card-w, 4.6vh) * .41);
+                     background:#f7ecc8; border-color:var(--gold);
+                     box-shadow:inset 0 0 0 .25vh var(--gold), 0 .3vh .6vh rgba(0,0,0,.5); }
+  .brigBox.active .brigInner .card { box-shadow:inset 0 0 0 .25vh var(--gold), 0 0 1.4vh rgba(255,180,80,.9); }
+  .results { text-align:center; }
+  .results h2 { font-size:clamp(1.8rem,5vw,3.4rem); margin:.2em 0; }
+  .results .row { font-family:var(--serif); font-size:clamp(1.05rem,2.4vw,1.9rem); margin:.15em 0; color:var(--ink); }
+  .banner { text-align:center; font-size:clamp(1rem,2.1vw,1.5rem); color:var(--gold-lt); margin-bottom:.6em; }
+
+  /* ---- The Brig bursting open, lifted from app/index.html ---------------- */
+  /* Selector is .brigBox, matching the element's class. It read .brigBar for a
+     while after the box was renamed, which silently killed the build-up shake —
+     the id is still brigBar, so the JS kept working and nothing errored. */
+  .brigBox.bursting { animation:brigShake 1.1s cubic-bezier(.4,0,.7,1) both, brigGlow 1.1s ease-in both; }
+  @keyframes brigShake{
+    0%{ transform:translate(0,0) rotate(0); }
+    22%{ transform:translate(-2px,0) rotate(-.4deg); }
+    40%{ transform:translate(2px,1px) rotate(.4deg); }
+    55%{ transform:translate(-3px,-1px) rotate(-.7deg); }
+    67%{ transform:translate(3px,1px) rotate(.8deg); }
+    76%{ transform:translate(-4px,-1px) rotate(-1deg); }
+    83%{ transform:translate(5px,1px) rotate(1.1deg); }
+    88%{ transform:translate(-6px,-1px) rotate(-1.4deg); }
+    92%{ transform:translate(6px,1px) rotate(1.5deg); }
+    96%{ transform:translate(-7px,-1px) rotate(-1.7deg); }
+    100%{ transform:translate(6px,0) rotate(1.6deg); }
+  }
+  @keyframes brigGlow{
+    0%{ filter:drop-shadow(0 0 4px rgba(255,180,70,.35)) brightness(1.02); }
+    60%{ filter:drop-shadow(0 0 16px rgba(255,120,50,.6)) brightness(1.14) saturate(1.25); }
+    100%{ filter:drop-shadow(0 0 34px rgba(255,60,70,.95)) brightness(1.42) saturate(1.5); }
+  }
+
+  /* ---- Full-screen moment. Unlike hot-seat's splash this AUTO-DISMISSES:
+     nobody is going to walk over and tap the television. ------------------- */
+  .tvSplash { position:fixed; inset:0; z-index:100; display:none; background:#06131a; opacity:0;
+              transition:opacity .22s ease; }
+  .tvSplash.show { display:block; opacity:1; animation:splashHit .32s cubic-bezier(.15,.9,.2,1); }
+  .tvSplash.departing { opacity:0; }
+  @keyframes splashHit { from { transform:scale(1.12); filter:brightness(2) saturate(1.45); } }
+  /* cover, now that the art is a 16:9 piece drawn for this screen. It was
+     `contain` while the only artwork was a portrait poster, because cover
+     cropped that one's own JAILBREAK lettering off the top. */
+  .tvSplash img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
+  .tvSplashPanel { position:absolute; left:0; right:0; bottom:4vh; text-align:center; z-index:1;
+                   padding:0 4vw; text-shadow:0 3px 14px rgba(0,0,0,1), 0 0 30px rgba(0,0,0,.9); }
+  .tvSplashTitle { font-family:var(--serif); font-size:clamp(2.4rem,9vw,7rem); line-height:1;
+                   color:#ffd76a; letter-spacing:.04em; }
+  .tvSplashText { font-size:clamp(1.1rem,2.8vw,2.2rem); color:#f7e4b2; margin-top:.35em; }
+  .tvSplash.failure { background:#1a0606; }
+  .tvSplash.failure .tvSplashTitle { color:#ff8a5a; }
+  .tvSplash.success .tvSplashTitle { color:#8ce6a8; }
+
+  .muteBtn { position:fixed; top:10px; right:12px; z-index:120; font-size:.9rem; padding:.35em .9em;
+             background:rgba(20,12,7,.9); color:var(--gold-lt); border:1px solid #c99a43; }
+</style>
+</head>
+<body class="saltyBoard">
+
+<div id="codeEntry">
+  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
+  <div class="meta hint">Enter the room code shown on the host's device</div>
+  <input id="codeInput" maxlength="4" autocapitalize="characters" placeholder="ABCD" autofocus>
+  <button id="watchBtn" class="salty">Show Game</button>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="lobby" class="hidden">
+  <img class="logo" src="/assets/logo.webp" alt="Salty Schooner">
+  <div class="joinAt">Join at <b id="joinUrl"></b></div>
+  <div class="bigCode roomCodeBig" id="lobbyCode"></div>
+  <div class="joinAt meta">Waiting for the host to start…</div>
+  <div class="lobbyPlayers" id="lobbyPlayers"></div>
+</div>
+
+<div id="game" class="hidden">
+  <div class="tvHeader">
+    <div class="tvStatus" id="tvStatus"></div>
+  </div>
+  <!-- Rails BOTH sides, Runs and Brig between them (spec §5). brigBar, brigCards
+       and brigTitle keep their ids: the Jailbreak animation and the sound cues
+       look them up by id, so renaming them would silently kill both. -->
+  <div class="tvStage" id="tvStage">
+    <aside class="playerRail" id="seatsLeft"></aside>
+
+    <main class="commandTable">
+      <section class="runLane" id="run0"></section>
+      <section class="runLane" id="run1"></section>
+
+      <section class="brigWrap">
+        <div class="brigBox" id="brigBar">
+          <div class="brigInner">
+            <div class="cardRow" id="brigCards"></div>
+            <div class="brigCaption" id="brigTitle"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="runLane" id="run2"></section>
+      <section class="runLane" id="run3"></section>
+    </main>
+
+    <aside class="playerRail" id="seatsRight"></aside>
+  </div>
+  <!-- The log is deliberately not rendered on screen (Nick, 2026-08-02): the
+       board itself tells the story on a TV. view.log is still fetched and is
+       still what drives the Jailbreak sound cues by diffing, so do not stop
+       requesting it — only its display was dropped. -->
+</div>
+
+<div id="results" class="hidden results"></div>
+
+<div id="tvSplash" class="tvSplash">
+  <img id="tvSplashArt" src="/assets/jailbreak-tv.jpg" alt="" fetchpriority="high">
+  <div class="tvSplashPanel">
+    <div class="tvSplashTitle" id="tvSplashTitle"></div>
+    <div class="tvSplashText" id="tvSplashText"></div>
+  </div>
+</div>
+<button id="muteBtn" class="muteBtn hidden">Sound: on</button>
+
+<script src="/shared/api.js"></script>
+<script src="/shared/engine.js"></script>
+<script src="/shared/sfx.js"></script>
+<script src="/shared/poller.js"></script>
+<script src="/shared/vendor/supabase.js"></script>
+<script src="/shared/realtime.js"></script>
+<script>
+// Display-only screen. It never sends an action and holds no token — it just
+// polls the public board by room code. All controls stay on the host device.
+const CODE_KEY = 'salty-tv-code';
+let roomCode = null;
+
+function show(id) {
+  ['codeEntry','lobby','game','results'].forEach(p => document.getElementById(p).classList.toggle('hidden', p !== id));
+}
+
+function cardHtml(c) {
+  if (!c) return '';
+  const red = c.suit === '♥' || c.suit === '♦';
+  const wild = c.rank === 'K' && c.effectiveValue;
+  const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
+  const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''}">${c.rank}${c.suit}${as}</span>`;
+}
+
+document.getElementById('joinUrl').textContent = location.host + '/join';
+
+// ---- Deriving events from the polled snapshot ------------------------------
+// get-public-state returns a board, not an event stream, so the TV works out what
+// just happened by diffing the log — which is newest-first and capped at 8 lines.
+// Tracks the previously-seen top line and treats everything above it as new.
+//
+// Two cases must stay SILENT rather than fire a burst of cues:
+//   • the very first poll (otherwise the whole visible history plays at once);
+//   • the old top line no longer being present, which means either more than 8
+//     events landed between polls or the round was re-dealt. Re-baseline quietly.
+let lastTopLogLine = null;
+let splashTimer = null;
+
+function newLogLines(log) {
+  if (!Array.isArray(log) || log.length === 0) return [];
+  if (lastTopLogLine === null) { lastTopLogLine = log[0]; return []; }   // first poll
+  if (log[0] === lastTopLogLine) return [];                              // nothing new
+  const idx = log.indexOf(lastTopLogLine);
+  lastTopLogLine = log[0];
+  if (idx === -1) return [];                                            // fell out of window
+  return log.slice(0, idx).reverse();                                   // oldest-new first
+}
+
+function showSplash(kind, title, text, holdMs) {
+  const el = document.getElementById('tvSplash');
+  clearTimeout(splashTimer);
+  el.classList.remove('jailbreak', 'success', 'failure', 'departing');
+  if (kind) el.classList.add(kind);
+  const art = kind === 'jailbreak';
+  document.getElementById('tvSplashArt').style.display = art ? '' : 'none';
+  // The Jailbreak artwork already reads "JAILBREAK" in the illustration, so
+  // repeating it in text just covers the picture. Only add the part the art
+  // can't know — how many Kings got out. Success/Curse have no art and do need
+  // a heading.
+  const titleEl = document.getElementById('tvSplashTitle');
+  titleEl.style.display = art ? 'none' : '';
+  titleEl.textContent = title;
+  document.getElementById('tvSplashText').textContent = text;
+  el.classList.add('show');
+  // Nobody taps a television, so it takes itself away.
+  splashTimer = setTimeout(() => {
+    el.classList.add('departing');
+    setTimeout(() => el.classList.remove('show', 'departing', 'jailbreak', 'success', 'failure'), 260);
+  }, holdMs);
+}
+
+function reactToLog(log) {
+  newLogLines(log).forEach(line => {
+    if (/triggered a Jailbreak with/.test(line)) {
+      const n = (line.match(/(\d+) Brig King/) || [])[1] || '';
+      // Brig rattles and glows first, then bursts into the splash — same beat as
+      // the hot-seat build (JAILBREAK_BUILDUP_MS there).
+      const bar = document.getElementById('brigBar');
+      if (bar) { bar.classList.remove('bursting'); void bar.offsetWidth; bar.classList.add('bursting'); }
+      Sfx.play('jailbreak-buildup');
+      setTimeout(() => {
+        if (bar) bar.classList.remove('bursting');
+        Sfx.play('jailbreak-trigger');
+        showSplash('jailbreak', 'JAILBREAK', n ? `${n} King${n === '1' ? '' : 's'} loose!` : 'The Brig is open!', 2600);
+      }, 1100);
+      return;
+    }
+    if (/^Jailbreak failed/.test(line)) {
+      Sfx.play('jailbreak-failure');
+      showSplash('failure', 'CURSE OF THE CROWN', 'Unplayed Kings escape — penalty cards dealt.', 2600);
+      return;
+    }
+    if (/played every released Brig King|Jailbreak complete/.test(line)) {
+      Sfx.play('jailbreak-success');
+      showSplash('success', 'BRIG SECURED', 'Every freed King played.', 1800);
+      return;
+    }
+    if (/discarded .* to Port/.test(line)) { Sfx.play('discard'); return; }
+    if (/played .* (to|on) Run/.test(line)) { Sfx.play('place'); return; }
+  });
+}
+
+const muteBtn = document.getElementById('muteBtn');
+muteBtn.addEventListener('click', () => {
+  Sfx.setEnabled(!Sfx.isEnabled());
+  muteBtn.textContent = 'Sound: ' + (Sfx.isEnabled() ? 'on' : 'off');
+});
+
+// The screen still knows its room — the code is only forgotten on a 404 — so
+// making someone retype it was pure friction, and friction here is what makes a
+// 30-minute idle stop feel like a punishment rather than a power saver. Prefill
+// it and offer one tap. The button below is the normal Show Game handler, so
+// resuming re-verifies the room exists before committing the screen to it.
+function showTvPaused() {
+  show('codeEntry');
+  const saved = localStorage.getItem(CODE_KEY) || '';
+  const input = document.getElementById('codeInput');
+  if (saved) input.value = saved;
+  document.getElementById('err').textContent = saved
+    ? `Paused — nothing happened for a while. Tap Show Game to pick room ${saved} back up.`
+    : 'Paused — nothing happened for a while. Enter the code to resume.';
+}
+
+// The TV is a display, so 2s is imperceptible. Its backoff ceiling is deliberately
+// LOWER than the other screens': the Jailbreak burst is the moment everyone looks
+// up for, and a long backoff would make it arrive late.
+const poller = createPoller({
+  poll,
+  // The low ceiling below existed because /tv derives the Jailbreak burst by
+  // diffing the log, so a long backoff made the moment everyone looks up arrive
+  // late. The doorbell removes that tension entirely: the burst now arrives when
+  // the server says it happened, and the timer is only a safety net.
+  intervalFor: () => (doorbell.isLive() ? 45000 : 2000),
+  maxInterval: 4000,
+  // 30 min of a still board with nobody touching the screen, and a hard 90 min
+  // since the game last actually changed. A /tv sat on a dead lobby overnight is
+  // what burned half a month's function quota; the hard stop is what makes that
+  // impossible rather than merely unlikely.
+  idleStopMs: 30 * 60 * 1000,
+  hardStopMs: 90 * 60 * 1000,
+  onIdleStop: showTvPaused
+});
+
+// /tv is token-free and addressed by room CODE, so it subscribes by code too —
+// room_pulse carries it for exactly this reason.
+const doorbell = createDoorbell({
+  roomCode: () => roomCode,
+  label: 'tv',
+  // A real pulse means somebody genuinely played, so it may restart a stopped
+  // screen. The visibility nudge (programmatic) may not — that was half of how
+  // an abandoned /tv kept itself alive.
+  //
+  // While RUNNING, a real pulse is rendered straight from its own payload —
+  // applyPulseRow — instead of triggering the fetch poll() would make; that
+  // fetch was a full extra Netlify Function round-trip on top of however long
+  // the action itself took, for data that was already sitting in the push.
+  // Falls back to a real fetch (wake) when the row has nothing usable, or when
+  // the screen was stopped — recovering a paused screen is not the hot path
+  // this was built to shave time off, so it keeps the simpler, safer fetch.
+  onChange: (version, meta) => {
+    if (meta && meta.programmatic) { poller.refresh(); return; }
+    if (poller.isRunning() && applyPulseRow(meta && meta.row)) return;
+    poller.wake();
+  },
+  // reschedule(), NOT refresh() and NOT kick(). A socket connecting or dropping
+  // is machinery. kick() defers the idle stop — so a flapping connection reset
+  // the 20-minute timer on every flap and the screen polled a dead lobby for 17
+  // hours. refresh() was the next attempt and leaked a different way: it fetches
+  // on every edge and resets the backoff, so a flapping socket set the poll rate
+  // outright (~7,200 fetches/hour, measured 2026-08-09). reschedule() re-reads
+  // the interval and nothing else.
+  onLiveChange: () => poller.reschedule()
+});
+
+function start(code) {
+  roomCode = code;
+  localStorage.setItem(CODE_KEY, code);
+  // Pointing the screen at a different room must baseline the log afresh, or the
+  // first poll is diffed against the previous room's history.
+  lastTopLogLine = null;
+  poller.stop();
+  poller.start();
+  // Re-subscribe as well: the channel is filtered to the OLD code and would
+  // otherwise keep listening to a room this screen is no longer showing.
+  doorbell.stop();
+  doorbell.start();
+}
+
+document.getElementById('watchBtn').addEventListener('click', async () => {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const err = document.getElementById('err');
+  err.textContent = '';
+  if (!code) { err.textContent = 'Enter the room code.'; return; }
+  try {
+    await Api.getPublicState(code);   // verify before committing the screen to it
+    start(code);
+  } catch (e) {
+    err.textContent = e.message;
+  }
+});
+document.getElementById('codeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('watchBtn').click();
+});
+
+function renderLobby(v) {
+  show('lobby');
+  document.getElementById('lobbyCode').textContent = v.roomCode;
+  document.getElementById('lobbyPlayers').innerHTML =
+    v.players.map(p => `<div class="chip">${escapeHtml(p.name)}</div>`).join('')
+    || '<div class="chip meta">Nobody yet…</div>';
+}
+
+// Player names are typed by players and interpolated straight into innerHTML
+// below, so they get escaped. Previously they did not — a name containing markup
+// would have been parsed as HTML on every screen showing it.
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+// Palette IDs rather than raw colour strings, so nothing player-controlled ever
+// reaches CSS (spec §7). Player-chosen colours are a later pass; until the
+// server stores one, seat order picks deterministically — same player, same
+// colour, every render. When p.color arrives this function is the only thing
+// that changes.
+const PALETTE = {
+  gold:   '#f0b429', violet: '#a78bfa', teal:   '#2dd4bf', coral:  '#fb7185',
+  lime:   '#a3e635', blue:   '#60a5fa', orange: '#fb923c', pink:   '#f472b6'
+};
+const PALETTE_ORDER = ['gold', 'violet', 'teal', 'coral', 'lime', 'blue', 'orange', 'pink'];
+function safePlayerColor(player) {
+  const id = player && player.color;
+  if (id && Object.prototype.hasOwnProperty.call(PALETTE, id)) return PALETTE[id];
+  const seat = player && typeof player.seat === 'number' ? player.seat : 0;
+  return PALETTE[PALETTE_ORDER[seat % PALETTE_ORDER.length]];
+}
+
+function seatHtml(p, currentSeat) {
+  const active = p.seat === currentSeat;
+  return `
+    <article class="seat ${active ? 'turn' : ''}" style="--player-color:${safePlayerColor(p)}" data-seat="${p.seat}">
+      <div class="nm">${escapeHtml(p.name)}</div>
+      <div>${cardHtml(p.goalTop)}</div>
+      <div class="stat"><span>HOLD</span><b>${p.goalCount}</b></div>
+      ${active ? '<div class="helm">AT THE HELM</div>' : ''}
+    </article>`;
+}
+
+// Alternate sides by seat order so the rails stay balanced at every player
+// count: 2 -> 1/1, 3 -> 2/1, 4 -> 2/2, 5 -> 3/2, 6 -> 3/3 (spec §6).
+function renderPlayerRails(v) {
+  const left = [], right = [];
+  (v.players || []).forEach((p, i) => (i % 2 === 0 ? left : right).push(p));
+  document.getElementById('seatsLeft').innerHTML = left.map(p => seatHtml(p, v.currentSeat)).join('');
+  document.getElementById('seatsRight').innerHTML = right.map(p => seatHtml(p, v.currentSeat)).join('');
+}
+
+// Every card stays in the DOM; only spacing changes. Nothing is truncated,
+// summarised or reordered — the overlap is presentation only (spec §2).
+const RUN_VISIBLE_TAIL = 4;
+function runHtml(run, index) {
+  const cards = run.cards || [];
+  const historyCount = Math.max(0, cards.length - RUN_VISIBLE_TAIL);
+  const dir = run.direction
+    ? `<span class="dirBadge ${run.direction}">${run.direction === 'up' ? '↑ UP' : '↓ DOWN'}</span>`
+    : '';
+  const body = cards.length
+    ? `<div class="runCards">${cards.map((card, i) => {
+        const cls = [i < historyCount ? 'history' : 'visibleTail', i === cards.length - 1 ? 'top' : '']
+          .filter(Boolean).join(' ');
+        return `<span class="runCard ${cls}" style="--card-index:${i}">${cardHtml(card)}</span>`;
+      }).join('')}</div>`
+    : '<div class="emptyRun">EMPTY · A OR Q</div>';
+  return `<div class="runHeader"><span>RUN ${index + 1}</span>${dir}</div>${body}`;
+}
+
+// Solve for the overlap that makes the sequence fit, instead of predicting it
+// from the card count. Runs have no maximum length — a King can reverse a Run's
+// direction, so it can bounce between ends indefinitely — and every count-based
+// formula overflows eventually. Measuring cannot.
+//
+// The newest four keep full size and full spacing at every length; all of the
+// compression is taken out of the history, down to a floor that still leaves a
+// visible sliver per card so the pile reads as depth rather than one thick card.
+const RUN_CARD_VH = 11;        // base card size; mirrored by the CSS fallback
+const MIN_SLIVER_VH = 0.55;    // thinnest a buried card may show and still read as a card
+const MIN_CARD_VH = 6.5;       // never shrink below this, however long the Run gets
+function fitRunCards(lane) {
+  const box = lane.querySelector('.runCards');
+  if (!box) return;
+  const vh = window.innerHeight / 100;
+  const baseCard = RUN_CARD_VH * vh;
+  const total = box.querySelectorAll('.runCard').length;
+  const history = box.querySelectorAll('.runCard.history').length;
+  const tailCount = total - history;
+
+  if (!history) {                       // four or fewer: full size, nothing to solve
+    box.style.setProperty('--run-card-w', baseCard.toFixed(2) + 'px');
+    box.style.removeProperty('--history-step');
+    return;
+  }
+
+  const tail = box.querySelectorAll('.runCard.visibleTail');
+  // A fixed margin, so it measures the same whatever the current step is.
+  const tailSpacing = tailCount > 1
+    ? Math.max(0, tail[1].getBoundingClientRect().left - tail[0].getBoundingClientRect().right)
+    : 0;
+  const sliver = MIN_SLIVER_VH * vh;
+  // The top card is scale(1.08), which grows it about 4% past its box on each
+  // side. Reserve that or the newest card visibly clips the lane edge.
+  const available = box.clientWidth - baseCard * 0.05;
+
+  // Tightest the row can be at full card size. If even that will not fit, the
+  // cards themselves have to come down — a Run has no maximum length, because a
+  // King can reverse its direction and send it back the other way.
+  let card = baseCard;
+  const tightest = tailCount * card + Math.max(0, tailCount - 1) * tailSpacing + history * sliver;
+  if (tightest > available) {
+    card = Math.max(MIN_CARD_VH * vh,
+      (available - history * sliver - Math.max(0, tailCount - 1) * tailSpacing) / tailCount);
+  }
+
+  // Every unit of step buys back one unit on each of the `history` seams.
+  const flat = total * card + Math.max(0, tailCount - 1) * tailSpacing;
+  const step = Math.min(card - sliver, Math.max(0, (flat - available) / history));
+  box.style.setProperty('--run-card-w', card.toFixed(2) + 'px');
+  box.style.setProperty('--history-step', step.toFixed(2) + 'px');
+}
+
+function renderRuns(runs) {
+  (runs || []).forEach((run, i) => {
+    const lane = document.getElementById('run' + i);
+    if (!lane) return;
+    lane.className = `runLane direction-${run.direction || 'unset'}${(run.cards || []).length ? '' : ' empty'}`;
+    lane.innerHTML = runHtml(run, i);
+    fitRunCards(lane);
+  });
+}
+
+// Same measure-and-solve idea as fitRunCards, simpler: the Brig has no history
+// tail to protect, just N Kings that should all read as cards on one row.
+// Deck size is one full deck PER PLAYER (engine.js makeDeck), so at 6 players
+// there are 24 Kings in the game — Nick saw 7 pile into the Brig during a real
+// game, and a fixed card size just ran them off the edge of the frame.
+const BRIG_CARD_VH = 4.6;      // mirrors the CSS fallback
+const BRIG_MIN_CARD_VH = 2.2;  // floor before falling back to wrap as a last resort
+function fitBrigCards() {
+  const row = document.querySelector('.brigInner .cardRow');
+  if (!row) return;
+  const n = row.querySelectorAll('.card').length;
+  row.classList.remove('wrap');
+  if (!n) return;
+  const vh = window.innerHeight / 100;
+  const base = BRIG_CARD_VH * vh;
+  const gap = parseFloat(getComputedStyle(row).gap) || 0;
+  const available = row.clientWidth;
+
+  let card = base;
+  if (n * base + (n - 1) * gap > available) {
+    card = Math.max(BRIG_MIN_CARD_VH * vh, (available - (n - 1) * gap) / n);
+  }
+  row.style.setProperty('--brig-card-w', card.toFixed(2) + 'px');
+
+  // Even the floor can be beaten by enough Kings — wrap rather than let them
+  // spill past the iron frame. A two-row Brig beats an overflowing one.
+  if (n * card + (n - 1) * gap > available + 0.5) row.classList.add('wrap');
+}
+
+// Both viewport-derived, so a resized window (or a TV switching resolution)
+// invalidates every measured value.
+window.addEventListener('resize', () => {
+  fitBrigCards();
+  document.querySelectorAll('.runLane').forEach(fitRunCards);
+});
+
+function renderGame(v) {
+  show('game');
+  // Round only. Deck count, room code and whose-turn text are gone from the
+  // permanent HUD (spec §12) — the active plaque already says whose turn it is,
+  // and the rest was reference data nobody reads from a sofa.
+  document.getElementById('tvStatus').textContent = `ROUND ${v.round} OF ${v.maxRounds}`;
+
+  renderPlayerRails(v);
+  renderRuns(v.runs);
+
+  const b = v.brig;
+  const kings = b.active ? b.releasedKings : b.waitingKings;
+  const box = document.getElementById('brigBar');
+  box.classList.toggle('active', b.active);
+  document.getElementById('brigCards').innerHTML = kings.map(cardHtml).join('');
+  fitBrigCards();
+  document.getElementById('brigTitle').textContent = b.active
+    ? `JAILBREAK — ${kings.length} King${kings.length === 1 ? '' : 's'} loose!`
+    : (kings.length
+        ? `${kings.length} King${kings.length === 1 ? '' : 's'} in The Brig`
+        : 'The Brig is empty');
+
+  // No log rendered — see the note in the #game markup. v.log is still used by
+  // the sound cues, which derive Jailbreak events by diffing it.
+}
+
+function renderResults(v) {
+  show('results');
+  const sorted = [...v.players].sort((a,b) => a.total - b.total);
+  const panel = document.getElementById('results');
+  if (v.status === 'GAME_RESULTS') {
+    panel.innerHTML = `<h2>🏆 ${escapeHtml(sorted[0].name)} wins!</h2>`
+      + sorted.map(p => `<div class="row">${escapeHtml(p.name)} — ${p.total}</div>`).join('')
+      + (v.endedEarly ? '<div class="banner">Ended early — already decided.</div>' : '');
+  } else {
+    panel.innerHTML = `<h2>Round ${v.round} complete</h2>`
+      + v.players.map(p => `<div class="row">${escapeHtml(p.name)}: +${p.roundScore} (${p.total} total)</div>`).join('')
+      + (v.pendingClinch ? `<div class="banner">${escapeHtml(v.pendingClinch)} has clinched the game.</div>` : '')
+      + '<div class="banner meta">Waiting for the host…</div>';
+  }
+}
+
+// Tracks the numeric stateVersion of whatever is currently on screen, null
+// while in a LOBBY (which carries none). Shared by both the fetched path
+// (poll) and the pushed path (applyPulseRow) below, because now that a render
+// can be triggered by two different sources, an in-flight fetch that started
+// before a push arrived could otherwise resolve afterward and revert the
+// screen to older content — the same race /play's applyView() already guards
+// against.
+let lastAppliedVersion = null;
+
+function applyPublicView(v) {
+  if (typeof lastAppliedVersion === 'number' && typeof v.stateVersion === 'number'
+      && v.stateVersion < lastAppliedVersion) {
+    return;
+  }
+  lastAppliedVersion = typeof v.stateVersion === 'number' ? v.stateVersion : null;
+
+  muteBtn.classList.remove('hidden');
+  if (v.status === 'LOBBY') {
+    // A reset re-deals, so the old log is gone — re-baseline silently rather
+    // than replaying a dead game's events.
+    lastTopLogLine = null;
+    renderLobby(v);
+  } else if (v.status === 'ROUND_RESULTS' || v.status === 'GAME_RESULTS') {
+    renderResults(v);
+  } else {
+    renderGame(v);
+    // Render first so the Brig element exists for the burst animation.
+    reactToLog(v.log);
+  }
+}
+
+// Signature for the poller. LOBBY carries no stateVersion, so fold in the
+// player count or the lobby would look static as people join and back off.
+function pulseSignature(v) {
+  return v.status === 'LOBBY'
+    ? 'LOBBY:' + (v.players ? v.players.length : 0)
+    : v.status + ':' + v.stateVersion;
+}
+
+async function poll() {
+  try {
+    const v = await Api.getPublicState(roomCode);
+    applyPublicView(v);
+    return pulseSignature(v);
+  } catch (e) {
+    // A deleted/expired room shouldn't strand the screen — fall back to entry.
+    if (e.status === 404) {
+      poller.stop();
+      localStorage.removeItem(CODE_KEY);
+      show('codeEntry');
+      document.getElementById('err').textContent = 'That room is no longer available.';
+    }
+  }
+}
+
+// The fast path: a Realtime push already carries the public board (see
+// lib/pulse.js), so render straight from it instead of following up with the
+// same fetch poll() would otherwise make — the whole point of embedding it.
+// poller.announce() updates the SAME bookkeeping a successful poll() would,
+// without the network round-trip. Returns false when the row has nothing
+// usable (an older row from before this shipped, or a lobby-only bump this
+// path cannot yet cover), so the caller can fall back to a real fetch.
+function applyPulseRow(row) {
+  const v = row && row.public_state;
+  if (!v) return false;
+  applyPublicView(v);
+  poller.announce(pulseSignature(v));
+  return true;
+}
+
+// ?code=ABCD for a bookmarkable TV link; otherwise resume the last code so a
+// TV that reboots comes straight back to the game.
+(function boot() {
+  const urlCode = new URLSearchParams(location.search).get('code');
+  const code = (urlCode || localStorage.getItem(CODE_KEY) || '').trim().toUpperCase();
+  if (code) start(code);
+})();
+</script>
+</body>
+</html>

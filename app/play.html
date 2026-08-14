@@ -1,0 +1,2617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Salty Schooner — Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  /* Controller styling only. Element ids, the .card/.run/.port classes and the
+     data-id/data-run/data-port/data-jb attributes are load-bearing — the tap
+     handlers select on them. Restyle them; do not rename or re-nest them. */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* theme.css paints an opaque navy on body, and CSS draws a negative-z-index
+     pseudo-element BEFORE its parent's background — so body was covering
+     .saltyBoard::before and hiding the board art entirely. Same bug fixed on
+     /tv; it applies here too. Swap board-bg.webp for Nick's reef background
+     when that asset lands. */
+  body { margin:0; overflow:hidden; background:transparent; }
+  .saltyBoard::before {
+    background-image:
+      linear-gradient(rgba(4,16,22,.34), rgba(4,16,22,.5)),
+      url("/assets/board-bg.webp") !important;
+  }
+
+  /* ---- LANDSCAPE CONTROLLER -------------------------------------------------
+   * Built to Nick's mockups (2026-08-02), which draw the phone held sideways.
+   * Everything is sized in dvh so the whole board fits one screen with no
+   * scrolling — an explicit requirement: "I don't want to have to scroll to see
+   * things on that screen." Portrait gets a rotate prompt rather than a squashed
+   * fallback, because the four-run row and the hand row cannot both survive a
+   * narrow viewport at a usable size.
+   */
+  #gameUi { height:100dvh; display:flex; flex-direction:column;
+            gap:1.1dvh; padding:1.4dvh 1.6dvh; }
+
+  .topBar { flex:0 0 auto; display:flex; align-items:center; gap:1.2dvh; }
+  /* Menu lives INSIDE the bar (see the markup): three separate items across the
+     top read as clutter on a phone. Order is Menu / turn / round — the button is
+     hard against the left edge, so its padding is trimmed on that side and the
+     round text gets the roomier right inset.
+     Fixed 600px rather than filling the row, to leave the logo real space.
+     max-width keeps it from overflowing a narrower phone than the 926px
+     landscape iPhone this was tuned against. */
+  .turnPill { flex:0 1 600px; max-width:100%; display:flex; align-items:center;
+              gap:1.4dvh; padding:.35dvh 2.2dvh .35dvh .5dvh; border-radius:1.4dvh;
+              border:.35dvh solid var(--gold); font-family:var(--serif);
+              background:linear-gradient(rgba(24,14,6,.9), rgba(24,14,6,.82));
+              color:var(--gold-lt); font-size:3.4dvh; line-height:1;
+              box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.5); }
+  .turnPill.myTurn { background:linear-gradient(#f0d089, #c9a227); color:#2a1e05; }
+  #turnText { flex:1 1 auto; }
+  .turnPill .roundMeta { font-size:2.2dvh; opacity:.85; white-space:nowrap; }
+  /* Stays dark in both pill states — on your turn the pill goes gold, so a gold
+     button would disappear into it.
+     Deliberately oversized for its text: it sits in the top strip where iOS
+     Safari reveals its toolbar, so a near-miss above the button un-fullscreens
+     the game. A bigger target is the cheap mitigation — the bar's own vertical
+     padding was cut to pay for most of the extra height. */
+  .pillMenu { flex:0 0 auto; font-size:2.6dvh; padding:2.6dvh 2.4dvh; border-radius:1dvh;
+              background:linear-gradient(rgba(24,14,6,.95), rgba(16,9,4,.95));
+              color:var(--gold-lt); border:.25dvh solid #c99a43; box-shadow:none; }
+  /* margin-left:auto pins it to the far right, so the space the turn bar gave up
+     opens between the two rather than stranding the logo mid-row.
+     logo-wide.png is the wordmark cropped tight — 4.65:1, no transparent
+     padding, unlike logo.webp which is two-thirds empty vertically and is still
+     what /tv, /host, /join and the lobby panels use. Height is capped at the
+     turn bar's own height so the logo never drives the row taller; at this
+     aspect that still buys ~175px of width. */
+  .topLogo { flex:0 0 auto; height:8.8dvh; width:auto; margin-left:auto;
+             filter:drop-shadow(0 .3dvh .9dvh rgba(0,0,0,.8)); }
+
+  /* Runs are TAP TARGETS ONLY — no card art, no legality highlight. Nick,
+     2026-08-02: showing which runs accept the selected card "takes all the
+     skill away if you're telegraphing to the player where to play the cards."
+     The card contents live on /tv. Illegal plays still toast. */
+  /* Grows into whatever the hand/ports column leaves over (they are pinned to
+     fixed heights below, and .midRow sizes to them) — the runs were the smallest
+     tap target on the screen, so the slack goes here. */
+  .runsRow { flex:1 1 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:1.2dvh; }
+  .run { background:var(--parch); color:#4a3418; border:.35dvh solid var(--gold);
+         border-radius:1.4dvh; min-height:9dvh;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.4dvh;
+         font-family:var(--serif); font-size:2.6dvh; letter-spacing:.05em;
+         box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45), inset 0 0 0 .18dvh rgba(240,208,137,.3);
+         cursor:pointer; }
+  .run:active { transform:translateY(.2dvh); }
+  /* Direction wash, lifted from hot-seat (app/index.html .run.direction-*). This
+     is NOT a legality hint: it reports the run's own established direction, which
+     is public state already shown on /tv, and does not change with what you have
+     selected. Direction is communicated by both hue and where the wash is
+     strongest — green pooling at the top for ascending, red at the bottom for
+     descending — so it survives colour-blindness better than hue alone. */
+  .run.direction-up { background:
+      linear-gradient(to bottom, rgba(26,145,85,.34), rgba(26,145,85,.09) 58%, rgba(26,145,85,0)),
+      var(--parch); }
+  .run.direction-down { background:
+      linear-gradient(to bottom, rgba(184,48,42,0), rgba(184,48,42,.09) 42%, rgba(184,48,42,.34)),
+      var(--parch); }
+  /* Remote mode only — the shared board is not on a TV, so the phone carries it. */
+  .run.showCards { flex-direction:column; gap:.5dvh; font-size:1.9dvh; padding:.8dvh; }
+
+  /* Sizes to the hand/ports column rather than filling the screen, so the slack
+     lands in .runsRow above instead of padding out the bottom of this row. */
+  .midRow { flex:0 1 auto; display:grid; grid-template-columns:1fr auto; gap:1.4dvh; min-height:0; }
+  /* align-items:center insets #handSection/.portsGrid below their own width
+     (see those rules) rather than letting them stretch edge-to-edge — leaves
+     the reef/board art visible on both sides and centers the ports under the
+     hand, matching Nick's ask. */
+  .leftCol { display:flex; flex-direction:column; align-items:center; gap:1.2dvh; min-height:0; }
+  /* Width is tuned to keep the Brig/HOLD frames square: each is half this
+     column's height, and the column now measures the hand + ports stack. Retune
+     this if either of those fixed heights changes. */
+  .rightCol { flex:0 0 auto; width:31.5dvh; display:flex; flex-direction:column; gap:1.2dvh; min-height:0; }
+
+  /* Hand on planks inside the rope frame, per the mockup. */
+  /* Hand and Ports share the left column. The hand gets the larger share (it is
+     the primary interaction) but not all of it — an unconstrained flex:1 here
+     let the plank panel swallow the column and left the cards looking tiny
+     inside it. */
+  /* Hand and Ports are pinned to explicit heights rather than flex shares: the
+     ports were sized as a leftover and grew to fill the column. Fixed bases keep
+     the hand exactly as it is while the ports shrink independently. */
+  #handSection { flex:0 0 31.8dvh; width:88%; min-height:0; position:relative;
+                 border:2.4dvh solid transparent;
+                 border-image:url("/assets/frame-generic.png") 90 fill / 2.4dvh / 0 round;
+                 display:flex; align-items:center; }
+  .handInner { display:flex; align-items:center; gap:1dvh; width:100%;
+               background:linear-gradient(rgba(20,12,7,.35), rgba(20,12,7,.35)), url("/assets/tex-wood.webp") center / 300px;
+               padding:.8dvh; border-radius:.6dvh; min-height:0; }
+  .handRow { display:flex; gap:1dvh; flex:1 1 auto; justify-content:center; }
+  #drawBtn { flex:0 0 auto; font-family:var(--serif); font-size:2.85dvh; line-height:1.15;
+             padding:2.1dvh 1.8dvh; border-radius:1dvh; border:.3dvh solid var(--gold);
+             background:linear-gradient(rgba(120,92,16,.95), rgba(84,64,10,.95));
+             color:var(--gold-lt); box-shadow:none; white-space:pre-line; }
+
+  .cardRow { display:flex; gap:.6dvh; }
+  /* 5:7 faces, sized off viewport height so the row fits a landscape phone. */
+  .card { width:13dvh; aspect-ratio:5/7; font-size:4dvh; border-radius:.8dvh; }
+  /* Hand cards are the primary touch target — bigger than the generic .card
+     default so they don't look lost in the plank panel. Scoped to #handRow so
+     port-fan and remote-mode run cards (which reuse the base .card size)
+     aren't affected. */
+  #handRow .card { width:18dvh; font-size:5.6dvh; }
+  .asBadge { font-size:1.2dvh; }
+  .card.selected { outline:.5dvh solid var(--gold-lt); outline-offset:.2dvh; transform:translateY(-.8dvh);
+                   box-shadow:0 0 2dvh rgba(240,208,137,.85), 0 .8dvh 1.4dvh rgba(0,0,0,.55); }
+  .card.slot { cursor:pointer; }
+  /* Optimistic feedback while a play is in flight. This is FEEDBACK ONLY — no
+     view state is faked, so the board can never disagree with the server (see
+     beginPendingPlay). The card fades where it sat and the target run takes a
+     ring, which is the honest cue in couch mode: runs deliberately carry no
+     card art there, so there is nothing for a card to fly INTO. */
+  .card.pending { opacity:.26; transform:translateY(.6dvh) scale(.94); pointer-events:none;
+                  transition:opacity .12s ease, transform .12s ease; }
+  .run.pendingTarget { box-shadow:0 0 0 .9dvh rgba(240,208,137,1), 0 0 2.4dvh rgba(240,208,137,.75);
+                       filter:brightness(1.12); }
+
+  /* HOLD in the ornate gold frame, Brig in the iron one — both lifted from
+     hot-seat rather than restyled, same as /tv. */
+  .holdBox, .brigBox { position:relative; flex:1 1 0; min-height:0;
+                       display:flex; align-items:center; justify-content:center; }
+  .holdBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-hold.png") center / 100% 100% no-repeat; }
+  .brigBox::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2;
+                    background:url("/assets/frame-brig.png") center / 100% 100% no-repeat; }
+  .holdInner, .brigInner { position:relative; z-index:1; width:66%; height:66%;
+                           display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5dvh; }
+  /* 72% is measured, not guessed: frame-hold.png is 512x512 and its transparent
+     window runs x=72..440, i.e. 71.9% of the image. Going wider (80% was tried)
+     slides the purple panel UNDER the ornate border and reads as the frame
+     clipping the card. Re-measure the art before changing this. The Brig keeps
+     the shared 66%: it holds several Kings at once and needs room to wrap. */
+  .holdInner { width:72%; height:72%;
+               background:linear-gradient(rgba(38,18,52,.85), rgba(38,18,52,.85)), url("/assets/tex-purple.webp") center / 200px; }
+  .brigInner { background:linear-gradient(rgba(24,16,14,.82), rgba(24,16,14,.88)), url("/assets/tex-stone.webp") center / 180px; }
+  .holdInner .card, .brigInner .card { width:7.4dvh; font-size:2.6dvh; }
+  /* HOLD shows exactly ONE card — the top of your pile — so it can be sized for
+     legibility rather than to fit a row. Scoped away from .brigInner, whose
+     cards must stay small enough that a multi-King Jailbreak still fits.
+     12.5dvh was tried first and was wrong in a specific way: at a 5:7 card
+     ratio that is 17.5dvh tall against a 22.68dvh panel (72% of a 31.5dvh
+     column) — 77% of the panel's HEIGHT, so it read as jammed vertically even
+     with the frame itself untouched and nothing clipping. 10dvh -> 14dvh tall
+     is 62%, real margin on every side. Re-derive the percentage if either the
+     panel's 72% or the column's 31.5dvh changes. */
+  .holdInner .card { width:10dvh; font-size:3.4dvh; }
+  .holdInner .panelCount { font-size:1.3dvh; }
+  .panelCount { font-size:1.5dvh; color:var(--gold-lt); }
+  .brigInner .cardRow { justify-content:center; flex-wrap:wrap; }
+
+  .portsGrid { flex:0 0 31.4dvh; width:88%; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); gap:1dvh;
+               background:var(--teal); border:.4dvh solid var(--gold); border-radius:1.4dvh;
+               padding:1dvh; box-shadow:0 .4dvh 1.4dvh rgba(0,0,0,.45); }
+  .port { background:rgba(8,40,44,.6); border:.25dvh solid rgba(201,162,39,.45); border-radius:1dvh;
+          text-align:center; min-height:0; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; position:relative; cursor:pointer; }
+  .port .count { font-size:1.4dvh; color:rgba(240,208,137,.7); }
+  /* Tap the count to fan the whole pile open — matches togglePortFan() in the
+     hot-seat build. Separate hit target from the port tile itself (stopPropagation
+     in the handler), since tapping the tile plays/discards. */
+  /* ~2x its original 2.6dvh. Briefly tried 3x, which Nick found too loud on the
+     tile; this is that backed off 30%. Sits INSIDE the tile corner rather than
+     straddling it — above roughly 5dvh the old negative offsets pushed it over
+     the Ports panel's own border and, on Port 4, past its right edge. */
+  .portBadge { position:absolute; top:.5dvh; right:.5dvh; background:var(--gold); color:#25190a;
+               border-radius:999px; min-width:5.5dvh; height:5.5dvh; padding:0 .7dvh; font-size:2.4dvh;
+               font-weight:800; display:flex; align-items:center; justify-content:center;
+               box-shadow:0 .2dvh .5dvh rgba(0,0,0,.5); cursor:pointer; z-index:3; }
+
+  /* What an empty run accepts. Deliberately quieter than the RUN label — it is
+     reference, not a call to action. */
+  .runOpener { font-size:2dvh; opacity:.7; letter-spacing:.04em; }
+
+  /* Opponents' HOLD piles — remote only; /tv carries these in couch mode. */
+  .oppStrip { display:none; }
+  /* The extra wrapper is layout-neutral in couch mode. Remote mode turns it
+     into the fixed central budget that can contain a Jailbreak event without
+     moving the player's private controls. */
+  .playfield { display:contents; }
+  .jailbreakEvent { display:none; }
+
+  /* ---- REMOTE MODE ----------------------------------------------------------
+   * Same DOM, re-flowed for a portrait phone with no /tv beside it. Deliberately
+   * CSS-only off a data-mode attribute rather than a second markup tree or a
+   * second page: /host was split off from /play precisely because duplicating
+   * the playing UI guarantees the copies drift apart, and that applies just as
+   * much to two layouts of the same screen. Every handler, every render branch
+   * and every optimistic-play path is shared; only the arrangement differs.
+   *
+   * WHY vw HERE AND dvh EVERYWHERE ELSE: couch mode is landscape, where height
+   * is the scarce axis, so dvh sizes cards correctly. Portrait inverts that —
+   * 1dvh is more than twice as wide relative to the screen — so the couch card
+   * sizes would blow straight past the edge. Widths that must fit ACROSS the
+   * screen are therefore in vw here. Do not "unify" these units.
+   */
+  #gameUi[data-mode="remote"] {
+                                /* The approved 50px geometry shift is defined
+                                   at 390x844. It tapers to zero at the 320x568
+                                   floor, where there is no spare vertical room. */
+                                --remote-stack-shift:clamp(0px,calc(18.2dvh - 103.4px),50px);
+                                /* The dock is taller now (real row spacing and
+                                   a Port row that fits card+count), so it needs
+                                   less upward translation to retain the table
+                                   gap. This still tapers to zero at 320x568. */
+                                --remote-dock-lift:clamp(0px,calc(19.93dvh - 113.2px),90px);
+                                --remote-private-gap:clamp(2px,calc(2.17dvh - 10.3px),8px);
+                                /* The taller opponent rail contributes 15px of
+                                   the requested table movement at 390x844; this
+                                   remaining 5px makes the net move 20px. */
+                                --remote-table-nudge:clamp(0px,calc(1.81dvh - 10.3px),5px);
+                                --remote-opp-pad-grow:clamp(3px,calc(1.63dvh - 6.25px),7.5px);
+                                /* Photoshop follow-up: a roughly 74%-screen hand
+                                   panel at 390w, but still the full available
+                                   card column at the 320w floor. */
+                                --remote-hand-trim:clamp(0px,calc(32.86vw - 105.15px),23px);
+                                --remote-hand-side-trim:clamp(0px,calc(27.14vw - 86.85px),19px);
+                                gap:.9dvh; padding:1dvh 2.5vw;
+                                overflow:hidden; }
+  /* EVERY flex/grid child in this layout needs min-width:0. Without it a child
+     cannot shrink below its own content, so one over-wide row (the hand, which
+     also carries the Draw button) silently widens the whole column and pushes
+     the Ports, the Brig and the logo off the right edge. This is the same
+     missing-min-width failure that let /tv's Brig row balloon past its frame on
+     2026-08-07 — same fix, one axis over. */
+  #gameUi[data-mode="remote"] .midRow,
+  #gameUi[data-mode="remote"] .playfield,
+  #gameUi[data-mode="remote"] .leftCol,
+  #gameUi[data-mode="remote"] .rightCol,
+  #gameUi[data-mode="remote"] .handInner,
+  #gameUi[data-mode="remote"] .handRow { min-width:0; }
+  /* Portrait has no room for decoration beside the turn pill; the logo is the
+     first thing to go rather than the thing that pushes everything else out. */
+  #gameUi[data-mode="remote"] .topBar { position:relative; z-index:5; gap:2vw; }
+  #gameUi[data-mode="remote"] .topLogo { display:none; }
+  /* 2x2 rather than 4-across: four run tiles side by side in portrait leaves
+     each one narrower than a single card.
+     It USED to grow into whatever height the rows below left over, on the
+     theory that slack was better spent on tap targets than pooled as dead
+     space. Nick overruled that on 2026-08-14, looking at a real phone: "the
+     runs area looks too stretched... it makes the cards look kind of
+     distorted... you're really trying to fill up the whole phone space at the
+     expense of proportions." So the board is now sized by PROPORTION — height
+     follows its own width and content, and leftover screen height is allowed
+     to just be leftover. Don't reintroduce a flex-grow here. */
+  /* ---- Tabletop tilt (remote only) -------------------------------------------
+   * Nick, 2026-08-11: "i really do like the 3d table foreshortening... we
+   * should lean into that." Grafted onto the EXISTING #runsGrid/.run/.brigBox
+   * elements and their real render() output — not new markup, not the
+   * hand-fan/vertical-Draw treatment from the reference mockup, which Nick
+   * separately said he does not want (the flat full-width hand/Draw/Ports
+   * built 2026-08-10 stays exactly as it is).
+   *
+   * WHY AN EXPLICIT-HEIGHT WRAPPER: `transform` never changes an element's
+   * layout box, only how it paints — rotateX on .runsRow directly would leave
+   * its ORIGINAL flex-assigned height reserved (dead space) while the tilted
+   * card corners paint outside a box sized for the untransformed rectangle
+   * (clipped, or clipping something below it). .tiltStage owns the real height
+   * and clips at a KNOWN boundary; .runsRow is absolutely positioned inside it
+   * purely for paint.
+   *
+   * The Brig lives in .rightCol in the HTML (shared with couch mode) and CSS
+   * grid-area placement only works on DIRECT children of the grid — so putting
+   * it in the middle of this 5-cell layout needs an actual DOM move, done in
+   * render() below, not a CSS-only trick. */
+  /* Height follows phone width with pixel caps, NOT vh/flex: the board keeps
+     the prototype's proportions on both stubby and tall phones instead of
+     stretching to whatever vertical space happens to be spare. */
+  /* The tabletop proportions come from the approved 3D prototype: two equal
+     Run rows around a Brig row roughly 44% as tall, separated by an 8px seam.
+     The stage scales between the prototype's 320-430px phone sizes without
+     distributing spare height between those rows. */
+  #gameUi[data-mode="remote"] .playfield {
+    flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+    justify-content:flex-start; overflow:visible;
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="none"] .playfield {
+    padding-top:var(--remote-stack-shift);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="none"] .tiltStage {
+    transform:translateY(var(--remote-table-nudge));
+  }
+  #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
+                                           margin:0;
+                                           width:100%;
+                                           height:min(clamp(280px,86vw,386px),100%);
+                                           perspective:900px;
+                                           perspective-origin:50% 38%;
+                                           isolation:isolate; overflow:visible; }
+  /* No slab behind the board. Perspective, tier widths and panel shadows carry
+     the depth without a second teal silhouette competing with the background. */
+  #gameUi[data-mode="remote"] .tiltStage::before,
+  #gameUi[data-mode="remote"] .tiltStage::after { display:none; }
+  /* .tiltBoard, NOT .runsRow, carries the grid/rotateX — see the HTML comment
+     for why: #runsGrid's innerHTML is fully replaced every render(), which
+     would destroy anything reparented directly inside it. */
+  #gameUi[data-mode="remote"] .tiltBoard { position:absolute;
+                                           inset:clamp(6px,2vw,10px)
+                                                 clamp(22px,calc(12.86vw - 19.15px),31px);
+                                           display:grid;
+                                           grid-template-columns:repeat(2,1fr);
+                                           grid-template-rows:minmax(0,1fr) clamp(48px,13.5vw,58px) minmax(0,1fr);
+                                           align-content:stretch;
+                                           grid-template-areas:"run0 run1" "brig brig" "run2 run3";
+                                           column-gap:8px; row-gap:8px;
+                                           transform-style:preserve-3d;
+                                           transform:rotateX(34deg);
+                                           transform-origin:50% 50%; }
+  /* display:contents removes #runsGrid's own box from layout entirely — its
+     four .run children become effective direct grid items of .tiltBoard, so
+     grid-area placement on [data-run] below still works, while render()'s
+     wholesale innerHTML rebuild of #runsGrid stays exactly as cheap and
+     unconstrained as it already was everywhere else. */
+  #gameUi[data-mode="remote"] .runsRow { display:contents; }
+  /* Placement only — every OTHER .run rule (background, border, direction wash,
+     card sizing) is untouched, so the tap targets, the no-legality-hint
+     philosophy and the direction wash all carry over unchanged. */
+  #gameUi[data-mode="remote"] .run[data-run="0"] { grid-area:run0; }
+  #gameUi[data-mode="remote"] .run[data-run="1"] { grid-area:run1; }
+  #gameUi[data-mode="remote"] .run[data-run="2"] { grid-area:run2; }
+  #gameUi[data-mode="remote"] .run[data-run="3"] { grid-area:run3; }
+  #gameUi[data-mode="remote"] .run { min-height:0; padding:8px;
+                                     position:relative; overflow:visible;
+                                     transform:translateZ(1.4vw); }
+  #gameUi[data-mode="remote"] .runLabel {
+    align-self:center; margin:0 0 4px; padding:2px 8px;
+    border-radius:999px; background:rgba(63,43,20,.09);
+    font-size:clamp(9px,2.75vw,12px); line-height:1;
+    transform:translateZ(5px);
+  }
+  #gameUi[data-mode="remote"] .run .card { width:44px; font-size:clamp(14px,3.7vw,17px); }
+  #gameUi[data-mode="remote"] .run .cardRow {
+    transform:translateZ(5px); transform-origin:50% 100%;
+  }
+
+  /* The Brig is a purpose-built iron gutter, not the square 512x512 frame art
+     squeezed into a strip. It stays between the Run rows in BOTH passive and
+     active remote states, so it never covers Runs, the hand or Ports. */
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox { grid-area:brig; flex:0 0 auto;
+                                                      height:auto; aspect-ratio:auto;
+                                                      min-height:0; padding:5px 12px;
+                                                      overflow:hidden;
+                                                      border:4px solid #665f55;
+                                                      border-top-color:#393631;
+                                                      border-bottom-color:#8b8173;
+                                                      border-radius:9px;
+                                                      background:linear-gradient(180deg,#111313,#292725);
+                                                      box-shadow:inset 0 8px 16px rgba(0,0,0,.88),
+                                                                 inset 0 -2px rgba(239,214,128,.08),
+                                                                 0 3px 7px rgba(0,0,0,.48);
+                                                      transform:translateZ(2px); }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::before {
+    content:""; position:absolute; z-index:0; pointer-events:none; inset:0;
+    background:repeating-linear-gradient(90deg,transparent 0 24px,rgba(193,183,168,.15) 24px 27px);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::after {
+    content:""; display:block; position:absolute; z-index:2; pointer-events:none; inset:0;
+    background:
+      radial-gradient(circle at 7px 7px,#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at calc(100% - 7px) 7px,#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at 7px calc(100% - 7px),#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at calc(100% - 7px) calc(100% - 7px),#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .brigInner {
+    width:100%; height:100%; min-width:0; flex-direction:row;
+    justify-content:center; gap:1.4vw; overflow:visible;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox #brigStrip {
+    flex:0 1 auto; min-width:0; flex-wrap:nowrap; align-items:center;
+    transform:translateZ(5px); transform-origin:50% 100%;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .card { width:6.5vw; font-size:2vw; }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .panelCount {
+    flex:0 0 auto; white-space:nowrap; font-family:var(--serif);
+    font-size:clamp(8px,2.2vw,11px); letter-spacing:.04em;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive {
+    min-height:0; border-color:var(--gold);
+    background:
+      radial-gradient(circle at 18% 35%,rgba(255,236,129,.24) 0 2px,transparent 3px),
+      repeating-linear-gradient(118deg,rgba(255,255,255,.08) 0 2px,transparent 2px 12px),
+      linear-gradient(105deg,#071d37 0 18%,#d92f55 18% 24%,#e0a421 24% 29%,#092a4a 29% 70%,#d92f55 70% 76%,#e0a421 76% 81%,#071d37 81%);
+    box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
+               0 0 2.8vw rgba(240,208,137,.58), 0 .8vw 1.5vw rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive::before {
+    background:
+      linear-gradient(90deg,transparent 0 8%,rgba(255,255,255,.13) 8% 8.6%,transparent 8.6% 91.4%,rgba(255,255,255,.13) 91.4% 92%,transparent 92%),
+      repeating-radial-gradient(circle at 50% 50%,transparent 0 9px,rgba(244,194,55,.1) 10px 11px);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .brigInner {
+    justify-content:center;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive #brigStrip {
+    display:none;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .panelCount {
+    position:relative; z-index:1; color:#fff3bd;
+    font:bold clamp(18px,6vw,28px)/1 var(--serif); letter-spacing:.08em;
+    text-shadow:2px 2px 0 #8d1833,-1px -1px 0 #8d1833,0 0 12px rgba(255,226,104,.8);
+  }
+  /* Active Jailbreak shelf. It owns space INSIDE .playfield rather than adding
+     height to the page. The Kings are visible reminders, but the whole group
+     is one 44px-minimum source because every released card obeys the same rule. */
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .playfield {
+    display:grid; grid-template-rows:clamp(78px,14dvh,101px) minmax(0,1fr);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .playfield {
+    display:grid; grid-template-rows:clamp(40px,7dvh,56px) minmax(0,1fr);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakEvent,
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakEvent {
+    display:flex; position:relative; z-index:4; min-width:0; overflow:hidden;
+    align-items:center; justify-content:center; gap:clamp(10px,4vw,24px);
+    margin:0 .8vw .5dvh; padding:clamp(5px,1.4vw,8px) clamp(8px,2vw,14px);
+    border:1px solid rgba(240,208,137,.52); border-radius:clamp(8px,2.2vw,12px);
+    background:
+      radial-gradient(circle at 8% 25%,rgba(255,217,90,.72) 0 1px,transparent 1.5px),
+      radial-gradient(circle at 94% 72%,rgba(255,117,116,.58) 0 1.2px,transparent 1.8px),
+      repeating-linear-gradient(115deg,transparent 0 13px,rgba(255,255,255,.035) 13px 15px),
+      linear-gradient(115deg,rgba(7,74,84,.96),rgba(9,42,70,.96) 44%,rgba(126,27,60,.94));
+    box-shadow:inset 0 0 18px rgba(0,0,0,.38),0 4px 12px rgba(0,0,0,.32);
+  }
+  #gameUi[data-mode="remote"] .jailbreakSource {
+    flex:0 0 auto; min-width:44px; min-height:44px; margin:0; padding:0 12px 0 0;
+    border:0; background:none; box-shadow:none; display:flex; align-items:center;
+    justify-content:center; position:relative;
+  }
+  #gameUi[data-mode="remote"] .jailbreakSource:active { transform:none; box-shadow:none; }
+  #gameUi[data-mode="remote"] .jailbreakCards { display:flex; align-items:center; padding-left:12px; }
+  #gameUi[data-mode="remote"] .jailbreakCard {
+    width:clamp(36px,10vw,48px); aspect-ratio:5/7; margin-left:-12px;
+    display:flex; align-items:center; justify-content:center; border-radius:clamp(5px,1.5vw,8px);
+    border:1px solid #aaa59a; background:#fffdf7; color:#171717;
+    font:bold clamp(13px,3.7vw,17px)/1 var(--sans);
+    box-shadow:0 3px 7px rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .jailbreakCard.red { color:#c63b2e; }
+  #gameUi[data-mode="remote"] .jailbreakSource.selected .jailbreakCard {
+    outline:3px solid #f8d45f; outline-offset:1px;
+    box-shadow:0 0 13px rgba(248,212,95,.9),0 3px 7px rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .jailbreakEventCount {
+    position:absolute; right:0; top:0; min-width:25px; height:25px; padding:0 5px;
+    border-radius:999px; display:flex; align-items:center; justify-content:center;
+    background:var(--gold); color:#25190a; border:2px solid #f0d089;
+    font:bold 11px/1 var(--sans); box-shadow:0 2px 5px rgba(0,0,0,.55);
+  }
+  #gameUi[data-mode="remote"] .jailbreakMessage {
+    min-width:0; max-width:52%; color:#fff5d5; font-family:var(--serif);
+    font-size:clamp(11px,3.4vw,16px); line-height:1.22;
+    text-shadow:0 2px 4px rgba(0,0,0,.72);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakEvent {
+    justify-content:flex-start; padding-inline:12px;
+    border-color:rgba(240,208,137,.36);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakMessage {
+    max-width:none; width:100%; text-align:center; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .tiltStage,
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .tiltStage {
+    height:min(clamp(220px,78vw,350px),100%);
+  }
+  @media (max-width:360px) {
+    #gameUi[data-mode="remote"] .run { padding:4px; }
+    #gameUi[data-mode="remote"] .run .card { width:38px; }
+  }
+  @media (orientation:portrait) and (max-height:650px) {
+    #gameUi[data-mode="remote"] .tiltStage { height:min(72vw,100%); }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .playfield {
+      grid-template-rows:60px minmax(0,1fr);
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakEvent {
+      gap:8px; margin-bottom:2px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakCard {
+      width:32px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakMessage {
+      font-size:10px; line-height:1.12;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .tiltBoard {
+      inset:5px 18px; grid-template-rows:minmax(0,1fr) 44px minmax(0,1fr);
+      column-gap:5px; row-gap:5px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .run .card { width:32px; }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .run { padding:4px; }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .runLabel { margin-bottom:2px; }
+  }
+  /* Nick, 2026-08-14, second pass on remote mode's bottom section — reference
+     image showed Draw Cards as a full-width banner ABOVE a [HOLD | hand] row,
+     with HOLD as its own simple box (his call: "give up on the decorative
+     frame... two separate boxes", not merged into the hand's wood panel). That
+     needs .leftCol to place FOUR things (draw / hold / hand / ports), where it
+     used to flex-stack two — a small named grid, direct children reparented in
+     by render() (see the JS comment by holdBoxEl2/drawBtnEl). Couch mode below
+     is untouched: #drawBtn and .holdBox live back in their original couch-only
+     parents there, this grid never applies to them. */
+  #gameUi[data-mode="remote"] .midRow { flex:0 0 auto; grid-template-columns:1fr; gap:0;
+                                         transform:translateY(calc(0px - var(--remote-dock-lift))); }
+  #gameUi[data-mode="remote"] .leftCol { display:grid;
+                                         row-gap:var(--remote-private-gap); column-gap:2vw;
+                                         grid-template-columns:auto 1fr;
+                                         grid-template-rows:44px 64px clamp(82px,25.65vw,108px);
+                                         grid-template-areas:"draw draw" "hold hand" "ports ports"; }
+  #gameUi[data-mode="remote"] #drawBtn { grid-area:draw; }
+  #gameUi[data-mode="remote"] .holdBox { grid-area:hold; }
+  #gameUi[data-mode="remote"] #handSection { grid-area:hand; }
+  #gameUi[data-mode="remote"] .portsGrid { grid-area:ports; }
+
+  /* .rightCol held HOLD and the Brig; both have moved elsewhere in remote mode
+     (HOLD into .leftCol's grid above, Brig into the tilted board or its own
+     escaped overlay), so it is left with nothing in it here — collapsed rather
+     than left as an empty box taking up a grid row for no reason. */
+  #gameUi[data-mode="remote"] .rightCol { display:none; }
+
+  /* DRAW CARDS keeps a permanent row in the private dock. It is contextual,
+     but hiding it changes visibility rather than layout: hand/HOLD/Ports never
+     jump when eligibility changes and the viewport never gains a scrollbar. */
+  #gameUi[data-mode="remote"] #drawBtn { width:75%; justify-self:end;
+                                         margin-right:clamp(0px,3vw,12px); white-space:nowrap;
+                                         position:relative; isolation:isolate;
+                                         transform:translateY(28px);
+                                         height:44px; min-height:44px; font-size:clamp(11px,3vw,14px);
+                                         line-height:1; padding:1.8vw 2vw;
+                                         border:0; border-radius:1.4vw;
+                                         background:transparent; box-shadow:none; }
+  /* 29px visible banner, 44px real button. The extra transparent hit area keeps
+     this frequent control viable on iPhone while matching the requested shape. */
+  #gameUi[data-mode="remote"] #drawBtn::before {
+    content:""; position:absolute; z-index:-1; inset:7.5px 0;
+    border:.3dvh solid var(--gold); border-radius:1.4vw;
+    background:linear-gradient(rgba(120,92,16,.95),rgba(84,64,10,.95));
+    box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4);
+  }
+  #gameUi[data-mode="remote"] #drawBtn.hidden {
+    display:block; visibility:hidden; opacity:0; pointer-events:none;
+  }
+
+  /* HOLD, simplified. frame-hold.png was a 512x512 SQUARE asset — fine filling
+     its own dedicated row, wrong once it has to sit narrow beside the hand at
+     whatever height the hand row happens to need; stretching it would be the
+     same trap that broke the old player plaques (documented elsewhere in this
+     file). Dropped for a plain bordered box instead — same gold-on-dark
+     language as the Ports tiles below it, so it reads as part of the same
+     family rather than a third distinct style. */
+  /* HOLD is deliberately 99px tall and bottom-aligned: the extra height grows
+     upward without moving the hand or Ports. Negative inline margins cancel
+     the extra 20px of visual width in grid sizing, so the hand column stays
+     exactly where it was while HOLD expands 10px on either side. */
+  #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:end;
+                                         width:calc(clamp(48px,13vw,58px) + 20px);
+                                         height:99px; min-height:0;
+                                         margin-inline:-10px;
+                                         transform:translateX(var(--remote-hand-side-trim)) translateY(40px);
+                                         padding:clamp(2px,.7vw,4px);
+                                         border:.3vw solid rgba(201,162,39,.6);
+                                         border-radius:1.4vw; background:rgba(8,40,44,.55); }
+  #gameUi[data-mode="remote"] .holdBox::after { display:none; }
+  #gameUi[data-mode="remote"] .holdInner { width:100%; height:100%; }
+  #gameUi[data-mode="remote"] .holdInner .card {
+    width:clamp(44px,11.5vw,52px); font-size:clamp(13px,3.8vw,17px);
+  }
+  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:clamp(8px,2vw,10px); }
+
+  #gameUi[data-mode="remote"] #handSection { flex:0 0 auto;
+                                             width:calc(100% - var(--remote-hand-trim)); height:84px;
+                                             justify-self:end; align-self:end;
+                                             min-height:0;
+                                             transform:translateY(40px);
+                                             border-width:1.6vw;
+                                             border-image-width:1.6vw; }
+  #gameUi[data-mode="remote"] .handInner { justify-content:center; padding:.4vw; }
+  #gameUi[data-mode="remote"] .handRow { gap:.8vw; flex-wrap:nowrap; }
+  /* Five playable cards still fit beside HOLD at 320px, but every face keeps
+     a 44px minimum touch width. At the 390px reference they grow to 48.75px
+     and center inside the 20px-taller hand panel. Suits remain visible: they
+     are cosmetic to the rules, but valuable recognition and colour-blind
+     redundancy. */
+  #gameUi[data-mode="remote"] #handRow .card {
+    width:clamp(44px,12.5vw,50px); font-size:clamp(13px,4vw,18px);
+  }
+  /* 100px at the 390px reference: the 73.7px card, its count, panel padding
+     and borders now fit as a unit instead of the face protruding above/below. */
+  #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:85%; height:100%;
+                                            justify-self:center; gap:1.4vw; padding:1.4vw;
+                                            transform:translateY(40px); }
+  #gameUi[data-mode="remote"] .port .card { width:12.15vw; font-size:3.7vw; }
+  #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
+  #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
+  /* NOTE: the old `.holdInner .card { width:14vw }` and `.holdInner
+     .panelCount { font-size:2vw }` used to live here. They were byte-identical
+     selectors to the ones in the HOLD block above and, sitting later in the
+     sheet, silently won — so the new narrower HOLD sizing was dead on arrival
+     and the card overflowed its own box on both sides (measured: 60.2px card
+     in a 49.4px box at 430w). Sized in ONE place now, up in the HOLD block.
+     Don't re-add a `.holdInner .card` rule down here. */
+  #gameUi[data-mode="remote"] .brigInner .card { width:7vw; font-size:2.2vw; }
+  #gameUi[data-mode="remote"] .panelCount { font-size:2vw; }
+  #gameUi[data-mode="remote"] .topLogo { height:6dvh; }
+  #gameUi[data-mode="remote"] .turnPill { font-size:2.6dvh; padding:.3dvh 1.6dvh .3dvh .4dvh; }
+  #gameUi[data-mode="remote"] .pillMenu { font-size:2dvh; padding:1.6dvh 1.6dvh; }
+  #gameUi[data-mode="remote"] .turnPill .roundMeta { font-size:1.7dvh; }
+  /* Overlays are siblings of #gameUi, so they need the body-scoped mode. The
+     fan opens a whole Port pile, which has no maximum depth — it already wraps
+     and scrolls, this only stops each card being sized for landscape. */
+  body[data-mode="remote"] .portFanOverlay .card { width:14vw; font-size:4.2vw; }
+  #gameUi[data-mode="remote"] .runOpener { font-size:3vw; }
+  /* Five compact status plaques fit across a 320px phone. They intentionally
+     do NOT draw miniature playing-card components: those fell to 9px type at
+     the six-player maximum. Rank+suit and HOLD count are the information. */
+  #gameUi[data-mode="remote"] .oppStrip { position:relative; z-index:5;
+                                          display:flex; flex:0 0 auto; gap:1vw;
+                                          justify-content:center; align-items:stretch; }
+  #gameUi[data-mode="remote"] .opp { flex:0 1 17.6vw; min-width:0; display:flex;
+                                     flex-direction:column; align-items:center; gap:.5vw;
+                                     padding:calc(.8vw + var(--remote-opp-pad-grow)) .6vw;
+                                     border-radius:1.4vw;
+                                     background:rgba(8,40,44,.55);
+                                     border:.3vw solid rgba(201,162,39,.4); }
+  #gameUi[data-mode="remote"] .opp.turn { border-color:var(--gold);
+                                          background:rgba(120,92,16,.35); }
+  #gameUi[data-mode="remote"] .oppName { width:100%; font-family:var(--serif);
+                                         font-size:clamp(9px,2.65vw,12px);
+                                         color:var(--gold-lt); max-width:18vw;
+                                         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #gameUi[data-mode="remote"] .oppHold { min-height:5vw; display:flex; align-items:baseline;
+                                         justify-content:center; gap:.8vw; line-height:1; }
+  #gameUi[data-mode="remote"] .oppRank { font:bold clamp(15px,4.8vw,21px)/1 var(--sans); color:#fffdf7;
+                                         text-shadow:0 2px 4px rgba(0,0,0,.75); }
+  #gameUi[data-mode="remote"] .oppRank.red { color:#ef745b; }
+  #gameUi[data-mode="remote"] .oppCount { font-size:clamp(8px,2.15vw,10px); color:rgba(240,208,137,.78);
+                                          white-space:nowrap; }
+  #gameUi[data-mode="remote"] .oppClear { font-size:clamp(9px,2.5vw,11px); color:var(--gold-lt); }
+
+  /* ---- Modals ---------------------------------------------------------------
+   * The King direction question and the Menu are both dimmed-backdrop modals,
+   * matching hot-seat's showModal(). The landscape layout claims every region of
+   * the screen — runs, hand, ports, HOLD, Brig — so there is no free strip left
+   * for a docked bar to occupy without covering something. A modal floats above
+   * all of it and cannot collide.
+   */
+  .modalBackdrop { position:fixed; inset:0; z-index:40; display:none;
+                   align-items:center; justify-content:center; padding:2dvh;
+                   background:rgba(4,10,14,.78); }
+  .modalBackdrop.show { display:flex; }
+  .modalCard { width:min(88vw, 92dvh); max-height:92dvh; overflow-y:auto;
+               background:linear-gradient(rgba(28,16,8,.97), rgba(20,12,6,.98));
+               border:.4dvh solid var(--gold); border-radius:1.6dvh; padding:2.4dvh;
+               box-shadow:0 1dvh 4dvh rgba(0,0,0,.7); }
+  .modalCard h2 { margin:0 0 1.4dvh; font-family:var(--serif); font-size:3dvh; color:var(--gold-lt); }
+  .modalCard p { margin:.6dvh 0; font-size:2dvh; }
+  .modalChoices { display:flex; flex-wrap:wrap; gap:1.2dvh; margin-top:2dvh; }
+  .modalChoices button { flex:1 1 auto; font-size:2.1dvh; padding:1.6dvh 2dvh; }
+  .menuSection { margin-top:2dvh; padding-top:1.6dvh; border-top:.2dvh solid rgba(201,162,39,.3); }
+  .menuSection h3 { margin:0 0 1dvh; font-family:var(--serif); font-size:1.9dvh;
+                    color:var(--gold-lt); text-transform:uppercase; letter-spacing:.1em; }
+  .menuScore { display:flex; justify-content:space-between; font-size:2.1dvh;
+               color:var(--gold-lt); padding:.5dvh 0; }
+  .menuScore.turn { font-weight:700; }
+  .menuBtns { display:flex; flex-wrap:wrap; gap:1dvh; }
+  .menuBtns button { font-size:1.9dvh; padding:1.2dvh 1.6dvh; }
+
+  /* Landscape is the designed orientation; portrait gets an honest prompt
+     rather than a broken board. */
+  #rotatePrompt { position:fixed; inset:0; z-index:60; display:none;
+                  flex-direction:column; align-items:center; justify-content:center;
+                  gap:2vh; padding:8vw; text-align:center;
+                  background:linear-gradient(rgba(6,14,20,.96), rgba(6,14,20,.99)); }
+  #rotatePrompt img { width:min(60vw,260px); }
+  @media (orientation: portrait) {
+    #rotatePrompt.armed { display:flex; }
+  }
+
+  .portFanOverlay { position:fixed; left:0; right:0; bottom:0; z-index:15; max-height:70vh;
+                     background:linear-gradient(rgba(10,20,26,.97), rgba(10,20,26,.99));
+                     border-top:1px solid var(--gold); box-shadow:0 -4px 18px rgba(0,0,0,.55);
+                     padding:14px; overflow-y:auto; }
+  .portFanOverlay h3 { margin-top:0; }
+  .portFanRow { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; align-items:flex-start; }
+  .portFanCell { display:flex; flex-direction:column; align-items:center; }
+  /* The last card in a pile is the only one that's actually playable — mark it
+     so the fan answers "which one can I use" not just "what's buried here". */
+  .portFanRow .card.top { outline:2px solid var(--gold); box-shadow:0 0 10px rgba(201,162,39,.6); }
+  .portFanTopLabel { font-size:9px; text-align:center; color:var(--gold-lt); margin-top:2px; }
+  .holdRow { display:flex; align-items:center; gap:12px; }
+
+  /* The hand sits on wood, as it does in the hot-seat build. */
+  #handSection { background:linear-gradient(rgba(20,12,7,.55), rgba(20,12,7,.55)), url("/assets/tex-wood.webp") center / 340px;
+                 border-top:1px solid rgba(201,162,39,.28); border-bottom:1px solid rgba(201,162,39,.28); }
+
+  button { font-size:1rem; padding:12px 18px; border-radius:10px; border:none;
+           font-family:var(--serif); font-weight:700; color:#25190a;
+           background:linear-gradient(#f0d089, #c9a227); box-shadow:0 2px 0 #6f5510; }
+  button:active { transform:translateY(1px); box-shadow:0 1px 0 #6f5510; }
+  button.wide { width:100%; }
+  .choiceBar { position:fixed; left:0; right:0; bottom:0; padding:14px; display:flex; gap:10px; flex-wrap:wrap; z-index:10;
+               background:linear-gradient(rgba(10,20,26,.96), rgba(10,20,26,.99));
+               border-top:1px solid var(--gold); box-shadow:0 -4px 18px rgba(0,0,0,.55); }
+  .toast { position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#7a2323; color:#fff;
+           padding:10px 18px; border-radius:10px; z-index:20; border:1px solid #c9a227; }
+  .hidden { display:none; }
+  .center { text-align:center; padding:40px 20px; }
+  #waitPanel .logo, #lobbyPanel .logo { width:min(70vw,320px); display:block; margin:0 auto 18px; }
+
+  /* Lobby and round-results now live here rather than on a separate host
+     screen, because the host is a player and stays on this page all game. */
+  .lobbyCode { font-family:var(--serif); font-size:3.4rem; letter-spacing:.2em;
+               color:var(--gold-lt); margin:6px 0; text-shadow:0 3px 12px rgba(0,0,0,.6); }
+  .playerList { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:18px 0; }
+  .playerChip { font-family:var(--serif); background:var(--teal); border:1px solid var(--gold);
+                padding:8px 16px; border-radius:999px; font-size:1rem; color:var(--gold-lt); }
+  .playerChip.you { background:linear-gradient(#f0d089, #c9a227); color:#25190a; border-color:#8a6c15; }
+  .scoreRow { display:flex; justify-content:space-between; max-width:320px; margin:6px auto;
+              font-size:1.05rem; color:var(--gold-lt); }
+  button.secondary { background:rgba(20,12,7,.92); color:var(--gold-lt); border:1px solid #c99a43;
+                     box-shadow:none; }
+  button.tiny { font-size:.82rem; padding:7px 12px; }
+  /* (.hostBar is gone — host controls live in the Menu modal now.) */
+</style>
+</head>
+<body class="saltyBoard">
+<div id="waitPanel" class="center">
+  <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
+  <p>Loading your seat…</p>
+</div>
+
+<div id="lobbyPanel" class="center hidden">
+  <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
+  <div class="meta">Room code</div>
+  <div class="lobbyCode" id="lobbyCode"></div>
+  <p class="meta" id="lobbyJoinHint"></p>
+  <div class="playerList" id="lobbyPlayers"></div>
+  <div id="lobbyHostControls" class="hidden">
+    <button id="startBtn" disabled>Start game</button>
+    <p style="margin-top:14px;"><button id="lobbyResetBtn" class="secondary tiny">Reset game</button></p>
+  </div>
+  <p class="meta hidden" id="lobbyWaitText">Waiting for the host to start…</p>
+</div>
+
+<div id="resultsPanel" class="center hidden"></div>
+
+<div id="gameUi" class="hidden">
+  <div class="topBar">
+    <div class="turnPill" id="turnBar">
+      <button id="menuBtn" class="pillMenu">Menu ☰</button>
+      <span id="turnText">Waiting…</span>
+      <span class="roundMeta" id="roundMeta"></span>
+    </div>
+    <img class="topLogo" src="/assets/logo-wide.png" alt="Salty Schooner">
+  </div>
+
+  <!-- Remote mode only. With no /tv there is nothing showing how close anyone
+       else is to going out, and a round is a race — the opponents' HOLD piles
+       are the single most important thing on the shared board. All public
+       (publicPlayers sends goalTop/goalCount; /tv puts the same two on every
+       plaque). Not tap targets: no data-id, so no listener ever binds. -->
+  <div class="oppStrip" id="oppStrip"></div>
+
+  <!-- Couch mode ignores both wrappers entirely (no rule below targets them
+       there) — plain blocks, zero effect, .runsRow renders exactly as it
+       always has.
+       .tiltBoard, not .runsRow, is the actual CSS Grid / rotateX element in
+       remote mode. Necessary, not decorative: render() replaces #runsGrid's
+       ENTIRE innerHTML on every call, so anything reparented INSIDE it (the
+       Brig, for the passive tilted state) would be destroyed by the very next
+       render. .tiltBoard is never innerHTML-rebuilt, so the Brig can live
+       there as a permanent grid sibling of #runsGrid; #runsGrid itself goes
+       display:contents in remote mode so its freely-rebuilt .run children
+       still act as direct grid items of .tiltBoard for grid-area placement. -->
+  <div class="playfield" id="playfield">
+    <!-- Remote-only state shelf. During your Jailbreak this is the playable
+         released-King group; during another player's it is a compact status
+         line. It is inside the playfield's fixed height, so appearing never
+         moves Draw, the hand/HOLD row or Ports. -->
+    <section class="jailbreakEvent" id="jailbreakEvent" aria-live="polite">
+      <div class="jailbreakMessage" id="jailbreakMessage"></div>
+    </section>
+    <div class="tiltStage" id="tiltStage">
+      <div class="tiltBoard" id="tiltBoard">
+        <div class="runsRow" id="runsGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="midRow">
+    <div class="leftCol">
+      <div id="handSection">
+        <div class="handInner">
+          <button id="drawBtn" class="hidden">Draw&#10;Cards</button>
+          <div class="handRow" id="handRow"></div>
+        </div>
+      </div>
+      <div class="portsGrid" id="portsGrid"></div>
+    </div>
+
+    <div class="rightCol">
+      <div class="holdBox">
+        <div class="holdInner">
+          <div id="holdCard"></div>
+          <div class="panelCount" id="holdCount"></div>
+        </div>
+      </div>
+      <!-- The Brig frame is always drawn; it only fills with Kings during YOUR
+           Jailbreak. Released Kings exist solely on the turn of whoever set them
+           loose, and that Jailbreak always resolves at the same discard that
+           ends the turn — so no other player's turn can overlap an open one, and
+           `isYourTurn && brig.active` is the whole condition. -->
+      <div class="brigBox">
+        <div class="brigInner">
+          <div id="brigStrip" class="cardRow"></div>
+          <div class="panelCount" id="brigCount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- One modal element serves both the King question and the Menu; only one can
+     ever be open, and reusing it keeps a single dismissal path. -->
+<div id="modalBackdrop" class="modalBackdrop">
+  <div class="modalCard">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div id="modalChoices" class="modalChoices"></div>
+  </div>
+</div>
+
+<div id="portFanOverlay" class="portFanOverlay hidden">
+  <h3 id="portFanTitle">Port</h3>
+  <div class="portFanRow" id="portFanRow"></div>
+  <button class="wide" id="portFanClose">Close</button>
+</div>
+
+<!-- The escape hatch matters: this overlay sits at z-index 60 across the whole
+     screen, so while it is up the Menu underneath cannot be tapped. Without a
+     way out from here, a player with no TV would have to rotate into couch mode
+     — a layout that deliberately shows no board — hunt for the Menu, and only
+     then find remote mode. Offer it where they actually are. -->
+<div id="rotatePrompt">
+  <img src="/assets/logo-wide.png" alt="Salty Schooner">
+  <p style="font-size:1.2rem;color:var(--gold-lt);">Turn your phone sideways to play.</p>
+  <p class="meta" style="max-width:34ch;">Couch mode expects a TV to be showing the board.</p>
+  <button id="rotateRemoteBtn" class="secondary">No TV? Play in remote mode</button>
+</div>
+
+<script src="/shared/api.js"></script>
+<script src="/shared/engine.js"></script>
+<script src="/shared/sfx.js"></script>
+<script src="/shared/poller.js"></script>
+<script src="/shared/vendor/supabase.js"></script>
+<script src="/shared/realtime.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+let roomId = params.get('room') || Persist.lastRoom();
+const urlPid = params.get('pid');
+const urlTok = params.get('tok');
+let creds = roomId ? Persist.loadPlayer(roomId, urlPid) : null;
+
+// Rejoin link: ?room=..&pid=..&tok=.. restores a seat on a device that no longer
+// has its saved credentials. Still supported, but rejoining by name at /join is
+// now the easier route for most cases.
+if (roomId && urlPid && urlTok) {
+  creds = { playerId: urlPid, resumeToken: urlTok };
+  Persist.savePlayer(roomId, urlPid, urlTok, null, null);
+  // Drop the token out of the address bar (and browser history) now that it's saved.
+  if (history.replaceState) history.replaceState(null, '', '/play?room=' + roomId);
+}
+let selected = null; // {zone, card, index}
+let lastView = null;
+let fannedPort = null; // index of the Port currently spread open, or null
+
+// ---- Instrumentation --------------------------------------------------------
+// Added 2026-08-13 to settle with numbers, not theory, why taps feel laggy and
+// inconsistent — and worse on a phone than on a desktop. Three suspects were on
+// the table, they need different fixes, so they have to be measured APART:
+//   1. the input lock refusing a tap that arrives while a request is in flight
+//      (produces a click that inputLocked() then drops),
+//   2. a full-board innerHTML rebuild replacing the card element BETWEEN a touch
+//      going down and coming up, which loses the tap before a click ever fires,
+//   3. plain network/server latency before the card appears in the run.
+//
+// Client durations only ever subtract two performance.now() readings from the
+// SAME clock. Server-side timings are reported separately and never differenced
+// against client time: the clocks are unrelated, and subtracting them gives a
+// number that looks precise and means nothing.
+//
+// Percentiles, not averages: the complaint is intermittent, so the tail is the
+// whole story and a mean hides it.
+//
+// A phone has no console, which is where this has to be read — Menu → Timings.
+const Perf = {
+  MAX: 400,
+  actions: [],
+  renders: [],
+  seq: 0,
+  counts: { tapGestures: 0, lostTaps: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0,
+            predicted: 0, resyncs: 0,
+            // Doorbell pulses that did NOT cost a get-state invocation, split by
+            // why. rendersSuppressed counts renders avoided AFTER the fetch;
+            // these count the fetch itself never happening, which is the only
+            // one of the two that shows up on a Netlify bill.
+            doorbellSuppressed: 0, doorbellHeld: 0, doorbellHeldFollowup: 0, doorbellHeldTimedOut: 0 },
+  // Renders split by what asked for them, and every poll tagged with whether
+  // the doorbell was live at the time. Without this it is impossible to tell a
+  // screen sitting on the 45s safety net from one that has silently fallen back
+  // to fast polling — which changes the diagnosis completely, and is the
+  // difference between "rebuilds are rare" and "rebuilds are constant".
+  byCause: {},
+  polls: { live: 0, down: 0 },
+  device: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse',
+  now() { return performance.now(); },
+  cap(a) { if (a.length > this.MAX) a.splice(0, a.length - this.MAX); },
+
+  // One row per attempted play, carrying a unique id. The id is what lets a
+  // response be matched to the tap that caused it rather than to whatever
+  // happens to be in flight when it lands, and what would make a duplicate or
+  // retried send identifiable if the optimistic queue is built later.
+  startAction(kind) {
+    const rec = { id: ++this.seq, kind, device: this.device, outcome: 'pending', t: { tap: this.now() } };
+    this.actions.push(rec); this.cap(this.actions);
+    return rec;
+  },
+  mark(rec, name) { if (rec) rec.t[name] = this.now(); },
+  finish(rec, outcome) { if (rec) { rec.outcome = outcome; rec.t.done = this.now(); } },
+  // Doorbell receipt -> fetch start, and receipt -> board painted. This is the
+  // RECEIVING half of opponent-visible latency: the part after the pulse lands
+  // here. The earlier half (server commit -> pulse delivered) cannot be measured
+  // from one device, because it spans two clocks — that still needs a second
+  // physical device, or timing recorded server-side at the pulse write.
+  //
+  // "toFetch" exists to settle whether poller.forceTick()'s 900ms floor delays a
+  // doorbell in practice. Expected ~0 on a device that is only watching; a
+  // non-zero p95 here would mean the floor is real on the observing side too.
+  pulseSpans: { toFetch: [], toPainted: [], toApplied: [] },
+  // How often minForcedGapMs actually held a forced fetch back, and by how much.
+  forcedDelays: [],
+  noteForcedDelay(ms) { this.forcedDelays.push(ms); this.cap(this.forcedDelays); },
+  notePulseSpan(kind, ms) {
+    const a = this.pulseSpans[kind];
+    if (a && isFinite(ms) && ms >= 0) { a.push(ms); this.cap(a); }
+  },
+  bump(cause, kind) {
+    const k = cause || 'unknown';
+    (this.byCause[k] || (this.byCause[k] = { drawn: 0, skipped: 0 }))[kind]++;
+  },
+  noteRender(ms, cause) {
+    this.renders.push({ ms, cause: cause || 'unknown' });
+    this.cap(this.renders);
+    this.bump(cause, 'drawn');
+  },
+  notePoll(live) { this.polls[live ? 'live' : 'down']++; },
+
+  // Suspect (2) leaves a specific fingerprint: a press on a tap target that
+  // never produces a click.
+  //
+  // This was FIRST WRITTEN as two global counters subtracted from each other,
+  // which was wrong and produced a nonsense reading in the field (-4 unmatched:
+  // more clicks than presses, which cannot describe lost taps). Two counters
+  // over different event scopes cannot be differenced — a click arriving
+  // without a matching press silently cancelled out a real loss. Each gesture
+  // is now correlated individually: one press, did its own click arrive.
+  //
+  // A press that MOVES is a drag or a scroll, not a lost tap, so it is excluded
+  // by distance rather than left to inflate the number.
+  noteTapGesture(lost) { this.counts.tapGestures++; if (lost) this.counts.lostTaps++; },
+  // A refused tap is not one thing. It matters whether input was held by a
+  // non-predictable action mid-flight, by the predicted queue still draining, or
+  // by an old-style pending play — those have different fixes, and a bare count
+  // cannot tell them apart.
+  busyReasons: {},
+  noteSwallowed(reason) {
+    this.counts.swallowed++;
+    const k = reason || 'unknown';
+    this.busyReasons[k] = (this.busyReasons[k] || 0) + 1;
+  },
+
+  pct(arr, p) {
+    if (!arr.length) return null;
+    const s = arr.slice().sort((a, b) => a - b);
+    return Math.round(s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]);
+  },
+  // Split by kind rather than pooled. Kings ('play-king') are excluded from both
+  // because their path opens a direction modal, so tap→feedback would measure
+  // how long a human took to decide and would swamp every percentile.
+  //
+  // Predicted and confirmed plays MUST be reported separately: the first phone
+  // readout after prediction shipped showed only the confirmed rows, because
+  // this filter excluded the predicted ones and nothing reported them — the
+  // table showed the plays that still wait and none of the ones that no longer
+  // do, which read as "no improvement" when ten plays had gone from ~400ms to
+  // about one.
+  spans(kind) {
+    const ok = this.actions.filter(a => a.outcome === 'accepted' && a.kind === kind);
+    const pick = fn => ok.map(fn).filter(v => typeof v === 'number' && isFinite(v) && v >= 0);
+    return {
+      feedback: pick(a => a.t.feedback - a.t.tap),
+      inRun:    pick(a => a.t.rendered - a.t.tap),
+      network:  pick(a => a.t.response - a.t.request),
+      locked:   pick(a => a.t.done - a.t.tap)
+    };
+  },
+  // Server stages come back as DURATIONS measured on the server's own clock, so
+  // nothing here differences two different clocks. "outside" is the part of the
+  // round trip the function did not account for — transit, cold start, queueing
+  // — which is where a 2-second tail would have to be hiding.
+  serverSpans() {
+    const w = this.actions.filter(a => a.server && typeof a.server.total === 'number');
+    const pick = fn => w.map(fn).filter(v => typeof v === 'number' && isFinite(v) && v >= 0);
+    return {
+      total:   pick(a => a.server.total),
+      reads:   pick(a => a.server.reads),
+      rules:   pick(a => a.server.rules),
+      write:   pick(a => a.server.write),
+      pulse:   pick(a => a.server.pulse),
+      outside: pick(a => (a.t.response - a.t.request) - a.server.total)
+    };
+  },
+  summary() {
+    const pred = this.spans('play-predicted');
+    const conf = this.spans('play');
+    const srv = this.serverSpans();
+    const row = (m, arr) => ({ metric: m, n: arr.length, p50: this.pct(arr, 50), p75: this.pct(arr, 75), p95: this.pct(arr, 95) });
+    return {
+      device: this.device,
+      counts: Object.assign({}, this.counts),
+      busyReasons: Object.assign({}, this.busyReasons),
+      ms: [
+        row('PREDICTED tap→card in run', pred.inRun),
+        row('waited   tap→card in run', conf.inRun),
+        row('waited   tap→feedback', conf.feedback),
+        row('request→response', pred.network.concat(conf.network)),
+        row('server: total in function', srv.total),
+        row('server:   db reads', srv.reads),
+        row('server:   rules', srv.rules),
+        row('server:   db write', srv.write),
+        row('server:   pulse', srv.pulse),
+        row('outside function', srv.outside),
+        row('doorbell→fetch start', this.pulseSpans.toFetch),
+        row('doorbell→painted', this.pulseSpans.toPainted),
+        row('doorbell→applied (nothing drawn)', this.pulseSpans.toApplied),
+        row('forced-poll delay when it bit', this.forcedDelays),
+        row('render duration', this.renders.map(r => r.ms))
+      ]
+    };
+  },
+  text() {
+    const s = this.summary();
+    const n = v => (v == null ? '—' : v + 'ms');
+    return `device: ${s.device}\n`
+      + `taps on a target: ${s.counts.tapGestures}, lost (no click): ${s.counts.lostTaps}\n`
+      + `taps refused while busy: ${s.counts.swallowed}`
+      + ` (${Object.keys(s.busyReasons).map(k => k + ' ' + s.busyReasons[k]).join(', ') || 'none'})\n`
+      + `predicted plays: ${s.counts.predicted || 0}, resyncs: ${s.counts.resyncs || 0}\n`
+      + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
+      + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
+      + `polls while realtime live: ${this.polls.live}, while down: ${this.polls.down}\n`
+      + `forced fetches delayed by the 900ms floor: ${this.forcedDelays.length}\n`
+      + `doorbell fetches avoided: ${s.counts.doorbellSuppressed} already-known`
+      + `, ${s.counts.doorbellHeld} held`
+      + ` (${s.counts.doorbellHeldFollowup} still needed, ${s.counts.doorbellHeldTimedOut} timed out)\n`
+      + 'by cause: ' + (Object.keys(this.byCause).map(k =>
+          `${k} ${this.byCause[k].drawn}drawn/${this.byCause[k].skipped}skipped`).join(', ') || '—') + '\n\n'
+      + s.ms.map(r => `${r.metric}  n=${r.n}  p50 ${n(r.p50)}  p75 ${n(r.p75)}  p95 ${n(r.p95)}`).join('\n');
+  }
+};
+window.Perf = Perf;   // so a desktop console can reach it too
+
+// ---- Gesture-safe rendering -------------------------------------------------
+// render() replaces the runs, hand, Ports, HOLD and Brig via innerHTML and
+// rebinds every listener. Every gameplay tap target is bound with 'click', and a
+// click only fires when the press and the release resolve to the same element —
+// so a render landing between a finger going down and coming up DESTROYS the
+// element the press landed on and the tap is lost outright. No CPU slowness is
+// needed to produce this; it is pure DOM timing, and a touch is held longer than
+// a mouse click, which is why a phone would feel it more than a desktop.
+//
+// So: while a pointer is down on the board, hold renders. Only the NEWEST view
+// is kept — an older one that never got drawn has no value once a newer one has
+// arrived, and coalescing keeps this from queueing up work.
+let pointerActive = false;
+let renderPending = false;
+let pendingCause = null;
+let pointerGuardTimer = null;
+let flushGraceTimer = null;
+// What triggered the next fetch, so a render can be attributed to a doorbell
+// pulse rather than to the timer. Reset to 'timer' each time it is consumed.
+let nextPollCause = 'timer';
+// An outstanding doorbell observation: news has arrived that the board does not
+// yet reflect. Deliberately NOT a "when did we decide to fetch" mark — an
+// earlier version of this recorded the timestamp at the moment a HELD pulse was
+// released, which silently excluded the entire hold from the very number the
+// hold makes interesting.
+//
+// receivedAt is the EARLIEST unreflected pulse, kept across coalescing: if 43
+// and 44 both land before either is drawn, the board has been behind since 43
+// arrived, and that is the honest measure of how stale the screen was. version
+// tracks the newest so the observation is satisfied by the right update.
+let pulseObs = null;   // { receivedAt, version }
+
+function notePulseReceived(version) {
+  if (!pulseObs) pulseObs = { receivedAt: Perf.now(), version: version };
+  else if (typeof version === 'number' && version > pulseObs.version) pulseObs.version = version;
+}
+
+// Closed only when the observation is genuinely resolved, and labelled by what
+// actually happened to the screen. 'painted' means a render ran; 'applied' means
+// the fetch came back with nothing new to draw. Conflating those would report
+// paint latency for frames that were never painted.
+function closePulseObs(kind) {
+  if (!pulseObs) return;
+  // Resolved only once the screen reflects the version that was ANNOUNCED. A
+  // render for some other, older update — our own action landing at 43 while
+  // the pulse announced 44 — is not this pulse being satisfied, and closing
+  // there reports a paint for news the player still cannot see. Observed doing
+  // exactly that: a held pulse's span was being closed by the action whose
+  // response released the hold, so the follow-up fetch it actually needed was
+  // never measured at all.
+  if (lastView && typeof lastView.stateVersion === 'number'
+      && typeof pulseObs.version === 'number'
+      && lastView.stateVersion < pulseObs.version) return;
+  Perf.notePulseSpan(kind, Perf.now() - pulseObs.receivedAt);
+  pulseObs = null;
+}
+// Nothing may freeze the board indefinitely. A pointer that never reports its
+// release (capture lost to a system gesture, a tab switched mid-touch) would
+// otherwise hold every render forever, which is a far worse bug than the one
+// this guard fixes.
+const POINTER_GUARD_MAX_MS = 1000;
+// How long to keep holding after a release that produces NO click — a drag, a
+// scroll, a press on bare board. Sized for mobile Safari, where the click after
+// a touch can be dispatched in a LATER task than pointerup rather than beside
+// it: a setTimeout(0) flush would beat that click and destroy the element,
+// which is the exact bug this guard exists to prevent. Real taps do not wait
+// this out — they flush on their own click, below.
+const FLUSH_GRACE_MS = 350;
+// One definition of "a thing you can tap", used for both the pointerdown and
+// the click counter. Counting different sets on each side would make the
+// unmatched-pointerdown figure meaningless — a click on bare board would cancel
+// out a genuinely lost tap on a card.
+const TAP_TARGETS = '[data-run],[data-id],[data-port],[data-jb],#holdTop';
+
+// The gesture currently under a finger, correlated individually so a lost tap
+// is measured per press rather than inferred by subtracting global totals.
+let gesture = null;   // { onTarget, matched, x, y, moved }
+
+function beginGesture(e) {
+  pointerActive = true;
+  gesture = {
+    onTarget: !!(e && e.target.closest && e.target.closest(TAP_TARGETS)),
+    matched: false,
+    x: e ? e.clientX : 0,
+    y: e ? e.clientY : 0,
+    moved: 0
+  };
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = null;
+  clearTimeout(pointerGuardTimer);
+  pointerGuardTimer = setTimeout(() => endGesture(true), POINTER_GUARD_MAX_MS);
+}
+
+// Only a press that stayed put and produced no click counts as lost; anything
+// that travelled was a scroll or a drag and never wanted a click.
+const TAP_SLOP_PX = 12;
+function scoreGesture() {
+  if (!gesture) return;
+  if (gesture.onTarget) Perf.noteTapGesture(!gesture.matched && gesture.moved <= TAP_SLOP_PX);
+  gesture = null;
+}
+
+function endGesture(fromTimeout) {
+  if (!pointerActive) return;
+  pointerActive = false;
+  clearTimeout(pointerGuardTimer);
+  pointerGuardTimer = null;
+  // The safety timeout fires between tasks by definition, so it cannot land in
+  // the pointerup→click gap and may draw at once.
+  if (fromTimeout) { flushDeferredRender(); return; }
+  // A normal release waits for the click it is about to produce (see
+  // FLUSH_GRACE_MS). The click handler below flushes as soon as it arrives, so
+  // this timer only ever pays out for gestures that were not taps.
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = setTimeout(flushDeferredRender, FLUSH_GRACE_MS);
+}
+
+function flushDeferredRender() {
+  clearTimeout(flushGraceTimer);
+  flushGraceTimer = null;
+  if (pointerActive) return;
+  scoreGesture();
+  if (!renderPending) return;
+  renderPending = false;
+  const cause = pendingCause;
+  pendingCause = null;
+  if (lastView) {
+    render(shownView(), (cause ? cause + '+' : '') + 'deferred');
+    closePulseObs('toPainted');
+  }
+}
+
+// Bound once, on the persistent container — #gameUi itself is never rebuilt,
+// only its children are. Capture phase so this is seen even if a handler below
+// stops propagation (the Port badge does).
+const gameUiEl = document.getElementById('gameUi');
+gameUiEl.addEventListener('pointerdown', beginGesture, true);
+gameUiEl.addEventListener('click', (e) => {
+  if (gesture && e.target.closest(TAP_TARGETS)) gesture.matched = true;
+  // Capture phase runs BEFORE the card's own handler, so yielding one task lets
+  // that handler finish — and paint its optimistic feedback — before the board
+  // is rebuilt underneath it.
+  setTimeout(flushDeferredRender, 0);
+}, true);
+// pointerup can land outside the element — or outside the window — so the
+// release is watched on the document, not on #gameUi.
+document.addEventListener('pointermove', (e) => {
+  if (!gesture) return;
+  gesture.moved = Math.max(gesture.moved,
+    Math.abs(e.clientX - gesture.x) + Math.abs(e.clientY - gesture.y));
+}, true);
+document.addEventListener('pointerup', () => endGesture(false), true);
+document.addEventListener('pointercancel', () => endGesture(false), true);
+window.addEventListener('blur', () => endGesture(true));
+
+// ---- Optimistic play feedback ----------------------------------------------
+// A play costs a ~300ms server round-trip that no amount of tuning removes (the
+// DB work measured as a rounding error; it is invocation and network), so the
+// tap has to LOOK answered before the answer arrives.
+//
+// The hard rule: this NEVER fakes state. lastView is not mutated, no card is
+// moved into a run, nothing is rendered as though the action succeeded. It only
+// fades the source card and rings the target, so the worst case on rejection is
+// a card fading back in — never a board that disagrees with the server. That is
+// the failure this project has hit twice; it is not worth re-opening for
+// perceived speed.
+//
+// Kings, Jailbreak plays, discards and draws are deliberately excluded: Kings
+// route through a modal, and the others have consequences (Brig release, payout)
+// that this feedback would misrepresent.
+let pendingPlay = null;      // { cardId, runIndex } while a PLAY_CARD is in flight
+let pendingTimer = null;
+const PENDING_TIMEOUT_MS = 8000;
+
+function beginPendingPlay(cardId, runIndex) {
+  pendingPlay = { cardId, runIndex };
+  Sfx.play('place');         // sound now, not when the server agrees
+  paintPending();
+  // Failsafe: if the request never settles — phone loses WiFi mid-tap — neither
+  // then() nor catch() runs and input would stay locked forever. This releases
+  // it and repaints the authoritative view; a late response still applies
+  // correctly afterwards because applyView is version-guarded.
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    if (!pendingPlay) return;
+    clearPendingPlay();
+    if (lastView) render(shownView());
+    showToast('Still waiting on the server — try again.');
+  }, PENDING_TIMEOUT_MS);
+}
+
+function clearPendingPlay() {
+  pendingPlay = null;
+  clearTimeout(pendingTimer);
+  pendingTimer = null;
+  document.querySelectorAll('#gameUi .card.pending').forEach(el => el.classList.remove('pending'));
+  document.querySelectorAll('#runsGrid .run.pendingTarget').forEach(el => el.classList.remove('pendingTarget'));
+}
+
+// Re-applied at the end of render() as well as on tap: the poller is still
+// running during those ~300ms, and a tick landing mid-flight rebuilds the hand
+// and would silently restore the card that was just faded out.
+function paintPending() {
+  if (!pendingPlay) return;
+  const card = document.querySelector(`#handRow .card[data-id="${pendingPlay.cardId}"]`)
+            || document.querySelector(`#portsGrid .card[data-id="${pendingPlay.cardId}"]`);
+  if (card) card.classList.add('pending');
+  const run = document.querySelector(`#runsGrid .run[data-run="${pendingPlay.runIndex}"]`);
+  if (run) run.classList.add('pendingTarget');
+}
+
+// ---- Scoped optimistic play -------------------------------------------------
+// Measured on a real phone, 2026-08-13: tap→feedback 19ms, render 1-3ms, but
+// tap→card-in-run p50 439ms / p95 2087ms — and request→response accounted for
+// 429ms of that 439ms. The board was not slow to draw; it was deliberately
+// waiting for the server before drawing anything. No amount of render tuning
+// reaches that, so ordinary plays now land LOCALLY and the request follows.
+//
+// WHAT MAY BE PREDICTED, and why the boundary sits exactly here. The client
+// holds a VIEW, not the game state — no deck, no other hands, and only the TOP
+// of its own HOLD pile. So a play may be predicted only when its full effect is
+// derivable from the view alone:
+//   - ordinary (non-King) card. Kings open a direction modal and can trigger a
+//     Jailbreak, releasing Brig Kings the view cannot enumerate.
+//   - from HAND or a PORT. NOT from HOLD: the card under the top one is unknown,
+//     so the new HOLD top cannot be drawn. NOT a released Jailbreak King.
+//   - the play must not COMPLETE the run: completion recycles the non-Kings,
+//     sends Kings to the Brig and empties the run (engine checkComplete), and
+//     the recycle pile is not in the view.
+//   - no active Jailbreak, and HOLD not already empty — with an empty HOLD,
+//     runAfterPlay can END THE ROUND, which is not a board change to guess at.
+// Anything outside that set falls back to the old wait-for-the-server path,
+// which is unchanged and still correct.
+//
+// THE HARD RULE IS UNCHANGED: lastView stays authoritative and is never
+// mutated. Predictions live in a separate view that is rebuilt from lastView on
+// every confirmation, so the server can never be contradicted for longer than
+// one round trip, and a rejection repaints authoritative state rather than
+// leaving a board only the client believes in.
+let predicted = null;            // the view being SHOWN while plays are outstanding
+const playQueue = [];            // ordered predicted plays, oldest first
+let draining = false;
+let optimisticOff = false;       // latched off after repeated rejections
+let resyncCount = 0;
+const MAX_RESYNCS = 3;
+let actionSeq = 0;
+
+function shownView() { return predicted || lastView; }
+
+// Prediction requires that the phone's rules and the server's rules ARE THE
+// SAME RULES. A server that does not report its version is one that predates
+// this feature, so prediction stays off — the feature switches itself on only
+// once both halves are deployed.
+function engineInSync() {
+  return !!(lastView && lastView.engineRules && lastView.engineRules === Engine.RULES_VERSION);
+}
+
+// Mirrors engine.checkComplete's trigger condition, which is decidable from the
+// run alone: a non-King top card at the far end of the run's direction.
+function wouldCompleteRun(card, run) {
+  if (card.rank === 'K') return false;
+  let dir = run.direction;
+  if (!dir) {
+    if (run.cards.length === 0) dir = card.value === 1 ? 'up' : (card.value === 12 ? 'down' : null);
+    else {
+      const nexts = Engine.nextValuesForRun(run).filter(n => n.value === card.value);
+      dir = nexts.length ? nexts[0].dir : null;
+    }
+  }
+  return (dir === 'up' && card.value === 12) || (dir === 'down' && card.value === 1);
+}
+
+function canPredictPlay(card, zone, runIndex) {
+  if (optimisticOff || !engineInSync()) return false;
+  const v = shownView();
+  if (!v || v.status !== 'IN_ROUND' || !v.isYourTurn) return false;
+  if (card.rank === 'K') return false;
+  if (zone !== 'hand' && zone !== 'discard') return false;
+  if (v.brig && v.brig.active) return false;
+  if (!v.yourGoalCount) return false;
+  const run = v.runs[runIndex];
+  if (!run || !Engine.canPlayCardOnRun(card, run)) return false;
+  return !wouldCompleteRun(card, run);
+}
+
+// The non-King branch of engine.applyPlayCard, expressed against a view.
+// Returns false if the card is not where it was expected — which is how a
+// prediction that has been overtaken by real state gives up rather than
+// duplicating a card that has already moved.
+function applyPredictedPlay(v, cardId, runIndex) {
+  let card = null;
+  const hi = v.yourHand.findIndex(c => c.id === cardId);
+  if (hi >= 0) card = v.yourHand.splice(hi, 1)[0];
+  else {
+    for (const pile of v.yourPorts) {
+      if (pile.length && pile[pile.length - 1].id === cardId) { card = pile.pop(); break; }
+    }
+  }
+  const run = v.runs[runIndex];
+  if (!card || !run) return false;
+  if (run.cards.length === 0) {
+    if (card.value === 1) run.direction = 'up';
+    if (card.value === 12) run.direction = 'down';
+  } else if (!run.direction) {
+    const nexts = Engine.nextValuesForRun(run).filter(n => n.value === card.value);
+    if (nexts.length) run.direction = nexts[0].dir;
+  }
+  run.cards.push(card);
+  return true;
+}
+
+// Rebuilt from authoritative state every time, never patched incrementally, so
+// a confirmed play and a predicted one can never drift into disagreeing.
+//
+// The subtle case this has to survive: a poll can land carrying a play the
+// server has ALREADY committed while that play is still sitting in the queue
+// waiting for its own response. Replaying it would then fail to find the card
+// (it is no longer in hand), and treating that as "give up on predicting" would
+// throw away every LATER prediction too — the board would visibly snap
+// backwards, undoing a card the player already saw land. So an action that is
+// already reflected in authoritative state is skipped, not treated as a
+// failure; only a genuinely unreplayable queue falls back.
+function alreadyApplied(v, a) {
+  const run = v.runs[a.runIndex];
+  return !!(run && run.cards.some(c => c.id === a.cardId));
+}
+
+function rebuildPredicted() {
+  if (!playQueue.length || !lastView) { predicted = null; return; }
+  const v = JSON.parse(JSON.stringify(lastView));
+  for (const a of playQueue) {
+    if (alreadyApplied(v, a)) continue;
+    if (!applyPredictedPlay(v, a.cardId, a.runIndex)) { predicted = null; return; }
+  }
+  predicted = v;
+}
+
+async function drainQueue() {
+  if (draining) return;
+  draining = true;
+  try {
+    while (playQueue.length) {
+      const a = playQueue[0];
+      let res;
+      // Marked HERE, not when the card was tapped: a play queued behind another
+      // waits for it, and folding that wait into "request→response" would report
+      // the queue's own depth as network latency.
+      Perf.mark(a.rec, 'request');
+      try {
+        res = await Api.submitAction({
+          roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+          action: { type: 'PLAY_CARD', cardId: a.cardId, runIndex: a.runIndex },
+          clientActionId: a.id,
+          // Each send uses the version the PREVIOUS confirmation returned, so a
+          // burst of taps is a chain of compare-and-swaps rather than a race.
+          expectedVersion: lastView.stateVersion
+        });
+      } catch (e) {
+        Perf.finish(a.rec, 'server-rejected');
+        await reconcile(e.message);
+        return;
+      }
+      Perf.mark(a.rec, 'response');
+      if (a.rec && res && res.timing) a.rec.server = res.timing;
+      Perf.finish(a.rec, 'accepted');
+      playQueue.shift();
+      applyView(res.view, 'action');
+      settleHeldPulse();
+    }
+    poller.kick();
+  } finally {
+    draining = false;
+    // MUST be here, not only at the per-confirm settle inside the loop. The
+    // rejection path awaits reconcile() from inside this try, so draining is
+    // still true while reconcile runs — settleHeldPulse() called from there sees
+    // nonPredictBlocked() and bails, stranding a held pulse until its 6s
+    // timeout. A genuine opponent move would then be up to six seconds late.
+    // Running it once more after draining clears covers every exit path.
+    settleHeldPulse();
+  }
+}
+
+// A rejected prediction means the board on screen is not the board the server
+// has. Everything after it was predicted on top of a wrong assumption, so the
+// whole queue goes; authoritative state is re-fetched and repainted, and the
+// player is told plainly rather than left to notice a card moving back.
+async function reconcile(msg) {
+  playQueue.length = 0;
+  predicted = null;
+  resyncCount++;
+  Perf.counts.resyncs++;
+  Sfx.play('illegal');
+  showToast(msg ? msg + ' — board resynced.' : 'That play was refused — board resynced.');
+  try {
+    const v = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
+    lastView = v;
+  } catch (e) { /* the poller will catch up on its own */ }
+  // Repeated rejections mean the phone's rules and the server's disagree in a
+  // way the version check did not catch. Stop predicting for the session rather
+  // than keep showing plays that get taken back.
+  if (resyncCount >= MAX_RESYNCS) {
+    optimisticOff = true;
+    showToast('Switching to server-confirmed plays for the rest of this game.');
+  }
+  render(shownView(), 'reconcile');
+  settleHeldPulse();
+}
+
+// True while ANY action POST is outstanding, not just an optimistic run play.
+// pendingPlay alone covered only the run path, so a second tap on Draw or on a
+// Port sent a second request against the same expectedVersion: the server's
+// compare-and-swap correctly refused it (no state was ever corrupted), but the
+// player got a confusing "someone else already acted" for their own double-tap,
+// and every duplicate still cost a function invocation. Nick hit exactly this
+// on 2026-08-09 — tapping Draw three times because it felt unresponsive.
+let actionInFlight = false;
+
+// Every gameplay entry point checks this, rather than blanket pointer-events:none
+// on the board — the Menu, the Port fan and the rotate prompt must stay live.
+function inputLocked() { return pendingPlay !== null || actionInFlight; }
+
+// Anything that is NOT a predicted run play — a discard, a draw, a King, a play
+// from HOLD — must also stand aside while the predicted queue is draining, or
+// it would race the same expectedVersion the queue is chaining through. Selecting
+// a card is deliberately not covered: that is local and must stay instant.
+function nonPredictBlocked() { return inputLocked() || playQueue.length > 0 || draining; }
+
+// Wraps an action POST so the in-flight flag is always cleared, including on
+// the throw paths. Returns whatever the action returns.
+async function withActionLock(fn) {
+  actionInFlight = true;
+  try { return await fn(); }
+  finally { actionInFlight = false; }
+}
+
+// A tap that arrives while an action is in flight is dropped on purpose — but
+// dropping it in TOTAL SILENCE is its own bug. "Still working" and "your tap
+// did nothing" looked identical, so a normal network wait read as a dead app
+// and invited more tapping. Acknowledge every swallowed tap quietly; if they
+// keep tapping, say it in words too, since a sound is invisible with the
+// volume down (which on a couch, next to a TV playing the game's audio, is
+// the likely case).
+let busyTaps = 0;
+let busyTapTimer = null;
+// Derived here rather than passed in by each caller, so every refusal is
+// categorised the same way and no call site can forget to say why.
+function busyReason() {
+  if (pendingPlay) return 'awaiting-play';
+  if (actionInFlight) return 'action-in-flight';
+  if (draining || playQueue.length) return 'queue-draining';
+  return 'unknown';
+}
+function noteBusyTap() {
+  Perf.noteSwallowed(busyReason());
+  Sfx.play('ui');                     // soft cue, NOT 'illegal' — nothing is wrong
+  busyTaps++;
+  if (busyTaps >= 2) showToast('Still working on your last move…');
+  clearTimeout(busyTapTimer);
+  busyTapTimer = setTimeout(() => { busyTaps = 0; }, 1500);
+}
+
+// The host is a player now, so this page carries their controls too. Holding a
+// host token for THIS room is what makes them appear — /host saves it at
+// creation time. Purely a display check: every host action is re-verified
+// server-side against rooms.host_resume_token, so faking this in devtools
+// reveals buttons that then get a 401.
+let hostToken = roomId ? Persist.loadHost(roomId) : null;
+const isHost = () => !!hostToken;
+
+// Exactly one of these four is visible at a time. The choice bar and Port fan
+// are fixed overlays that live OUTSIDE all of them, so leaving the board has to
+// tear them down explicitly or they float over the lobby showing a dead game.
+const SCREENS = ['waitPanel', 'lobbyPanel', 'resultsPanel', 'gameUi'];
+function showScreen(id) {
+  SCREENS.forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+  if (id !== 'gameUi') { hideChoiceBar(); fannedPort = null; renderPortFan(); }
+}
+
+// Declared BEFORE the boot block below, which calls startPolling(): `const` is
+// not hoisted, so defining the poller further down would put it in the temporal
+// dead zone and throw on load. (poll/showPausedPanel are function declarations,
+// so referencing them here is fine.)
+//
+// Rates are per-state on purpose: only the player actually taking a turn needs to
+// feel instant. Waiting players were the bulk of the old invocation cost.
+const poller = createPoller({
+  poll,
+  intervalFor: () => {
+    // With the doorbell connected the server tells us the instant anything
+    // changes, so the timer stops being how we find out and becomes a safety
+    // net for a missed message. This single line is most of the invocation
+    // saving — a waiting player drops from a poll every 3.5s to one every 45s.
+    if (doorbell.isLive()) return 45000;
+    if (!lastView) return 1200;
+    if (lastView.status === 'LOBBY') return 3000;       // waiting for the host to start
+    return lastView.isYourTurn ? 1200 : 3500;           // your turn vs watching
+  },
+  maxInterval: 10000,
+  // 30 min with a still board and nobody touching the phone, plus a hard 90 min
+  // since the game last changed that nothing can defer. Raised from 10 min at
+  // Nick's request — a snack break should not paywall the game behind a tap —
+  // and the hard stop is what makes the longer window safe.
+  idleStopMs: 30 * 60 * 1000,
+  hardStopMs: 90 * 60 * 1000,
+  onIdleStop: showPausedPanel,
+  onForcedDelay: (ms) => Perf.noteForcedDelay(ms)
+});
+
+// Declared after the poller because its handler calls poller.wake(); function
+// hoisting does not apply to `const`.
+// ---- Doorbell self-echo suppression -----------------------------------------
+// Measured: a whole round's doorbell renders were "poll:doorbell 2drawn/60skipped"
+// — 60 fetches for a pulse that turned out to already be known. render-skip
+// saves phone work, NOT the fetch: poll() calls Api.getPlayerState() BEFORE
+// applyView() ever gets to decide the result was unchanged, so every one of
+// those 60 was a full Netlify invocation regardless.
+//
+// The obvious fix — skip the fetch if the pulse's own version is already
+// covered by lastView.stateVersion — is correct but incomplete, because of a
+// SPECIFIC ordering fact in submit-action.js: it writes the room, THEN awaits
+// bumpPulse(), THEN returns the HTTP response. The realtime broadcast and the
+// HTTP response therefore start their trips back to this same phone at
+// different points, over different transports, and either can arrive first.
+// So for MY OWN action, the pulse can legitimately reach here BEFORE the
+// response to the very request that caused it — at which point lastView still
+// shows the OLD version, the naive check says "newer, go fetch", and that
+// fetch is redundant anyway: the answer was already in flight on its own.
+//
+// So: a pulse arriving while something of mine is outstanding is HELD rather
+// than fetched or dropped. Once that action settles — from whatever wins the
+// race, its own response — settleHeldPulse() checks whether the version that
+// arrived is now covered. Covered: nothing to do, the redundant fetch was
+// avoided entirely. Not covered: something ELSE also changed while mine was in
+// flight (the opponent, most likely), and that genuinely needs a fetch.
+let heldPulseVersion = null;
+let heldPulseTimer = null;
+// Generous on purpose. This is a backstop for something going wrong (a request
+// that hangs with no response, network death mid-action), not the normal path
+// — the normal path resolves via settleHeldPulse() within a round trip. A real
+// opponent move must never be muted indefinitely by a stuck local action, so
+// this always wins eventually regardless of what is stuck.
+const HELD_PULSE_MAX_MS = 6000;
+
+function handlePulse(version, meta) {
+  if (meta && meta.programmatic) {
+    nextPollCause = 'visibility';
+    poller.refresh();
+    return;
+  }
+  nextPollCause = 'doorbell';
+
+  if (typeof version === 'number' && lastView && typeof lastView.stateVersion === 'number'
+      && version <= lastView.stateVersion) {
+    // Already known — from an earlier poll, or from an action response that
+    // beat this pulse here. The common, cheap case; no hold needed.
+    Perf.counts.doorbellSuppressed++;
+    return;
+  }
+
+  if (nonPredictBlocked()) {
+    // Something of mine is outstanding — most likely MY OWN action, whose
+    // response will bring lastView.stateVersion up to date momentarily without
+    // any help from this pulse. Remember the highest version seen and let
+    // settleHeldPulse() decide once that response lands, rather than racing it.
+    if (typeof version === 'number' && (heldPulseVersion === null || version > heldPulseVersion)) {
+      heldPulseVersion = version;
+    }
+    notePulseReceived(version);
+    Perf.counts.doorbellHeld++;
+    clearTimeout(heldPulseTimer);
+    heldPulseTimer = setTimeout(() => {
+      if (heldPulseVersion === null) return;
+      heldPulseVersion = null;
+      Perf.counts.doorbellHeldTimedOut++;
+      nextPollCause = 'doorbell';
+      poller.wake();
+    }, HELD_PULSE_MAX_MS);
+    return;
+  }
+
+  notePulseReceived(version);
+  // Nothing of mine outstanding: a genuine, unexplained change. wake() rather
+  // than kick() — the idle stop may already have fired and put up the paused
+  // panel, and a player returning to the table should not have to find the
+  // Resume button before the game starts moving again.
+  poller.wake();
+}
+
+// Called at every point a local action has just fully settled — success,
+// server rejection (via reconcile's own resync), or the legacy pending-play
+// timeout failsafe. A no-op the overwhelming majority of the time (nothing was
+// held), which is why it is cheap to call from several places rather than
+// threading a single "did settle" event through all of them.
+function settleHeldPulse() {
+  if (heldPulseVersion === null) return;
+  if (!lastView || typeof lastView.stateVersion !== 'number') return;
+  if (lastView.stateVersion >= heldPulseVersion) {
+    // Covered by what just landed. The fetch this held was never made.
+    heldPulseVersion = null;
+    clearTimeout(heldPulseTimer);
+    return;
+  }
+  if (nonPredictBlocked()) return;   // still something else outstanding — recheck at ITS settle point
+  // Fully settled and still doesn't cover it: something else changed too
+  // (the opponent acted while mine was in flight). This is the genuine case
+  // the hold exists to still catch, not to suppress.
+  heldPulseVersion = null;
+  clearTimeout(heldPulseTimer);
+  Perf.counts.doorbellHeldFollowup++;
+  nextPollCause = 'doorbell';
+  poller.wake();
+}
+
+const doorbell = createDoorbell({
+  roomId: () => roomId,
+  label: 'play',
+  onChange: handlePulse,
+  // Recompute the delay on a connection change, so losing the socket restores
+  // fast polling rather than waiting out one more 45s safety-net tick.
+  //
+  // reschedule(), NOT refresh() and NOT kick(). All three used to look
+  // interchangeable; they are not, and this line is where that cost real money.
+  // kick() would defer the idle stop on every flap (the 17-hour incident).
+  // refresh() fetches immediately and resets the backoff, so a socket flapping
+  // once a second produced ~2 fetches a second — ~7,200/hour, sustained, even
+  // with nobody playing (the 2026-08-09 incident). reschedule() only re-reads
+  // the clock: no fetch, no backoff reset. A connection changing state is not
+  // news about the GAME, and only news about the game may cost an invocation.
+  onLiveChange: () => poller.reschedule()
+});
+
+// One browser can now hold several seats (playing two sides yourself). With more
+// than one saved and no ?pid= to disambiguate, ask rather than guess — silently
+// resuming as the wrong player is worse than one extra tap.
+function showSeatPicker(list) {
+  const wait = document.getElementById('waitPanel');
+  wait.innerHTML = '<p>Which seat is this?</p><div id="seatPicks"></div>';
+  const box = document.getElementById('seatPicks');
+  list.forEach(p => {
+    const b = document.createElement('button');
+    b.style.cssText = 'display:block;width:100%;max-width:320px;margin:8px auto;';
+    b.textContent = p.name ? `${p.name} (seat ${p.seat + 1})` : `Seat ${p.seat + 1}`;
+    b.onclick = () => {
+      creds = p;
+      if (history.replaceState) history.replaceState(null, '', '/play?room=' + roomId + '&pid=' + p.playerId);
+      startPolling();
+    };
+    box.appendChild(b);
+  });
+}
+
+if (!roomId) {
+  document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
+} else if (creds) {
+  startPolling();
+} else {
+  const saved = Persist.loadPlayers(roomId);
+  if (saved.length > 1) showSeatPicker(saved);
+  else document.getElementById('waitPanel').innerHTML = '<p>No saved seat found.</p><p><a href="/join" style="color:#ffe28a;">Join a room</a></p>';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 2200);
+}
+
+// A King played as a wildcard must still READ as a King. Showing only its
+// effective value ("7♠") hides the King-on-King restriction and makes a legal
+// board look like an illegal one. Mirrors renderCard() in app/index.html.
+function cardHtml(c, extraClass) {
+  if (!c) return '';
+  const red = c.suit === '♥' || c.suit === '♦';
+  const wild = c.rank === 'K' && c.effectiveValue;
+  const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
+  const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${c.suit}${as}</span>`;
+}
+
+// Spreads a whole Port pile open — mirrors togglePortFan() in app/index.html.
+// Read-only: tapping a card inside the fan does nothing, same as hot-seat.
+// Only the top (last) card is actually playable, so it gets marked.
+function togglePortFan(i) {
+  // Refuse while a King direction question is up — it occupies the same corner
+  // of the screen and must be answered first.
+  if (choiceBarOpen()) { showToast('Answer the King first.'); return; }
+  fannedPort = (fannedPort === i) ? null : i;
+  renderPortFan();
+}
+function renderPortFan() {
+  const overlay = document.getElementById('portFanOverlay');
+  // yourPorts is absent from a LOBBY view, so guard on it rather than on lastView
+  // alone — a host reset can swap the view out while the fan is open.
+  if (fannedPort === null || !lastView || !shownView().yourPorts) {
+    fannedPort = null;
+    overlay.classList.add('hidden');
+    return;
+  }
+  const pile = shownView().yourPorts[fannedPort] || [];
+  if (pile.length === 0) { fannedPort = null; overlay.classList.add('hidden'); return; }
+  document.getElementById('portFanTitle').textContent = `Port ${fannedPort + 1} (${pile.length} card${pile.length === 1 ? '' : 's'})`;
+  document.getElementById('portFanRow').innerHTML = pile.map((c, idx) => {
+    const isTop = idx === pile.length - 1;
+    return `<div class="portFanCell">${cardHtml(c, isTop ? 'top' : '')}${isTop ? '<div class="portFanTopLabel">TOP</div>' : ''}</div>`;
+  }).join('');
+  overlay.classList.remove('hidden');
+}
+document.getElementById('portFanClose').addEventListener('click', () => { fannedPort = null; renderPortFan(); });
+
+// Selection is the ONE piece of UI state that changes nothing but a CSS class,
+// so it must never go through render(). render() rebuilds the innerHTML of the
+// runs, hand, Ports, HOLD and Brig and re-binds every listener; since the
+// restyle those elements carry layered gradients, a border-image PNG and
+// texture backgrounds, so a full rebuild on every tap is what made selecting a
+// card feel laggy on a phone — a local, zero-network action. Toggling the class
+// is equivalent because `selected` only ever feeds `.selected` in the markup
+// (grep the render() branches: hand, port top, holdTop, brig king). If that
+// stops being true, this has to grow to match, not go back to render().
+function paintSelection() {
+  document.querySelectorAll('#gameUi .card.selected, #jailbreakEvent [data-jb].selected')
+    .forEach(el => el.classList.remove('selected'));
+  if (!selected) return;
+  let el = null;
+  if (selected.zone === 'hand') el = document.querySelector(`#handRow .card[data-id="${selected.card.id}"]`);
+  else if (selected.zone === 'goal') el = document.getElementById('holdTop');
+  else if (selected.zone === 'discard') el = document.querySelector(`#portsGrid .port[data-port="${selected.index}"] .card`);
+  else if (selected.zone === 'jailbreak') {
+    el = document.querySelector(`#jailbreakEvent [data-jb="${selected.card.id}"]`)
+      || document.querySelector(`#brigStrip [data-jb="${selected.card.id}"]`);
+  }
+  if (el) el.classList.add('selected');
+}
+
+function selectCard(zone, card, index) {
+  if (!shownView().isYourTurn) return;
+  if (inputLocked()) { noteBusyTap(); return; }
+  // Picking a different card abandons any King direction question still on
+  // screen — that question belongs to the card you were playing a moment ago.
+  hideChoiceBar();
+  // Tapping the selected card again clears it. Without this you cannot get from
+  // "hand card selected" back to "nothing selected", which is the state a Port
+  // pickup requires.
+  if (selected && selected.card.id === card.id) { selected = null; Sfx.play('deselect'); paintSelection(); return; }
+  selected = { zone, card, index };
+  Sfx.play('select');
+  paintSelection();
+}
+
+// Mirrors window.portTap() in app/index.html: a Port tile is both the discard
+// target AND the way to pick a card back out of a Port to play it to a Run.
+function portTap(portIndex) {
+  if (!shownView().isYourTurn) return;
+  if (inputLocked()) { noteBusyTap(); return; }
+  if (selected && selected.zone === 'hand') return discardTo(portIndex);
+  const pile = shownView().yourPorts[portIndex] || [];
+  const top = pile[pile.length - 1];
+  if (top) return selectCard('discard', top, portIndex);
+  showToast('Select a hand card first to discard here.');
+}
+
+function legalRunIndexes(card) {
+  if (!lastView) return [];
+  return lastView.runs.map((r,i)=>i).filter(i => Engine.canPlayCardOnRun(card, lastView.runs[i]));
+}
+
+async function attemptPlay(runIndex) {
+  // Requirement 7: one action in flight at a time. Without this a double-tap
+  // sends two plays, and the second comes back as a version conflict — a
+  // confusing "someone else already acted" for a solo player.
+  if (!selected) return;
+  const card = selected.card;
+  const zone = selected.zone;
+
+  // A predicted play does not wait on anything, so it is not gated by the
+  // in-flight lock — that lock exists to stop two requests racing the same
+  // expectedVersion, and the queue serialises them instead. It must still stand
+  // aside for a NON-predicted action already in flight.
+  if (canPredictPlay(card, zone, runIndex) && !inputLocked()) {
+    const rec = Perf.startAction('play-predicted');
+    selected = null;
+    playQueue.push({ id: ++actionSeq, cardId: card.id, runIndex, rec });
+    Perf.counts.predicted++;
+    rebuildPredicted();
+    Sfx.play('place');
+    render(shownView(), 'predict');
+    Perf.mark(rec, 'feedback');
+    Perf.mark(rec, 'rendered');   // the card is on the run NOW, not after the server agrees
+    drainQueue();
+    return;
+  }
+
+  // Everything else keeps the original behaviour: one action at a time, and the
+  // board waits for the server before it changes.
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
+  // Opened AFTER the lock check, so a refused tap is counted by noteBusyTap()
+  // rather than becoming a timing row with nothing behind it.
+  const rec = Perf.startAction(card.rank === 'K' ? 'play-king' : 'play');
+  const run = shownView().runs[runIndex];
+  if (!Engine.canPlayCardOnRun(card, run)) {
+    Perf.finish(rec, 'illegal-local');
+    Sfx.play('illegal'); showToast('Illegal play.'); return;
+  }
+  if (card.rank === 'K') {
+    let choices;
+    if (!run.direction) {
+      choices = Engine.unsetNaturalKingChoices(run).map(c => ({ label: `King as ${Engine.VALUE_NAMES[c.kingValue]} — ${c.dir.toUpperCase()}`, value: c.kingValue, dir: c.dir }));
+    } else {
+      const required = Engine.kingRequiredValue(run);
+      choices = ['up','down'].map(dir => ({ label: `Continue ${dir.toUpperCase()} as ${Engine.VALUE_NAMES[required]}`, value: required, dir }));
+    }
+    // Capture the card id NOW. Previously sendPlay() read `selected` at the
+    // moment a choice was tapped, so changing selection while the question was
+    // on screen answered it with the wrong card — committing a King and then
+    // touching a hand card played the hand card instead, King untouched.
+    showChoiceBar(choices, (choice) => sendPlay(card.id, runIndex, { value: choice.value, dir: choice.dir }, rec));
+    return;
+  }
+  // Non-King, already checked legal by the same engine the server runs: give the
+  // feedback now, then send. Kings above deliberately skip this — they go
+  // through a modal, so there is no unanswered tap to cover.
+  beginPendingPlay(card.id, runIndex);
+  Perf.mark(rec, 'feedback');
+  sendPlay(card.id, runIndex, undefined, rec);
+}
+
+// ---- Modal ------------------------------------------------------------------
+// Lifted from hot-seat's showModal(): dimmed backdrop, titled card, a row of
+// choice buttons. Replaces the old docked choiceBar, which had nowhere to live
+// once the landscape layout claimed every region of the screen.
+function hideChoiceBar() {
+  document.getElementById('modalBackdrop').classList.remove('show');
+}
+function choiceBarOpen() {
+  return document.getElementById('modalBackdrop').classList.contains('show');
+}
+function showModal(title, bodyHtml, choices) {
+  // The Port fan is a bottom sheet and would sit under the backdrop looking
+  // half-interactive. Close it before anything opens over the top.
+  fannedPort = null; renderPortFan();
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml || '';
+  const box = document.getElementById('modalChoices');
+  box.innerHTML = '';
+  (choices || []).forEach(c => {
+    const b = document.createElement('button');
+    b.textContent = c.label;
+    if (c.secondary) b.className = 'secondary';
+    b.onclick = () => { hideChoiceBar(); if (c.action) c.action(); };
+    box.appendChild(b);
+  });
+  document.getElementById('modalBackdrop').classList.add('show');
+}
+// Kept under its old name so attemptPlay()'s King path needs no rewiring.
+function showChoiceBar(choices, onPick) {
+  showModal(
+    'Captain’s Orders',
+    '<p>Which direction does the run continue?</p>',
+    choices.map(c => ({ label: c.label, action: () => onPick(c) }))
+  );
+}
+
+async function sendPlay(cardId, runIndex, kingChoice, rec) {
+  // Whether the tap already got its feedback. The King path does not call
+  // beginPendingPlay, so it still needs the sound on success.
+  const wasOptimistic = pendingPlay !== null;
+  try {
+    Perf.mark(rec, 'request');
+    const res = await withActionLock(() => Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'PLAY_CARD', cardId, runIndex, kingChoice },
+      clientActionId: rec ? rec.id : undefined,
+      expectedVersion: lastView.stateVersion
+    }));
+    Perf.mark(rec, 'response');
+    if (rec && res && res.timing) rec.server = res.timing;
+    selected = null;
+    // Cleared BEFORE applyView so render()'s paintPending has nothing to
+    // re-apply — the authoritative view already has the card in the run.
+    clearPendingPlay();
+    if (!wasOptimistic) Sfx.play('place');
+    applyView(res.view, 'action');
+    // applyView can defer the draw if a finger is still down; that is rare this
+    // late in a play and is counted separately as rendersDeferred, so read this
+    // mark as "the board was told", not always "pixels changed".
+    Perf.mark(rec, 'rendered');
+    Perf.finish(rec, 'accepted');
+    settleHeldPulse();
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
+  } catch (e) {
+    Perf.finish(rec, 'server-rejected');
+    // Requirement 6: fall back to the untouched authoritative view. Nothing was
+    // faked, so this is just a repaint — the faded card comes back where it was.
+    clearPendingPlay();
+    Sfx.play('illegal');
+    showToast(e.message);
+    selected = null;
+    render(shownView());
+  }
+}
+
+async function discardTo(portIndex) {
+  if (!selected || selected.zone !== 'hand') { Sfx.play('illegal'); showToast('Select a card from your hand first.'); return; }
+  // Discard had no in-flight guard at all: a double-tap on a Port fired two
+  // POSTs, and the loser came back as "someone else already acted".
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
+  try {
+    const res = await withActionLock(() => Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'DISCARD_TO_PORT', cardId: selected.card.id, portIndex },
+      expectedVersion: lastView.stateVersion
+    }));
+    selected = null;
+    Sfx.play('discard');
+    applyView(res.view, 'action');
+    settleHeldPulse();
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
+  } catch (e) {
+    Sfx.play('illegal');
+    showToast(e.message);
+  }
+}
+
+document.getElementById('drawBtn').addEventListener('click', async () => {
+  // Draw is not itself optimistic (requirement 8), but it must not fire while a
+  // play is in flight — it would race the same expectedVersion and lose. Since
+  // actionInFlight now covers draws too, this also stops Draw racing ITSELF.
+  if (nonPredictBlocked()) { noteBusyTap(); return; }
+  try {
+    const res = await withActionLock(() => Api.submitAction({
+      roomId, actorType: 'player', token: creds.resumeToken, playerId: creds.playerId,
+      action: { type: 'DRAW_HAND' },
+      expectedVersion: lastView.stateVersion
+    }));
+    Sfx.play('ui');
+    applyView(res.view, 'action');
+    settleHeldPulse();
+    poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
+  } catch (e) { Sfx.play('illegal'); showToast(e.message); }
+});
+
+function renderLobby(view) {
+  showScreen('lobbyPanel');
+  document.getElementById('lobbyCode').textContent = view.roomCode || '';
+  document.getElementById('lobbyJoinHint').textContent =
+    'Others join at ' + location.host + '/join and enter this code.';
+
+  // Mark which chip is you. seat is absent on a ?tok= rejoin, in which case
+  // nothing is highlighted rather than highlighting the wrong person.
+  const mySeat = creds && typeof creds.seat === 'number' ? creds.seat : null;
+  const players = view.players || [];
+  document.getElementById('lobbyPlayers').innerHTML =
+    players.map(p => `<div class="playerChip ${p.seat === mySeat ? 'you' : ''}">${p.name}</div>`).join('')
+    || '<span class="meta">Nobody yet…</span>';
+
+  document.getElementById('lobbyHostControls').classList.toggle('hidden', !isHost());
+  document.getElementById('lobbyWaitText').classList.toggle('hidden', isHost());
+  if (isHost()) {
+    // The host occupies a seat, so this is 1 already — one other player is enough.
+    document.getElementById('startBtn').disabled = players.length < 2;
+  }
+}
+
+function renderResults(view) {
+  showScreen('resultsPanel');
+  const panel = document.getElementById('resultsPanel');
+  const gameOver = view.status === 'GAME_RESULTS';
+  // Lowest total wins — hand and HOLD cards are penalty points.
+  const rows = gameOver ? [...view.players].sort((a, b) => a.total - b.total) : view.players;
+
+  let html = gameOver
+    ? `<h2>Game over — ${rows[0].name} wins</h2>`
+    : `<h2>Round ${view.round} complete</h2>`;
+  html += rows.map(p => `<div class="scoreRow"><span>${p.name}</span><span>${
+    gameOver ? p.total : `+${p.roundScore} (${p.total})`
+  }</span></div>`).join('');
+
+  if (!isHost()) {
+    html += '<p class="meta" style="margin-top:22px;">Waiting for the host…</p>';
+  } else if (gameOver) {
+    html += '<p style="margin-top:22px;"><button id="resultsResetBtn" class="secondary">Back to the lobby</button></p>';
+  } else if (view.pendingClinch) {
+    html += `<p style="margin-top:18px;"><b>${view.pendingClinch}</b> has clinched the game.</p>`
+      + '<p><button id="endNowBtn">End game now</button></p>'
+      + '<p><button id="nextRoundBtn" class="secondary">Keep playing</button></p>';
+  } else {
+    html += '<p style="margin-top:22px;"><button id="nextRoundBtn">Start next round</button></p>'
+      + '<p style="margin-top:12px;"><button id="resultsResetBtn" class="secondary tiny">Reset game</button></p>';
+  }
+  panel.innerHTML = html;
+
+  // Rebuilt every render, so these are wired fresh rather than once at load.
+  const next = document.getElementById('nextRoundBtn');
+  if (next) next.onclick = () => advanceRound(false, view);
+  const end = document.getElementById('endNowBtn');
+  if (end) end.onclick = () => advanceRound(true, view);
+  const rst = document.getElementById('resultsResetBtn');
+  if (rst) rst.onclick = doReset;
+}
+
+async function advanceRound(endNow, view) {
+  try {
+    await Api.submitAction({
+      roomId, actorType: 'host', token: hostToken,
+      action: { type: 'ADVANCE_ROUND', endNow },
+      expectedVersion: view.stateVersion
+    });
+    poller.kick();
+  } catch (e) { showToast(e.message); }
+}
+
+async function doReset() {
+  if (!isHost()) return;
+  if (!confirm('Reset this game for everyone? Progress will be lost. Players keep their seats and do not need to rejoin.')) return;
+  try {
+    await Api.resetGame(roomId, hostToken);
+    poller.kick();
+  } catch (e) { showToast(e.message); }
+}
+
+// Timing wrapper. render() is called from a dozen places; measuring it here
+// rather than at each call site is what makes "is the rebuild itself expensive,
+// or is it only expensive when it collides with a touch?" answerable.
+function render(view, cause) {
+  const t0 = Perf.now();
+  try { renderImpl(view); }
+  finally { Perf.noteRender(Perf.now() - t0, cause || 'other'); }
+}
+
+function renderImpl(view) {
+  // A LOBBY response is getLobbyView, not getPlayerView — no hand, HOLD or
+  // Ports — so the board code below would throw on view.yourHand.map(...).
+  // This is also the state a host reset drops everyone into mid-game.
+  if (view.status === 'LOBBY') {
+    // Drop any held selection. Card ids come from a uid counter in the engine
+    // that restarts at 1 on a cold function instance, so a card dealt after the
+    // reset can carry the same id as the one selected before it — a stale
+    // `selected` would then match the wrong card by id in the next game.
+    selected = null;
+    renderLobby(view);
+    return;
+  }
+  if (view.status === 'ROUND_RESULTS' || view.status === 'GAME_RESULTS') {
+    selected = null;
+    renderResults(view);
+    return;
+  }
+  showScreen('gameUi');
+  // Drives the whole remote layout from CSS (see the REMOTE MODE block). Read
+  // once here so every branch below agrees on the mode within a single render.
+  const remote = displayMode() === 'remote';
+  // Set on BOTH: the layout rules hang off #gameUi, but the Port fan and the
+  // modals are siblings of it (they are fixed overlays and have to be, or the
+  // board's stacking context would trap them), so a #gameUi-scoped selector
+  // cannot reach their card sizes. body carries the mode for those.
+  document.getElementById('gameUi').dataset.mode = remote ? 'remote' : 'couch';
+  document.body.dataset.mode = remote ? 'remote' : 'couch';
+  // Landscape is couch mode's designed orientation and the rotate prompt is
+  // right to insist on it. Remote mode is drawn FOR portrait, so arming it there
+  // would demand a rotation into a layout that does not exist.
+  document.getElementById('rotatePrompt').classList.toggle('armed', !remote);
+
+  const bar = document.getElementById('turnBar');
+  document.getElementById('turnText').textContent =
+    view.isYourTurn ? 'Your Turn' : `${view.currentPlayerName}'s turn`;
+  document.getElementById('roundMeta').textContent = `Round ${view.round}/${view.maxRounds}`;
+  bar.classList.toggle('myTurn', view.isYourTurn);
+
+  // Runs are bare tap targets in couch mode. NO legality highlight anywhere —
+  // Nick, 2026-08-02: telegraphing where a card can go removes the skill. Remote
+  // mode adds the card contents back, because then no TV is carrying them.
+  // The direction- class is a different thing and stays in both modes: it states
+  // the run's own direction, not whether your selection fits there.
+  // Opponents' HOLD piles. Couch mode leaves this empty because /tv carries the
+  // plaques; remote has no /tv, and without it the player cannot see the race
+  // they are in. Your own HOLD is already the big frame at the bottom, so only
+  // the other seats go here.
+  const oppStrip = document.getElementById('oppStrip');
+  oppStrip.innerHTML = remote
+    ? (view.players || []).filter(p => p.seat !== view.yourSeat).map(p => {
+        const red = p.goalTop && (p.goalTop.suit === '♥' || p.goalTop.suit === '♦');
+        const status = p.goalTop
+          ? `<div class="oppHold"><span class="oppRank ${red ? 'red' : ''}">${p.goalTop.rank}${p.goalTop.suit}</span></div>`
+          : '<div class="oppHold"><span class="oppClear">Cleared!</span></div>';
+        return `<div class="opp ${p.seat === view.currentSeat ? 'turn' : ''}">`
+          + `<div class="oppName">${p.name}</div>${status}`
+          + `<div class="oppCount">${p.goalCount} in HOLD</div></div>`;
+      }).join('')
+    : '';
+
+  const showCards = remote;
+  document.getElementById('runsGrid').innerHTML = view.runs.map((r, i) => {
+    const cards = showCards
+      ? `<div class="cardRow">${r.cards.slice(-3).map(c => cardHtml(c)).join('')}</div>`
+      : '';
+    // What an EMPTY run will accept. Public rule state, not a legality hint: it
+    // is the same for every player and does not depend on what is in your hand,
+    // so it sits with the direction wash rather than with the telegraphing Nick
+    // ruled out. Shown in both modes (Nick, 2026-08-10).
+    const opener = r.cards.length === 0 ? '<div class="runOpener">A or Q</div>' : '';
+    return `<div class="run direction-${r.direction || 'unset'} ${showCards ? 'showCards' : ''}" data-run="${i}">`
+      + `<div class="runLabel">RUN ${i + 1}</div>${opener}${cards}</div>`;
+  }).join('');
+  document.querySelectorAll('#runsGrid .run').forEach(el => {
+    el.addEventListener('click', () => attemptPlay(Number(el.dataset.run)));
+  });
+
+  document.getElementById('handRow').innerHTML = view.yourHand.map(c => {
+    const sel = selected && selected.zone === 'hand' && selected.card.id === c.id;
+    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}${c.suit}</span>`;
+  }).join('') || '<span class="meta">Empty</span>';
+  document.querySelectorAll('#handRow .card').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = view.yourHand.find(c => c.id === el.dataset.id);
+      selectCard('hand', c);
+    });
+  });
+  // Drawing is always a choice now. The server decides eligibility (start-of-turn
+  // quota, or a refill because the hand is empty) and sends the count; 0 hides it.
+  const drawBtn = document.getElementById('drawBtn');
+  const drawable = view.yourDrawCount || 0;
+  drawBtn.classList.toggle('hidden', !(view.isYourTurn && drawable > 0));
+  // Deliberately no number: how many you are owed depends on the start-of-turn
+  // quota and whether the hand has been cleared, and a label stating a count is
+  // one more thing that can drift out of step with what the server deals. The
+  // server decides the amount; the button just offers the choice.
+  drawBtn.textContent = 'Draw\nCards';
+
+  document.getElementById('portsGrid').innerHTML = view.yourPorts.map((pile,i) => {
+    const top = pile[pile.length-1];
+    const sel = selected && selected.zone === 'discard' && selected.index === i;
+    const badge = pile.length > 0 ? `<span class="portBadge" data-fan="${i}">${pile.length}</span>` : '';
+    // Occupied Ports already carry the gold pile-count badge; repeating the
+    // same number below the card is visual noise. Empty Ports retain their 0
+    // because there is no badge and the value helps distinguish them at a glance.
+    const emptyCount = top ? '' : '<div class="count">0</div>';
+    return `<div class="port" data-port="${i}">${top ? cardHtml(top, sel ? 'selected' : '') : '<span class="meta">Port '+(i+1)+'</span>'}${badge}${emptyCount}</div>`;
+  }).join('');
+  document.querySelectorAll('#portsGrid .port').forEach(el => {
+    el.addEventListener('click', () => portTap(Number(el.dataset.port)));
+  });
+  document.querySelectorAll('#portsGrid .portBadge').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); togglePortFan(Number(el.dataset.fan)); });
+  });
+  renderPortFan();
+
+  document.getElementById('holdCard').innerHTML = (() => {
+    if (!view.yourGoalTop) return '<span class="meta">Cleared!</span>';
+    const sel = selected && selected.zone === 'goal';
+    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}${view.yourGoalTop.suit}</span>`;
+  })();
+  const holdTop = document.getElementById('holdTop');
+  if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
+  document.getElementById('holdCount').textContent = view.yourGoalCount + ' cards';
+
+  // A remote Jailbreak gets a state shelf above the board. On your turn its
+  // released-King group is playable; on another turn it is status only. The
+  // Brig row itself becomes a banner in both cases, preserving the board's
+  // physical layout while making the exceptional state unmistakable.
+  const b = view.brig;
+  const mineToPlay = b.active && view.isYourTurn;
+  const jailbreakState = remote ? (mineToPlay ? 'mine' : (b.active ? 'other' : 'none')) : 'none';
+  document.getElementById('gameUi').dataset.jailbreak = jailbreakState;
+  // Two different things share this frame, and only one of them is playable.
+  //
+  // Couch mode leaves it empty unless the Kings are YOURS to play, because the
+  // waiting Kings are public and /tv is already showing them. Remote mode has no
+  // /tv, so leaving it empty hides public board state from the only player who
+  // cannot see it any other way — how close the Brig is to a Jailbreak is
+  // information every other seat has. Waiting Kings are therefore drawn here,
+  // but WITHOUT data-jb: they are not yours, tapping one must do nothing, and
+  // the missing attribute is what makes that true rather than a check that could
+  // be forgotten later (see the tap-target note at the top of this file).
+  const jailbreakMine = mineToPlay ? b.releasedKings : [];
+  const jailbreakEvent = document.getElementById('jailbreakEvent');
+  if (remote && mineToPlay) {
+    const visibleKings = jailbreakMine.slice(0, 4);
+    const firstKing = jailbreakMine[0];
+    const selectedKing = firstKing && selected && selected.zone === 'jailbreak'
+      && selected.card.id === firstKing.id;
+    const cards = visibleKings.map(c => `<span class="jailbreakCard ${c.suit==='♥'||c.suit==='♦'?'red':''}">${c.rank}${c.suit}</span>`).join('');
+    const source = firstKing
+      ? `<button class="jailbreakSource ${selectedKing ? 'selected' : ''}" data-jb="${firstKing.id}" type="button" aria-label="Select a released King">`
+        + `<span class="jailbreakCards">${cards}</span>`
+        + `<span class="jailbreakEventCount">×${jailbreakMine.length}</span></button>`
+      : '';
+    jailbreakEvent.innerHTML = source
+      + '<div class="jailbreakMessage" id="jailbreakMessage">The Crown demands every King!</div>';
+  } else if (remote && b.active) {
+    const count = (b.releasedKings || []).length;
+    jailbreakEvent.innerHTML = `<div class="jailbreakMessage" id="jailbreakMessage">${view.currentPlayerName} is resolving a Jailbreak — ${count} King${count === 1 ? '' : 's'} remain</div>`;
+  } else {
+    jailbreakEvent.innerHTML = '<div class="jailbreakMessage" id="jailbreakMessage"></div>';
+  }
+  // Waiting Kings are context rather than tap targets, so their preview stays
+  // capped. During a remote Jailbreak the event shelf above draws up to four
+  // faces with a total-count badge. The whole group points at the first real
+  // King, and the count decrements after each authoritative play. Nothing in
+  // the rules or server state changes — this is still "select a released King."
+  const BRIG_PREVIEW_MAX = 6;
+  const brigWaiting = (!mineToPlay && remote)
+    ? (b.waitingKings || []).slice(0, BRIG_PREVIEW_MAX)
+    : [];
+  const jailbreakHtml = remote ? '' : jailbreakMine.map(c => {
+      const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
+      return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+    }).join('');
+  document.getElementById('brigStrip').innerHTML = jailbreakHtml
+    + brigWaiting.map(c => `<span class="card ${c.suit==='♥'||c.suit==='♦'?'red':''}">${c.rank}${c.suit}</span>`).join('');
+  document.getElementById('brigCount').textContent = remote && b.active
+    ? 'JAILBREAK'
+    : mineToPlay
+      ? `JAILBREAK — ${b.releasedKings.length} TO PLAY`
+    : (remote ? `${b.waitingCount} in the Brig` : '');
+  // Move the Brig frame to wherever THIS mode/state needs it. appendChild MOVES
+  // an existing node — nothing is re-created, so #brigStrip's own listeners
+  // (bound below, every render) are unaffected by which parent it currently
+  // sits under.
+  //
+  //   couch            -> .rightCol, next to HOLD (unchanged, always was here)
+  //   remote           -> inside the tilted board (grid-area: brig); an active
+  //                       state changes its contents to a responsive banner
+  const brigBoxEl = document.querySelector('.brigBox');
+  brigBoxEl.classList.toggle('jailbreakActive', remote && b.active);
+  if (remote) {
+    // .tiltBoard, NOT #runsGrid — appending inside #runsGrid would place the
+    // Brig exactly where the very next render()'s innerHTML rebuild wipes it.
+    // (Found this the hard way: it throws on the SECOND render, once
+    // #brigStrip has been destroyed along with everything else that was
+    // sitting inside #runsGrid.)
+    const tiltBoardEl = document.getElementById('tiltBoard');
+    if (brigBoxEl.parentElement !== tiltBoardEl) tiltBoardEl.appendChild(brigBoxEl);
+  } else {
+    const rightColEl = document.querySelector('.rightCol');
+    if (brigBoxEl.parentElement !== rightColEl) rightColEl.appendChild(brigBoxEl);
+  }
+
+  // HOLD and Draw Cards, same appendChild-moves-not-recreates technique as the
+  // Brig above. Nick, 2026-08-14: Draw Cards should read as a full-width
+  // banner rather than the floating pill, and HOLD should sit beside the hand
+  // — its own simpler box, not sharing the hand's wood panel — instead of its
+  // own separate row at the bottom. .leftCol becomes a small grid in remote
+  // mode for exactly this (see the CSS), which needs #drawBtn and .holdBox as
+  // DIRECT children of .leftCol alongside the two that were already there.
+  //
+  // Neither #handSection nor .handInner is ever innerHTML-rebuilt (only
+  // #handRow, a child, is) — the same fact that made the Brig fix safe applies
+  // here: these are stable containers, safe to hold a moved node indefinitely.
+  const drawBtnEl = document.getElementById('drawBtn');
+  const holdBoxEl2 = document.querySelector('.holdBox');
+  const leftColEl = document.querySelector('.leftCol');
+  const handInnerEl = document.querySelector('.handInner');
+  if (remote) {
+    if (drawBtnEl.parentElement !== leftColEl) leftColEl.insertBefore(drawBtnEl, leftColEl.firstChild);
+    if (holdBoxEl2.parentElement !== leftColEl) leftColEl.appendChild(holdBoxEl2);
+  } else {
+    // Couch: exactly where they always were — first in .handInner (beside the
+    // hand row), and in .rightCol (beside the Brig, handled above).
+    if (drawBtnEl.parentElement !== handInnerEl) handInnerEl.insertBefore(drawBtnEl, handInnerEl.firstChild);
+    const rightColEl2 = document.querySelector('.rightCol');
+    if (holdBoxEl2.parentElement !== rightColEl2) rightColEl2.insertBefore(holdBoxEl2, rightColEl2.firstChild);
+  }
+
+  document.querySelectorAll('#jailbreakEvent [data-jb], #brigStrip [data-jb]').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);
+      selectCard('jailbreak', c);
+    });
+  });
+
+  // Last, because everything above just replaced the elements it styles. A poll
+  // landing while a play is in flight would otherwise restore the faded card and
+  // drop the target ring, undoing the feedback mid-request.
+  paintPending();
+}
+
+function applyView(view, cause) {
+  // Drop a view that is older than what we already show. A poll GET issued just
+  // before an action's POST commits will answer with pre-action state and arrive
+  // afterwards, briefly reverting the board — your card visibly jumps back into
+  // your hand. Only compare when both sides carry a version: a LOBBY view (host
+  // reset) has none and must always be allowed through.
+  if (lastView && typeof lastView.stateVersion === 'number'
+      && typeof view.stateVersion === 'number'
+      && view.stateVersion < lastView.stateVersion) {
+    return;
+  }
+
+  // An UNCHANGED poll used to rebuild the entire board anyway. On your own turn
+  // that is a full innerHTML replacement of the runs, hand, Ports, HOLD and Brig
+  // roughly every 1.2s, forever, whether or not anything moved — wasted work at
+  // best, and at worst a rebuild landing in the middle of a touch (see the
+  // gesture guard above). Skip only the DRAW; the view itself is still adopted,
+  // because a same-version response can still carry fields the board does not
+  // paint, and dropping it wholesale would throw those away.
+  const unchanged = lastView
+    && typeof lastView.stateVersion === 'number'
+    && typeof view.stateVersion === 'number'
+    && view.stateVersion === lastView.stateVersion
+    && lastView.status === view.status;
+
+  lastView = view;
+  // Predictions are re-derived from the new authoritative state, never carried
+  // forward as patches. A play the server has now confirmed drops out of the
+  // queue naturally; one that has been overtaken makes rebuildPredicted give up
+  // and fall back to authoritative state rather than show a duplicate card.
+  rebuildPredicted();
+
+  if (unchanged) {
+    Perf.counts.rendersSuppressed++;
+    Perf.bump(cause, 'skipped');
+    // Resolved, but nothing was drawn — the fetch came back with news we already
+    // had. Recorded as 'applied' rather than 'painted' so paint latency is never
+    // credited for a frame that never existed.
+    closePulseObs('toApplied');
+    return;
+  }
+
+  // A real change, but a finger is on the board: hold it. Only the newest view
+  // matters, so this is a flag rather than a queue — flushDeferredRender()
+  // draws whatever lastView has become by the time the gesture ends, which is
+  // also why a later action response cannot be overtaken by an earlier poll.
+  if (pointerActive) {
+    renderPending = true;
+    pendingCause = cause;
+    Perf.counts.rendersDeferred++;
+    // Deliberately left OPEN. The finger is still down and the board still shows
+    // the old state, so the pulse is not yet resolved; flushDeferredRender()
+    // closes it when the render actually runs. Closing here would report a paint
+    // that had not happened.
+    return;
+  }
+
+  render(shownView(), cause);
+  closePulseObs('toPainted');
+}
+
+async function poll() {
+  // Claimed BEFORE the fetch, for two reasons: this poll's cause is whatever
+  // asked for it, and a pulse arriving mid-flight must not retag a request
+  // already on the wire. (Reading it after the await also put it in its own
+  // temporal dead zone for the line below, which threw on every single poll
+  // into the catch — silently, since the catch returns 'error' and the poller
+  // simply backs off. The tests caught it; nothing on screen would have.)
+  const cause = nextPollCause;
+  nextPollCause = 'timer';
+  try {
+    // Measured before the await so the span ends where the fetch BEGINS, not
+    // where it returns. Scoped to doorbell-caused polls only: a timer poll that
+    // happens to run first must not be credited with doorbell latency. The
+    // observation is NOT cleared here — it stays open until the screen actually
+    // reflects it, which is a different moment.
+    if (cause === 'doorbell' && pulseObs) Perf.notePulseSpan('toFetch', Perf.now() - pulseObs.receivedAt);
+    const view = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
+    Perf.notePoll(doorbell.isLive());
+    applyView(view, 'poll:' + cause);
+    // Signature the poller compares to decide whether anything actually moved.
+    // LOBBY views carry no stateVersion, hence the status fallback.
+    return (view.status || '') + ':' + (view.stateVersion == null ? '' : view.stateVersion);
+  } catch (e) {
+    console.error(e);
+    return 'error';
+  }
+}
+
+function showPausedPanel() {
+  const wait = document.getElementById('waitPanel');
+  showScreen('waitPanel');
+  wait.innerHTML = '<p>Paused — this tab went quiet for a while.</p>'
+    + '<p class="meta">Stopped checking for updates so it isn’t running in the background.</p>'
+    + '<button id="resumeBtn" style="margin-top:14px;">Resume game</button>';
+  document.getElementById('resumeBtn').addEventListener('click', () => {
+    wait.classList.add('hidden');
+    poller.start();
+  });
+}
+
+// ---- Display mode -----------------------------------------------------------
+// PER-DEVICE, not per-room. The server sends every device the same payload; the
+// only difference is what a device chooses to draw. "couch" hides the shared
+// board because a /tv is carrying it; "remote" draws it here instead. This is
+// what lets one room mix both — Nick's mother playing remote while everyone
+// else is on a couch. Stored locally, so each phone keeps its own answer.
+// Sound preference persists per device too. Sfx exposes setEnabled/isEnabled but
+// keeps no storage of its own, so the choice would reset on every reload without
+// this; the stored value is pushed back into Sfx at boot, below.
+const SOUND_KEY = 'salty-sound-on';
+function soundOn() { return Sfx.isEnabled(); }
+function setSoundOn(v) {
+  Sfx.setEnabled(v);
+  localStorage.setItem(SOUND_KEY, v ? '1' : '0');
+}
+if (localStorage.getItem(SOUND_KEY) === '0') Sfx.setEnabled(false);
+
+const MODE_KEY = 'salty-display-mode';
+function displayMode() { return localStorage.getItem(MODE_KEY) || 'couch'; }
+function setDisplayMode(m) {
+  localStorage.setItem(MODE_KEY, m);
+  if (lastView) render(shownView());
+}
+
+// ---- Menu -------------------------------------------------------------------
+// Everything that is not a card play lives here: scoreboard, sound, the mode
+// switch, and (for the host) the round controls that used to sit in a corner
+// strip. Nick, 2026-08-02 — "the host controls should live in the menu also,
+// along with the reset/admin page button."
+function openMenu() {
+  const v = lastView;
+  if (!v) return;
+  const mode = displayMode();
+
+  let html = '<div class="menuSection"><h3>Scores</h3>';
+  html += (v.players || []).map(p =>
+    `<div class="menuScore ${p.seat === v.currentSeat ? 'turn' : ''}">`
+    + `<span>${p.name}${p.seat === v.yourSeat ? ' (you)' : ''}</span>`
+    + `<span>${p.goalCount} in HOLD · ${p.total} pts</span></div>`).join('');
+  html += '</div>';
+
+  html += `<div class="menuSection"><h3>This device</h3>
+    <div class="menuBtns">
+      <button id="mCouch" class="${mode === 'couch' ? '' : 'secondary'}">Couch mode</button>
+      <button id="mRemote" class="${mode === 'remote' ? '' : 'secondary'}">Remote mode</button>
+      <button id="mSound" class="secondary">Sound: ${soundOn() ? 'on' : 'off'}</button>
+      <button id="mTimings" class="secondary">Timings</button>
+    </div>
+    <p class="meta" style="font-size:1.6dvh;margin-top:1dvh;">
+      Couch mode hides the shared board because the TV is showing it.
+      Remote mode draws the runs here instead.</p></div>`;
+
+  if (isHost()) {
+    const roundBtn = v.status === 'ROUND_RESULTS'
+      ? '<button id="mNextRound">Next round</button>' : '';
+    html += `<div class="menuSection"><h3>Host</h3><div class="menuBtns">
+      ${roundBtn}
+      <button id="mReset" class="secondary">Reset game</button>
+      <button id="mAdmin" class="secondary">Admin page</button>
+    </div></div>`;
+  }
+
+  showModal('Menu', html, [{ label: 'Close', secondary: true }]);
+
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('mCouch', () => { setDisplayMode('couch'); hideChoiceBar(); });
+  on('mRemote', () => { setDisplayMode('remote'); hideChoiceBar(); });
+  on('mSound', () => {
+    setSoundOn(!soundOn());
+    hideChoiceBar();
+    openMenu();   // reopen so the label reflects the new state
+  });
+  on('mTimings', () => { hideChoiceBar(); showTimings(); });
+  on('mNextRound', () => { hideChoiceBar(); advanceRound(false, v); });
+  on('mReset', () => { hideChoiceBar(); doReset(); });
+  on('mAdmin', () => { location.href = '/admin'; });
+}
+// The whole point of the instrumentation is the PHONE, which has no console —
+// so the numbers have to be readable on the device that has the problem, and
+// copyable off it afterwards.
+function showTimings() {
+  showModal('Timings',
+    '<pre style="white-space:pre-wrap;font-size:1.5dvh;line-height:1.5;text-align:left;">'
+      + Perf.text() + '</pre>',
+    [{ label: 'Copy', action: copyTimings }, { label: 'Close', secondary: true }]);
+}
+function copyTimings() {
+  const txt = Perf.text() + '\n\n' + JSON.stringify(Perf.summary(), null, 2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt)
+      .then(() => showToast('Timings copied'), () => showToast('Could not copy'));
+  } else {
+    showToast('Clipboard unavailable here');
+  }
+}
+document.getElementById('menuBtn').addEventListener('click', openMenu);
+// setDisplayMode re-renders, and render() disarms the prompt in remote mode, so
+// this both switches the layout and dismisses the overlay in one tap.
+document.getElementById('rotateRemoteBtn').addEventListener('click', () => setDisplayMode('remote'));
+
+// Host-only controls. These live in static markup rather than being rebuilt per
+// render, so they are wired once here. They stay inert for non-hosts: the
+// panels holding them are hidden, and every handler re-checks isHost().
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!isHost()) return;
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  try {
+    await Api.startGame(roomId, hostToken);
+    poller.kick();
+  } catch (e) {
+    showToast(e.message);
+    btn.disabled = false;   // re-enable so a failed start can be retried
+  }
+});
+document.getElementById('lobbyResetBtn').addEventListener('click', doReset);
+// (The in-game Reset button moved into the Menu modal — see openMenu().)
+
+function startPolling() {
+  poller.start();
+  doorbell.start();
+}
+</script>
+</body>
+</html>

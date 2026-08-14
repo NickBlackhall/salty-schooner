@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — Join</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  :root { color-scheme: dark; }
+  body { display:flex; min-height:100dvh; align-items:center; justify-content:center; padding:18px; }
+  .panel { background:var(--wood); border:1px solid rgba(201,162,39,.4); border-radius:14px;
+           padding:26px; width:min(380px, 92vw); box-shadow:0 6px 26px rgba(0,0,0,.5); }
+  .logo { width:100%; max-width:280px; display:block; margin:0 auto 14px; }
+  label { display:block; margin:14px 0 6px; color:var(--gold-lt); font-family:var(--serif); font-size:.95rem; }
+  input { width:100%; box-sizing:border-box; padding:12px; font-size:1.4rem; border-radius:8px;
+          border:1px solid var(--gold); background:rgba(10,20,26,.85); color:var(--gold-lt);
+          text-transform:uppercase; letter-spacing:.18em; text-align:center; font-family:var(--serif); }
+  input#nameInput { text-transform:none; letter-spacing:normal; font-size:1.1rem; font-family:var(--sans); }
+  button { width:100%; margin-top:20px; font-size:1.1rem; padding:14px; border-radius:10px; cursor:pointer;
+           font-family:var(--serif); font-weight:700; color:#25190a; border:1px solid #8a6c15;
+           background:linear-gradient(#f0d089, #c9a227); box-shadow:0 2px 0 #6f5510; }
+  button:active { transform:translateY(1px); box-shadow:0 1px 0 #6f5510; }
+  button:disabled { opacity:.5; }
+  .error { color:#ff8a7a; margin-top:10px; text-align:center; min-height:1.2em; }
+</style>
+</head>
+<body class="saltyBoard">
+<div class="panel">
+  <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
+  <label>Room code</label>
+  <input id="codeInput" maxlength="4" autocapitalize="characters" placeholder="ABCD">
+  <label>Your name</label>
+  <input id="nameInput" maxlength="24" placeholder="Captain...">
+  <button id="joinBtn">Join</button>
+  <div class="error" id="errorBox"></div>
+  <p style="color:#8aa4b2;font-size:.85rem;text-align:center;margin-top:14px;">
+    Knocked out of a game? Enter the same room code and the <b>exact same name</b> to get your seat back.
+  </p>
+</div>
+<script src="/shared/api.js"></script>
+<script>
+document.getElementById('joinBtn').addEventListener('click', async () => {
+  const roomCode = document.getElementById('codeInput').value.trim().toUpperCase();
+  const playerName = document.getElementById('nameInput').value.trim();
+  const err = document.getElementById('errorBox');
+  err.textContent = '';
+  if (!roomCode || !playerName) { err.textContent = 'Enter both a room code and your name.'; return; }
+  try {
+    const res = await Api.joinRoom(roomCode, playerName);
+    // Keep the name so a browser holding several seats can label them, and pin
+    // the seat in the URL so /play never has to guess which one this tab is.
+    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat, playerName);
+    location.href = '/play?room=' + res.roomId + '&pid=' + res.playerId;
+  } catch (e) {
+    err.textContent = e.message;
+  }
+});
+</script>
+</body>
+</html>

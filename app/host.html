@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salty Schooner — Create a game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  :root { color-scheme: dark; }
+  body { display:flex; min-height:100dvh; align-items:center; justify-content:center; padding:18px; }
+  .wrap { width:min(420px, 94vw); }
+  .panel { background:var(--wood); border:1px solid rgba(201,162,39,.4); border-radius:14px;
+           padding:24px; box-shadow:0 6px 26px rgba(0,0,0,.5); }
+  .logo { width:100%; max-width:280px; display:block; margin:0 auto 16px; }
+  label { display:block; margin:14px 0 6px; color:var(--gold-lt); font-family:var(--serif); font-size:.95rem; }
+  input { width:100%; box-sizing:border-box; padding:11px; font-size:1.05rem; border-radius:8px;
+          border:1px solid var(--gold); background:rgba(10,20,26,.85); color:var(--gold-lt); }
+  input[type=number] { font-family:var(--serif); }
+  .row { display:flex; gap:12px; }
+  .row > div { flex:1; }
+  button { width:100%; margin-top:22px; font-size:1.1rem; padding:14px; border-radius:10px; cursor:pointer;
+           font-family:var(--serif); font-weight:700; color:#25190a; border:1px solid #8a6c15;
+           background:linear-gradient(#f0d089, #c9a227); box-shadow:0 2px 0 #6f5510; }
+  button:active { transform:translateY(1px); box-shadow:0 1px 0 #6f5510; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button.secondary { background:rgba(20,12,7,.92); color:var(--gold-lt); border:1px solid #c99a43;
+                     box-shadow:none; margin-top:10px; font-size:1rem; padding:11px; }
+  .error { color:#ff8a7a; margin-top:12px; text-align:center; min-height:1.2em; }
+  .hint { color:#8aa4b2; font-size:.85rem; text-align:center; margin-top:14px; line-height:1.5; }
+  .resume { background:rgba(10,20,26,.7); border:1px solid rgba(201,162,39,.35); border-radius:12px;
+            padding:14px 16px; margin-bottom:16px; text-align:center; }
+  .resume .code { font-family:var(--serif); font-size:1.6rem; letter-spacing:.16em; color:var(--gold-lt); }
+  .hidden { display:none; }
+</style>
+</head>
+<body class="saltyBoard">
+<div class="wrap">
+
+  <div class="resume hidden" id="resumePanel">
+    <div class="meta">You already have a game going</div>
+    <div class="code" id="resumeCode"></div>
+    <button class="secondary" id="resumeBtn">Rejoin it</button>
+  </div>
+
+  <div class="panel">
+    <img class="logo" src="/assets/logo-wide.png" alt="Salty Schooner">
+    <label for="hostNameInput">Your name</label>
+    <input id="hostNameInput" maxlength="24" placeholder="Captain...">
+    <div class="row">
+      <div>
+        <label for="roundsInput">Rounds</label>
+        <input id="roundsInput" type="number" min="1" max="10" value="4">
+      </div>
+      <div>
+        <label for="holdInput">HOLD cards</label>
+        <input id="holdInput" type="number" min="5" max="20" value="10">
+      </div>
+      <div>
+        <label for="maxPlayersInput">Max players</label>
+        <input id="maxPlayersInput" type="number" min="2" max="6" value="6">
+      </div>
+    </div>
+    <button id="createBtn">Create game</button>
+    <div class="error" id="errorBox"></div>
+    <p class="hint">
+      You'll get a room code to read out, and you play too — this deals you in
+      at seat 1.
+    </p>
+  </div>
+</div>
+
+<script src="/shared/api.js"></script>
+<script>
+// /host is now ONLY the create-a-game form. Everything after creation — the
+// lobby, the room code, Start, the round controls — lives on /play, because the
+// host is a player now and /play already has the entire playing UI. Duplicating
+// card selection, King direction, the Port fan and discard onto a second screen
+// would guarantee the two drift apart, which this project has been bitten by
+// before. See docs/WORKLOG.md, "host-as-a-seat".
+
+// Offer the previous room rather than resuming it silently or, worse, quietly
+// minting a second room every time the host refreshes this page. Nick's words:
+// navigating rooms and players is really hard right now.
+(function offerResume() {
+  const last = Persist.lastRoom();
+  if (!last) return;
+  const hostToken = Persist.loadHost(last);
+  if (!hostToken) return;                       // not a room we host
+  const seat = Persist.loadPlayer(last);
+  const code = Persist.loadRoomCode(last);
+  const panel = document.getElementById('resumePanel');
+  document.getElementById('resumeCode').textContent = code || 'your room';
+  panel.classList.remove('hidden');
+  document.getElementById('resumeBtn').addEventListener('click', () => {
+    location.href = seat
+      ? '/play?room=' + last + '&pid=' + seat.playerId
+      : '/play?room=' + last;
+  });
+})();
+
+const createBtn = document.getElementById('createBtn');
+createBtn.addEventListener('click', async () => {
+  const err = document.getElementById('errorBox');
+  err.textContent = '';
+  const hostName = document.getElementById('hostNameInput').value.trim();
+  if (!hostName) { err.textContent = 'Enter your name — you are playing too.'; return; }
+
+  createBtn.disabled = true;
+  try {
+    const res = await Api.createRoom({
+      hostName,
+      rounds: Number(document.getElementById('roundsInput').value),
+      holdCards: Number(document.getElementById('holdInput').value),
+      maxPlayers: Number(document.getElementById('maxPlayersInput').value)
+    });
+    // Two identities for the same person: the host token authorises Start /
+    // Next round / Reset, the player credentials are the seat they play from.
+    // /play reads both — the host token is what makes its host controls appear.
+    Persist.saveHost(res.roomId, res.hostResumeToken);
+    Persist.saveRoomCode(res.roomId, res.roomCode);
+    Persist.savePlayer(res.roomId, res.playerId, res.resumeToken, res.seat, hostName);
+    location.href = '/play?room=' + res.roomId + '&pid=' + res.playerId;
+  } catch (e) {
+    err.textContent = e.message;
+    createBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

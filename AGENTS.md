@@ -12,12 +12,23 @@ Build Salty Schooner into a stable, mobile-first card game prototype for phones 
 
 When sources conflict, use this order:
 
-1. `docs/MASTER_PROJECT_BRIEF.md`
-2. Newer written decisions approved by Nick Blackhall
-3. The newest stable prototype in `reference/`
+1. **`docs/RULES.md` — the authoritative ruleset.** If a build disagrees with it,
+   the build is wrong.
+2. `docs/MASTER_PROJECT_BRIEF.md`
+3. Newer written decisions approved by Nick Blackhall
 4. Existing implementation details
 
 Do not infer a new rule from artwork, layout mockups, or promotional images.
+
+**Do not treat `reference/` as a rules authority.** The only prototype in there
+is `salty_schooner_v11_ipad_fit.html`, which is **v11** — superseded, and
+explicitly called historical by the multiplayer roadmap. An earlier version of
+this list pointed at it, which would have led an agent to "correct" the game
+backwards. `reference/` is for historical context only.
+
+**`app/index.html` is not the ruleset either.** It is the frozen v26.16 hot-seat
+build and it deliberately differs from `docs/RULES.md` on hand refill (see §14 of
+that document). Do not resync anything to match it without checking there first.
 
 ## Non-negotiable rule safety
 
