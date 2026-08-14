@@ -48,7 +48,13 @@ function createPoller({
   // Reproduced in scripts/test-flap-cost.js.
   minForcedGapMs = 900,
   onIdleStop = null,          // called when polling stops itself
-  onError = null
+  onError = null,
+  // Optional: called with the delay in ms whenever a forced fetch is held back
+  // by minForcedGapMs. The floor is a gap between consecutive fetches rather
+  // than a flat delay, so how often it actually bites is a question about real
+  // play — two opponent moves landing under 900ms apart, say — and not one to
+  // settle by reading the code. Screens that do not care simply omit it.
+  onForcedDelay = null
 }) {
   let timer = null;
   let running = false;
@@ -161,7 +167,9 @@ function createPoller({
     clearTimeout(timer);
     const since = Date.now() - lastPollAt;
     if (since < minForcedGapMs) {
-      timer = setTimeout(tick, minForcedGapMs - since);
+      const wait = minForcedGapMs - since;
+      if (onForcedDelay) { try { onForcedDelay(wait); } catch (e) { /* never let a metric break polling */ } }
+      timer = setTimeout(tick, wait);
       return;
     }
     tick();

@@ -615,7 +615,10 @@ const Perf = {
   // "toFetch" exists to settle whether poller.forceTick()'s 900ms floor delays a
   // doorbell in practice. Expected ~0 on a device that is only watching; a
   // non-zero p95 here would mean the floor is real on the observing side too.
-  pulseSpans: { toFetch: [], toPainted: [] },
+  pulseSpans: { toFetch: [], toPainted: [], toApplied: [] },
+  // How often minForcedGapMs actually held a forced fetch back, and by how much.
+  forcedDelays: [],
+  noteForcedDelay(ms) { this.forcedDelays.push(ms); this.cap(this.forcedDelays); },
   notePulseSpan(kind, ms) {
     const a = this.pulseSpans[kind];
     if (a && isFinite(ms) && ms >= 0) { a.push(ms); this.cap(a); }
@@ -718,6 +721,8 @@ const Perf = {
         row('outside function', srv.outside),
         row('doorbell→fetch start', this.pulseSpans.toFetch),
         row('doorbell→painted', this.pulseSpans.toPainted),
+        row('doorbell→applied (nothing drawn)', this.pulseSpans.toApplied),
+        row('forced-poll delay when it bit', this.forcedDelays),
         row('render duration', this.renders.map(r => r.ms))
       ]
     };
@@ -733,6 +738,7 @@ const Perf = {
       + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
       + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
       + `polls while realtime live: ${this.polls.live}, while down: ${this.polls.down}\n`
+      + `forced fetches delayed by the 900ms floor: ${this.forcedDelays.length}\n`
       + `doorbell fetches avoided: ${s.counts.doorbellSuppressed} already-known`
       + `, ${s.counts.doorbellHeld} held`
       + ` (${s.counts.doorbellHeldFollowup} still needed, ${s.counts.doorbellHeldTimedOut} timed out)\n`
@@ -763,9 +769,42 @@ let flushGraceTimer = null;
 // What triggered the next fetch, so a render can be attributed to a doorbell
 // pulse rather than to the timer. Reset to 'timer' each time it is consumed.
 let nextPollCause = 'timer';
-// performance.now() at the moment a doorbell decided a fetch was needed, read
-// and cleared by the poll it caused. Null when a poll was not doorbell-driven.
-let pulseFetchMark = null;
+// An outstanding doorbell observation: news has arrived that the board does not
+// yet reflect. Deliberately NOT a "when did we decide to fetch" mark — an
+// earlier version of this recorded the timestamp at the moment a HELD pulse was
+// released, which silently excluded the entire hold from the very number the
+// hold makes interesting.
+//
+// receivedAt is the EARLIEST unreflected pulse, kept across coalescing: if 43
+// and 44 both land before either is drawn, the board has been behind since 43
+// arrived, and that is the honest measure of how stale the screen was. version
+// tracks the newest so the observation is satisfied by the right update.
+let pulseObs = null;   // { receivedAt, version }
+
+function notePulseReceived(version) {
+  if (!pulseObs) pulseObs = { receivedAt: Perf.now(), version: version };
+  else if (typeof version === 'number' && version > pulseObs.version) pulseObs.version = version;
+}
+
+// Closed only when the observation is genuinely resolved, and labelled by what
+// actually happened to the screen. 'painted' means a render ran; 'applied' means
+// the fetch came back with nothing new to draw. Conflating those would report
+// paint latency for frames that were never painted.
+function closePulseObs(kind) {
+  if (!pulseObs) return;
+  // Resolved only once the screen reflects the version that was ANNOUNCED. A
+  // render for some other, older update — our own action landing at 43 while
+  // the pulse announced 44 — is not this pulse being satisfied, and closing
+  // there reports a paint for news the player still cannot see. Observed doing
+  // exactly that: a held pulse's span was being closed by the action whose
+  // response released the hold, so the follow-up fetch it actually needed was
+  // never measured at all.
+  if (lastView && typeof lastView.stateVersion === 'number'
+      && typeof pulseObs.version === 'number'
+      && lastView.stateVersion < pulseObs.version) return;
+  Perf.notePulseSpan(kind, Perf.now() - pulseObs.receivedAt);
+  pulseObs = null;
+}
 // Nothing may freeze the board indefinitely. A pointer that never reports its
 // release (capture lost to a system gesture, a tab switched mid-touch) would
 // otherwise hold every render forever, which is a far worse bug than the one
@@ -836,7 +875,10 @@ function flushDeferredRender() {
   renderPending = false;
   const cause = pendingCause;
   pendingCause = null;
-  if (lastView) render(shownView(), (cause ? cause + '+' : '') + 'deferred');
+  if (lastView) {
+    render(shownView(), (cause ? cause + '+' : '') + 'deferred');
+    closePulseObs('toPainted');
+  }
 }
 
 // Bound once, on the persistent container — #gameUi itself is never rebuilt,
@@ -1211,7 +1253,8 @@ const poller = createPoller({
   // and the hard stop is what makes the longer window safe.
   idleStopMs: 30 * 60 * 1000,
   hardStopMs: 90 * 60 * 1000,
-  onIdleStop: showPausedPanel
+  onIdleStop: showPausedPanel,
+  onForcedDelay: (ms) => Perf.noteForcedDelay(ms)
 });
 
 // Declared after the poller because its handler calls poller.wake(); function
@@ -1273,18 +1316,20 @@ function handlePulse(version, meta) {
     if (typeof version === 'number' && (heldPulseVersion === null || version > heldPulseVersion)) {
       heldPulseVersion = version;
     }
+    notePulseReceived(version);
     Perf.counts.doorbellHeld++;
     clearTimeout(heldPulseTimer);
     heldPulseTimer = setTimeout(() => {
       if (heldPulseVersion === null) return;
       heldPulseVersion = null;
       Perf.counts.doorbellHeldTimedOut++;
+      nextPollCause = 'doorbell';
       poller.wake();
     }, HELD_PULSE_MAX_MS);
     return;
   }
 
-  pulseFetchMark = Perf.now();
+  notePulseReceived(version);
   // Nothing of mine outstanding: a genuine, unexplained change. wake() rather
   // than kick() — the idle stop may already have fired and put up the paused
   // panel, and a player returning to the table should not have to find the
@@ -1313,7 +1358,7 @@ function settleHeldPulse() {
   heldPulseVersion = null;
   clearTimeout(heldPulseTimer);
   Perf.counts.doorbellHeldFollowup++;
-  pulseFetchMark = Perf.now();
+  nextPollCause = 'doorbell';
   poller.wake();
 }
 
@@ -1928,7 +1973,15 @@ function applyView(view, cause) {
   // and fall back to authoritative state rather than show a duplicate card.
   rebuildPredicted();
 
-  if (unchanged) { Perf.counts.rendersSuppressed++; Perf.bump(cause, 'skipped'); return; }
+  if (unchanged) {
+    Perf.counts.rendersSuppressed++;
+    Perf.bump(cause, 'skipped');
+    // Resolved, but nothing was drawn — the fetch came back with news we already
+    // had. Recorded as 'applied' rather than 'painted' so paint latency is never
+    // credited for a frame that never existed.
+    closePulseObs('toApplied');
+    return;
+  }
 
   // A real change, but a finger is on the board: hold it. Only the newest view
   // matters, so this is a flag rather than a queue — flushDeferredRender()
@@ -1938,25 +1991,36 @@ function applyView(view, cause) {
     renderPending = true;
     pendingCause = cause;
     Perf.counts.rendersDeferred++;
+    // Deliberately left OPEN. The finger is still down and the board still shows
+    // the old state, so the pulse is not yet resolved; flushDeferredRender()
+    // closes it when the render actually runs. Closing here would report a paint
+    // that had not happened.
     return;
   }
 
   render(shownView(), cause);
+  closePulseObs('toPainted');
 }
 
 async function poll() {
+  // Claimed BEFORE the fetch, for two reasons: this poll's cause is whatever
+  // asked for it, and a pulse arriving mid-flight must not retag a request
+  // already on the wire. (Reading it after the await also put it in its own
+  // temporal dead zone for the line below, which threw on every single poll
+  // into the catch — silently, since the catch returns 'error' and the poller
+  // simply backs off. The tests caught it; nothing on screen would have.)
+  const cause = nextPollCause;
+  nextPollCause = 'timer';
   try {
-    // Read before the await so the span ends where the fetch BEGINS, not where
-    // it returns — the floor being measured delays the start, not the transit.
-    const pulseAt = pulseFetchMark;
-    pulseFetchMark = null;
-    if (pulseAt !== null) Perf.notePulseSpan('toFetch', Perf.now() - pulseAt);
+    // Measured before the await so the span ends where the fetch BEGINS, not
+    // where it returns. Scoped to doorbell-caused polls only: a timer poll that
+    // happens to run first must not be credited with doorbell latency. The
+    // observation is NOT cleared here — it stays open until the screen actually
+    // reflects it, which is a different moment.
+    if (cause === 'doorbell' && pulseObs) Perf.notePulseSpan('toFetch', Perf.now() - pulseObs.receivedAt);
     const view = await Api.getPlayerState(roomId, creds.playerId, creds.resumeToken);
     Perf.notePoll(doorbell.isLive());
-    const cause = nextPollCause;
-    nextPollCause = 'timer';
     applyView(view, 'poll:' + cause);
-    if (pulseAt !== null) Perf.notePulseSpan('toPainted', Perf.now() - pulseAt);
     // Signature the poller compares to decide whether anything actually moved.
     // LOBBY views carry no stateVersion, hence the status fallback.
     return (view.status || '') + ':' + (view.stateVersion == null ? '' : view.stateVersion);

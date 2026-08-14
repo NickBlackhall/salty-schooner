@@ -215,6 +215,104 @@ async function rejectionReleasesHold(page) {
   return { pass: held === null, detail: `heldPulseVersion=${held === null ? 'released' : held}` };
 }
 
+// --- measurement semantics ---------------------------------------------------
+// These assert the REPORTING, not the behaviour. An earlier version of this
+// instrumentation timed a held pulse from the moment the hold was RELEASED,
+// which excluded the whole hold from the one number the hold makes interesting,
+// and reported "painted" for frames that were never drawn. Both were wrong in
+// the flattering direction, which is exactly why they need tests.
+
+// A held pulse's latency must include the hold, not start after it.
+async function heldPulseTimesFromReceipt(page) {
+  await tapPlay(page);
+  await page.waitForTimeout(40);
+  await page.evaluate(() => handlePulse(44, { programmatic: false }));   // held
+  await page.waitForTimeout(700);                                        // sit in the hold
+  await confirm(page, 43);                                               // does not cover 44
+  await page.waitForTimeout(1500);                                       // past the forced-poll floor
+  const spans = await page.evaluate(() => JSON.parse(JSON.stringify(Perf.pulseSpans)));
+  const first = spans.toFetch[0];
+  // Must include the ~700ms hold. Timed from release it would be near zero.
+  return { pass: typeof first === 'number' && first >= 650,
+           detail: `toFetch=${first == null ? 'none' : Math.round(first) + 'ms'} (must include the ~700ms hold)` };
+}
+
+// An unchanged result is 'applied', never 'painted'.
+// After the dedupe this should be RARE in real play — a doorbell fetch that
+// comes back with nothing to draw is precisely what the suppression exists to
+// avoid, so a non-zero count here is a signal that one slipped through. Driven
+// directly rather than via handlePulse, because handlePulse would (correctly)
+// suppress an already-known version before any fetch happened.
+async function unchangedIsAppliedNotPainted(page) {
+  await page.evaluate(() => {
+    notePulseReceived(42);                                       // open an observation
+    nextPollCause = 'doorbell';                                  // attribute the fetch
+    window.__nextFetch = JSON.parse(JSON.stringify(lastView));   // returns the same version
+    poller.refresh();
+  });
+  await page.waitForTimeout(1500);
+  const spans = await page.evaluate(() => JSON.parse(JSON.stringify(Perf.pulseSpans)));
+  return { pass: spans.toApplied.length === 1 && spans.toPainted.length === 0,
+           detail: `applied=${spans.toApplied.length} painted=${spans.toPainted.length}` };
+}
+
+// A real change reports as painted, once.
+async function changeIsPainted(page) {
+  await page.evaluate(() => {
+    const nv = JSON.parse(JSON.stringify(lastView));
+    nv.stateVersion = 43;
+    nv.runs[0].cards.push({ id: '999', rank: '8', suit: '♠', value: 8 });
+    window.__nextFetch = nv;
+    handlePulse(43, { programmatic: false });
+  });
+  await page.waitForTimeout(1500);
+  const spans = await page.evaluate(() => JSON.parse(JSON.stringify(Perf.pulseSpans)));
+  return { pass: spans.toPainted.length === 1 && spans.toApplied.length === 0,
+           detail: `painted=${spans.toPainted.length} applied=${spans.toApplied.length}` };
+}
+
+// A timer poll running while an observation is open must not be credited with
+// doorbell latency.
+async function timerPollDoesNotStealAttribution(page) {
+  await page.evaluate(() => {
+    notePulseReceived(99);                 // an observation is open
+    nextPollCause = 'timer';               // but the next poll is a timer poll
+    poller.refresh();
+  });
+  await page.waitForTimeout(1500);
+  const spans = await page.evaluate(() => JSON.parse(JSON.stringify(Perf.pulseSpans)));
+  return { pass: spans.toFetch.length === 0,
+           detail: `toFetch entries after a timer poll=${spans.toFetch.length} (want 0)` };
+}
+
+// The 900ms floor is a gap between fetches, not a flat delay: with no recent
+// poll it must not delay at all, and when it does bite it must be recorded.
+async function forcedFloorIsMeasured(page) {
+  const idle = await page.evaluate(async () => {
+    // With no doorbell connected the poller runs its FAST rate (1.2s on your
+    // own turn), so a quiet window longer than the 900ms floor never opens and
+    // the floor would appear to bite always. Pretend realtime is live, which is
+    // the real-world condition, and the base rate becomes the 45s safety net.
+    doorbell.isLive = () => true;
+    poller.reschedule();
+    Perf.forcedDelays.length = 0;
+    await new Promise(r => setTimeout(r, 1100));   // let the floor lapse
+    handlePulse(43, { programmatic: false });
+    return Perf.forcedDelays.length;
+  });
+  // Now two pulses in quick succession: the second must hit the floor.
+  const back2back = await page.evaluate(async () => {
+    await new Promise(r => setTimeout(r, 1100));
+    handlePulse(44, { programmatic: false });
+    await new Promise(r => setTimeout(r, 60));
+    lastView.stateVersion = 44;                    // so 45 still counts as new
+    handlePulse(45, { programmatic: false });
+    return Perf.forcedDelays.length;
+  });
+  return { pass: idle === 0 && back2back > 0,
+           detail: `delaysAfterIdlePulse=${idle} (want 0), afterBackToBack=${back2back} (want >0)` };
+}
+
 const CASES = [
   ['pulse before response',   pulseBeforeResponse,       'my own pulse beating my own response costs no fetch'],
   ['response before pulse',   responseBeforePulse,       'the other ordering is plainly already-known'],
@@ -222,7 +320,12 @@ const CASES = [
   ['idle opponent pulse',     idleOpponentPulseFetches,  'with nothing outstanding, fetch immediately'],
   ['stale pulse',             staleP2ulseIgnored,        'a pulse at or below lastView is dropped'],
   ['multiple queued actions', multipleQueuedActions,     'a held pulse resolves against the whole queue'],
-  ['rejection releases hold', rejectionReleasesHold,     'a failed action never strands a held pulse']
+  ['rejection releases hold', rejectionReleasesHold,     'a failed action never strands a held pulse'],
+  ['held timed from receipt', heldPulseTimesFromReceipt, 'a held pulse’s latency includes the hold'],
+  ['unchanged is applied',    unchangedIsAppliedNotPainted, 'nothing drawn is never reported as painted'],
+  ['change is painted',       changeIsPainted,           'a real change reports painted, once'],
+  ['no stolen attribution',   timerPollDoesNotStealAttribution, 'a timer poll is not credited with doorbell latency'],
+  ['forced floor measured',   forcedFloorIsMeasured,     'the 900ms floor is a gap, and its hits are counted']
 ];
 
 (async () => {
