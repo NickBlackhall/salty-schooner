@@ -217,6 +217,11 @@
 
   /* Opponents' HOLD piles — remote only; /tv carries these in couch mode. */
   .oppStrip { display:none; }
+  /* The extra wrapper is layout-neutral in couch mode. Remote mode turns it
+     into the fixed central budget that can contain a Jailbreak event without
+     moving the player's private controls. */
+  .playfield { display:contents; }
+  .jailbreakEvent { display:none; }
 
   /* ---- REMOTE MODE ----------------------------------------------------------
    * Same DOM, re-flowed for a portrait phone with no /tv beside it. Deliberately
@@ -233,12 +238,7 @@
    * screen are therefore in vw here. Do not "unify" these units.
    */
   #gameUi[data-mode="remote"] { gap:.9dvh; padding:1dvh 2.5vw;
-                                /* Safety valve, not the plan: the layout below
-                                   is budgeted to fit 100dvh, but a 6-player
-                                   game or a Brig full of Kings must never put a
-                                   control out of reach. Overflow scrolls rather
-                                   than clipping. */
-                                overflow-y:auto; }
+                                overflow:hidden; }
   /* EVERY flex/grid child in this layout needs min-width:0. Without it a child
      cannot shrink below its own content, so one over-wide row (the hand, which
      also carries the Draw button) silently widens the whole column and pushes
@@ -246,6 +246,7 @@
      missing-min-width failure that let /tv's Brig row balloon past its frame on
      2026-08-07 — same fix, one axis over. */
   #gameUi[data-mode="remote"] .midRow,
+  #gameUi[data-mode="remote"] .playfield,
   #gameUi[data-mode="remote"] .leftCol,
   #gameUi[data-mode="remote"] .rightCol,
   #gameUi[data-mode="remote"] .handInner,
@@ -291,16 +292,21 @@
      Run rows around a Brig row roughly 44% as tall, separated by an 8px seam.
      The stage scales between the prototype's 320-430px phone sizes without
      distributing spare height between those rows. */
+  #gameUi[data-mode="remote"] .playfield {
+    flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+    justify-content:flex-start; overflow:hidden;
+  }
   #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
-                                           margin-top:auto;
-                                           height:clamp(318px,86vw,386px);
+                                           margin:0;
+                                           width:100%;
+                                           height:min(clamp(280px,86vw,386px),100%);
                                            perspective:900px;
                                            perspective-origin:50% 38%;
                                            isolation:isolate; overflow:visible; }
   #gameUi[data-mode="remote"] .tiltStage::before {
     content:""; position:absolute; z-index:-2; pointer-events:none;
-    top:-14dvh; left:.8vw; right:.8vw; bottom:-1.4vw;
-    clip-path:polygon(14% 0,86% 0,100% 100%,0 100%);
+    inset:0 .8vw -1.4vw;
+    clip-path:polygon(8% 0,92% 0,100% 100%,0 100%);
     border-bottom:clamp(2px,.7vw,3px) solid rgba(213,169,51,.58);
     border-radius:0 0 clamp(16px,5vw,25px) clamp(16px,5vw,25px);
     background:
@@ -398,29 +404,117 @@
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive {
     min-height:0; border-color:var(--gold);
+    background:
+      radial-gradient(circle at 18% 35%,rgba(255,236,129,.24) 0 2px,transparent 3px),
+      repeating-linear-gradient(118deg,rgba(255,255,255,.08) 0 2px,transparent 2px 12px),
+      linear-gradient(105deg,#071d37 0 18%,#d92f55 18% 24%,#e0a421 24% 29%,#092a4a 29% 70%,#d92f55 70% 76%,#e0a421 76% 81%,#071d37 81%);
     box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
                0 0 2.8vw rgba(240,208,137,.58), 0 .8vw 1.5vw rgba(0,0,0,.5);
   }
-  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .jbStack {
-    width:44px; min-height:44px; aspect-ratio:5/6; font-size:clamp(14px,4vw,18px);
-    box-shadow:4px 0 0 #ddd8ca, 8px 0 0 #aaa59a, 0 .8vw 1.6vw rgba(0,0,0,.6);
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive::before {
+    background:
+      linear-gradient(90deg,transparent 0 8%,rgba(255,255,255,.13) 8% 8.6%,transparent 8.6% 91.4%,rgba(255,255,255,.13) 91.4% 92%,transparent 92%),
+      repeating-radial-gradient(circle at 50% 50%,transparent 0 9px,rgba(244,194,55,.1) 10px 11px);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .brigInner {
+    justify-content:center;
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive #brigStrip {
-    padding-right:12px;
+    display:none;
   }
-  .jbStackCount {
-    position:absolute; right:-10px; top:1px; min-width:25px; height:25px;
-    padding:0 5px; border-radius:999px; display:flex; align-items:center; justify-content:center;
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .panelCount {
+    position:relative; z-index:1; color:#fff3bd;
+    font:bold clamp(18px,6vw,28px)/1 var(--serif); letter-spacing:.08em;
+    text-shadow:2px 2px 0 #8d1833,-1px -1px 0 #8d1833,0 0 12px rgba(255,226,104,.8);
+  }
+  /* Active Jailbreak shelf. It owns space INSIDE .playfield rather than adding
+     height to the page. The Kings are visible reminders, but the whole group
+     is one 44px-minimum source because every released card obeys the same rule. */
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .playfield {
+    display:grid; grid-template-rows:clamp(78px,14dvh,116px) minmax(0,1fr);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .playfield {
+    display:grid; grid-template-rows:clamp(40px,7dvh,56px) minmax(0,1fr);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakEvent,
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakEvent {
+    display:flex; position:relative; z-index:4; min-width:0; overflow:hidden;
+    align-items:center; justify-content:center; gap:clamp(10px,4vw,24px);
+    margin:0 .8vw .5dvh; padding:clamp(5px,1.4vw,8px) clamp(8px,2vw,14px);
+    border:1px solid rgba(240,208,137,.52); border-radius:clamp(8px,2.2vw,12px);
+    background:
+      radial-gradient(circle at 8% 25%,rgba(255,217,90,.72) 0 1px,transparent 1.5px),
+      radial-gradient(circle at 94% 72%,rgba(255,117,116,.58) 0 1.2px,transparent 1.8px),
+      repeating-linear-gradient(115deg,transparent 0 13px,rgba(255,255,255,.035) 13px 15px),
+      linear-gradient(115deg,rgba(7,74,84,.96),rgba(9,42,70,.96) 44%,rgba(126,27,60,.94));
+    box-shadow:inset 0 0 18px rgba(0,0,0,.38),0 4px 12px rgba(0,0,0,.32);
+  }
+  #gameUi[data-mode="remote"] .jailbreakSource {
+    flex:0 0 auto; min-width:44px; min-height:44px; margin:0; padding:0 12px 0 0;
+    border:0; background:none; box-shadow:none; display:flex; align-items:center;
+    justify-content:center; position:relative;
+  }
+  #gameUi[data-mode="remote"] .jailbreakSource:active { transform:none; box-shadow:none; }
+  #gameUi[data-mode="remote"] .jailbreakCards { display:flex; align-items:center; padding-left:12px; }
+  #gameUi[data-mode="remote"] .jailbreakCard {
+    width:clamp(36px,10vw,48px); aspect-ratio:5/7; margin-left:-12px;
+    display:flex; align-items:center; justify-content:center; border-radius:clamp(5px,1.5vw,8px);
+    border:1px solid #aaa59a; background:#fffdf7; color:#171717;
+    font:bold clamp(13px,3.7vw,17px)/1 var(--sans);
+    box-shadow:0 3px 7px rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .jailbreakCard.red { color:#c63b2e; }
+  #gameUi[data-mode="remote"] .jailbreakSource.selected .jailbreakCard {
+    outline:3px solid #f8d45f; outline-offset:1px;
+    box-shadow:0 0 13px rgba(248,212,95,.9),0 3px 7px rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .jailbreakEventCount {
+    position:absolute; right:0; top:0; min-width:25px; height:25px; padding:0 5px;
+    border-radius:999px; display:flex; align-items:center; justify-content:center;
     background:var(--gold); color:#25190a; border:2px solid #f0d089;
     font:bold 11px/1 var(--sans); box-shadow:0 2px 5px rgba(0,0,0,.55);
+  }
+  #gameUi[data-mode="remote"] .jailbreakMessage {
+    min-width:0; max-width:52%; color:#fff5d5; font-family:var(--serif);
+    font-size:clamp(11px,3.4vw,16px); line-height:1.22;
+    text-shadow:0 2px 4px rgba(0,0,0,.72);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakEvent {
+    justify-content:flex-start; padding-inline:12px;
+    border-color:rgba(240,208,137,.36);
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .jailbreakMessage {
+    max-width:none; width:100%; text-align:center; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  #gameUi[data-mode="remote"][data-jailbreak="mine"] .tiltStage,
+  #gameUi[data-mode="remote"][data-jailbreak="other"] .tiltStage {
+    height:min(clamp(220px,78vw,350px),100%);
   }
   @media (max-width:360px) {
     #gameUi[data-mode="remote"] .run .card { width:42px; }
   }
   @media (orientation:portrait) and (max-height:650px) {
-    /* Preserve the same row ratio on short phones, but compress the total stage
-       enough that the private controls remain reachable without a tall scroll. */
-    #gameUi[data-mode="remote"] .tiltStage { height:72vw; }
+    #gameUi[data-mode="remote"] .tiltStage { height:min(72vw,100%); }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .playfield {
+      grid-template-rows:60px minmax(0,1fr);
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakEvent {
+      gap:8px; margin-bottom:2px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakCard {
+      width:32px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .jailbreakMessage {
+      font-size:10px; line-height:1.12;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .tiltBoard {
+      inset:5px; grid-template-rows:minmax(0,1fr) 44px minmax(0,1fr);
+      column-gap:5px; row-gap:5px;
+    }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .run .card { width:32px; }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .run { padding:4px; }
+    #gameUi[data-mode="remote"][data-jailbreak="mine"] .runLabel { margin-bottom:2px; }
   }
   /* Nick, 2026-08-14, second pass on remote mode's bottom section — reference
      image showed Draw Cards as a full-width banner ABOVE a [HOLD | hand] row,
@@ -431,9 +525,10 @@
      by render() (see the JS comment by holdBoxEl2/drawBtnEl). Couch mode below
      is untouched: #drawBtn and .holdBox live back in their original couch-only
      parents there, this grid never applies to them. */
-  #gameUi[data-mode="remote"] .midRow { grid-template-columns:1fr; gap:.9dvh; }
+  #gameUi[data-mode="remote"] .midRow { flex:0 0 auto; grid-template-columns:1fr; gap:0; }
   #gameUi[data-mode="remote"] .leftCol { display:grid; gap:1vw 2vw;
                                          grid-template-columns:auto 1fr;
+                                         grid-template-rows:44px 64px clamp(78px,22vw,94px);
                                          grid-template-areas:"draw draw" "hold hand" "ports ports"; }
   #gameUi[data-mode="remote"] #drawBtn { grid-area:draw; }
   #gameUi[data-mode="remote"] .holdBox { grid-area:hold; }
@@ -446,17 +541,16 @@
      than left as an empty box taking up a grid row for no reason. */
   #gameUi[data-mode="remote"] .rightCol { display:none; }
 
-  /* DRAW CARDS as a real banner, not the floating pill it was: in-flow, full
-     width, its own grid row. The pill was Nick's 2026-08-11 request; this
-     supersedes it on his review of the reference image — 2026-08-14: "give up
-     on the decorative frame... this will save some screen space." Still
-     contextual — render() only un-hides it when a draw is actually offered,
-     exactly as before; the grid area simply collapses when it is hidden,
-     rather than the pill's old position:absolute overlap. */
+  /* DRAW CARDS keeps a permanent row in the private dock. It is contextual,
+     but hiding it changes visibility rather than layout: hand/HOLD/Ports never
+     jump when eligibility changes and the viewport never gains a scrollbar. */
   #gameUi[data-mode="remote"] #drawBtn { width:100%; white-space:nowrap;
-                                         min-height:44px; font-size:clamp(11px,3vw,14px);
+                                         height:44px; min-height:44px; font-size:clamp(11px,3vw,14px);
                                          line-height:1; padding:1.8vw 2vw;
                                          border-radius:1.4vw; box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4); }
+  #gameUi[data-mode="remote"] #drawBtn.hidden {
+    display:block; visibility:hidden; opacity:0; pointer-events:none;
+  }
 
   /* HOLD, simplified. frame-hold.png was a 512x512 SQUARE asset — fine filling
      its own dedicated row, wrong once it has to sit narrow beside the hand at
@@ -470,8 +564,8 @@
      than expected (wrapped to two lines — see the card-width fix below), HOLD
      stretched into a tall mostly-empty box. Sized off its own content instead,
      independent of whatever the hand row ends up being. */
-  #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:start;
-                                         width:clamp(48px,13vw,58px); min-height:64px;
+  #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:stretch;
+                                         width:clamp(48px,13vw,58px); min-height:0;
                                          padding:clamp(2px,.7vw,4px);
                                          border:.3vw solid rgba(201,162,39,.6);
                                          border-radius:1.4vw; background:rgba(8,40,44,.55); }
@@ -482,8 +576,8 @@
   }
   #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:clamp(8px,2vw,10px); }
 
-  #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
-                                             min-height:64px;
+  #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%; height:64px;
+                                             min-height:0;
                                              border-width:1.6vw;
                                              border-image-width:1.6vw; }
   #gameUi[data-mode="remote"] .handInner { justify-content:center; padding:.4vw; }
@@ -494,7 +588,7 @@
   #gameUi[data-mode="remote"] #handRow .card {
     width:clamp(44px,11.2vw,50px); font-size:clamp(13px,3.7vw,17px);
   }
-  #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; gap:1.4vw; padding:1.4vw; }
+  #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; height:100%; gap:1.4vw; padding:1.4vw; }
   #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
   #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
@@ -677,9 +771,18 @@
        there as a permanent grid sibling of #runsGrid; #runsGrid itself goes
        display:contents in remote mode so its freely-rebuilt .run children
        still act as direct grid items of .tiltBoard for grid-area placement. -->
-  <div class="tiltStage" id="tiltStage">
-    <div class="tiltBoard" id="tiltBoard">
-      <div class="runsRow" id="runsGrid"></div>
+  <div class="playfield" id="playfield">
+    <!-- Remote-only state shelf. During your Jailbreak this is the playable
+         released-King group; during another player's it is a compact status
+         line. It is inside the playfield's fixed height, so appearing never
+         moves Draw, the hand/HOLD row or Ports. -->
+    <section class="jailbreakEvent" id="jailbreakEvent" aria-live="polite">
+      <div class="jailbreakMessage" id="jailbreakMessage"></div>
+    </section>
+    <div class="tiltStage" id="tiltStage">
+      <div class="tiltBoard" id="tiltBoard">
+        <div class="runsRow" id="runsGrid"></div>
+      </div>
     </div>
   </div>
 
@@ -1688,13 +1791,17 @@ document.getElementById('portFanClose').addEventListener('click', () => { fanned
 // (grep the render() branches: hand, port top, holdTop, brig king). If that
 // stops being true, this has to grow to match, not go back to render().
 function paintSelection() {
-  document.querySelectorAll('#gameUi .card.selected').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('#gameUi .card.selected, #jailbreakEvent [data-jb].selected')
+    .forEach(el => el.classList.remove('selected'));
   if (!selected) return;
   let el = null;
   if (selected.zone === 'hand') el = document.querySelector(`#handRow .card[data-id="${selected.card.id}"]`);
   else if (selected.zone === 'goal') el = document.getElementById('holdTop');
   else if (selected.zone === 'discard') el = document.querySelector(`#portsGrid .port[data-port="${selected.index}"] .card`);
-  else if (selected.zone === 'jailbreak') el = document.querySelector(`#brigStrip [data-jb="${selected.card.id}"]`);
+  else if (selected.zone === 'jailbreak') {
+    el = document.querySelector(`#jailbreakEvent [data-jb="${selected.card.id}"]`)
+      || document.querySelector(`#brigStrip [data-jb="${selected.card.id}"]`);
+  }
   if (el) el.classList.add('selected');
 }
 
@@ -2115,12 +2222,14 @@ function renderImpl(view) {
   if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
   document.getElementById('holdCount').textContent = view.yourGoalCount + ' cards';
 
-  // Your Brig fills ONLY during your own Jailbreak. The waiting Kings are public
-  // and live on /tv; what belongs here are the Kings you personally have to play
-  // before you discard. Released Kings only exist on the turn of whoever sprang
-  // them, so this condition already scopes it to the right player.
+  // A remote Jailbreak gets a state shelf above the board. On your turn its
+  // released-King group is playable; on another turn it is status only. The
+  // Brig row itself becomes a banner in both cases, preserving the board's
+  // physical layout while making the exceptional state unmistakable.
   const b = view.brig;
   const mineToPlay = b.active && view.isYourTurn;
+  const jailbreakState = remote ? (mineToPlay ? 'mine' : (b.active ? 'other' : 'none')) : 'none';
+  document.getElementById('gameUi').dataset.jailbreak = jailbreakState;
   // Two different things share this frame, and only one of them is playable.
   //
   // Couch mode leaves it empty unless the Kings are YOURS to play, because the
@@ -2132,32 +2241,45 @@ function renderImpl(view) {
   // the missing attribute is what makes that true rather than a check that could
   // be forgotten later (see the tap-target note at the top of this file).
   const jailbreakMine = mineToPlay ? b.releasedKings : [];
+  const jailbreakEvent = document.getElementById('jailbreakEvent');
+  if (remote && mineToPlay) {
+    const visibleKings = jailbreakMine.slice(0, 4);
+    const firstKing = jailbreakMine[0];
+    const selectedKing = firstKing && selected && selected.zone === 'jailbreak'
+      && selected.card.id === firstKing.id;
+    const cards = visibleKings.map(c => `<span class="jailbreakCard ${c.suit==='♥'||c.suit==='♦'?'red':''}">${c.rank}${c.suit}</span>`).join('');
+    const source = firstKing
+      ? `<button class="jailbreakSource ${selectedKing ? 'selected' : ''}" data-jb="${firstKing.id}" type="button" aria-label="Select a released King">`
+        + `<span class="jailbreakCards">${cards}</span>`
+        + `<span class="jailbreakEventCount">×${jailbreakMine.length}</span></button>`
+      : '';
+    jailbreakEvent.innerHTML = source
+      + '<div class="jailbreakMessage" id="jailbreakMessage">The Crown demands every King!</div>';
+  } else if (remote && b.active) {
+    const count = (b.releasedKings || []).length;
+    jailbreakEvent.innerHTML = `<div class="jailbreakMessage" id="jailbreakMessage">${view.currentPlayerName} is resolving a Jailbreak — ${count} King${count === 1 ? '' : 's'} remain</div>`;
+  } else {
+    jailbreakEvent.innerHTML = '<div class="jailbreakMessage" id="jailbreakMessage"></div>';
+  }
   // Waiting Kings are context rather than tap targets, so their preview stays
-  // capped. During a remote Jailbreak every released card is a rules-identical
-  // King; presenting 24 separate 35px targets made none of them usable. Draw a
-  // single large stack instead. Its data-jb points at the first real King, and
-  // the count decrements after each authoritative play. Nothing in the rules or
-  // server state changes — this is "take the next released King" on a phone.
+  // capped. During a remote Jailbreak the event shelf above draws up to four
+  // faces with a total-count badge. The whole group points at the first real
+  // King, and the count decrements after each authoritative play. Nothing in
+  // the rules or server state changes — this is still "select a released King."
   const BRIG_PREVIEW_MAX = 6;
   const brigWaiting = (!mineToPlay && remote)
     ? (b.waitingKings || []).slice(0, BRIG_PREVIEW_MAX)
     : [];
-  const jailbreakHtml = mineToPlay && remote && jailbreakMine.length
-    ? (() => {
-      const c = jailbreakMine[0];
-      const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
-      const red = c.suit === '♥' || c.suit === '♦';
-      return `<span class="card slot jbStack ${red ? 'red' : ''} ${sel ? 'selected' : ''}" data-jb="${c.id}">`
-        + `${c.rank}${c.suit}<span class="jbStackCount">×${jailbreakMine.length}</span></span>`;
-    })()
-    : jailbreakMine.map(c => {
+  const jailbreakHtml = remote ? '' : jailbreakMine.map(c => {
       const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
       return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
     }).join('');
   document.getElementById('brigStrip').innerHTML = jailbreakHtml
     + brigWaiting.map(c => `<span class="card ${c.suit==='♥'||c.suit==='♦'?'red':''}">${c.rank}${c.suit}</span>`).join('');
-  document.getElementById('brigCount').textContent = mineToPlay
-    ? `JAILBREAK — ${b.releasedKings.length} TO PLAY`
+  document.getElementById('brigCount').textContent = remote && b.active
+    ? 'JAILBREAK'
+    : mineToPlay
+      ? `JAILBREAK — ${b.releasedKings.length} TO PLAY`
     : (remote ? `${b.waitingCount} in the Brig` : '');
   // Move the Brig frame to wherever THIS mode/state needs it. appendChild MOVES
   // an existing node — nothing is re-created, so #brigStrip's own listeners
@@ -2165,11 +2287,10 @@ function renderImpl(view) {
   // sits under.
   //
   //   couch            -> .rightCol, next to HOLD (unchanged, always was here)
-  //   remote           -> inside the tilted board (grid-area: brig); the active
-  //                       state uses one counted King stack, so it no longer
-  //                       needs an overlay that covers legal hand/Port plays
+  //   remote           -> inside the tilted board (grid-area: brig); an active
+  //                       state changes its contents to a responsive banner
   const brigBoxEl = document.querySelector('.brigBox');
-  brigBoxEl.classList.toggle('jailbreakActive', remote && mineToPlay);
+  brigBoxEl.classList.toggle('jailbreakActive', remote && b.active);
   if (remote) {
     // .tiltBoard, NOT #runsGrid — appending inside #runsGrid would place the
     // Brig exactly where the very next render()'s innerHTML rebuild wipes it.
@@ -2209,7 +2330,7 @@ function renderImpl(view) {
     if (holdBoxEl2.parentElement !== rightColEl2) rightColEl2.insertBefore(holdBoxEl2, rightColEl2.firstChild);
   }
 
-  document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
+  document.querySelectorAll('#jailbreakEvent [data-jb], #brigStrip [data-jb]').forEach(el => {
     el.addEventListener('click', () => {
       const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);
       selectCard('jailbreak', c);

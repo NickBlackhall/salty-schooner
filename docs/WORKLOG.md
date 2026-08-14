@@ -1329,3 +1329,37 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       or console warnings. Also verified a realistic eight-King Jailbreak,
       stack selection → Run tap → King direction modal, and couch mode at
       844×390 with the Brig and Draw button still in their original parents.
+
+25. `Stable one-screen remote states and Jailbreak presentation` — **remote UI
+    change only; no game rule, engine, server-view or `/tv` behavior changed.**
+    - The portrait controller is now a fixed `100dvh` composition with hidden
+      overflow. Its top bar, opponent rail and private dock retain fixed space;
+      the Runs/Brig playfield is the only flexible region. Browser checks at the
+      supported 320×568 floor, 390×844 and 430×932 showed document width and
+      height equal to the viewport in normal, no-draw, own-Jailbreak and
+      opponent-Jailbreak states.
+    - Draw Cards remains conditional, but its 44px row is permanently reserved.
+      When drawing is unavailable the control becomes invisible and inert rather
+      than `display:none`, so the hand, HOLD and Ports never jump and the page
+      never gains a transient scrollbar.
+    - A remote Jailbreak now has a state shelf inside the existing playfield
+      budget. On your turn it shows up to four released King faces plus the real
+      remaining count as one accessible source; selecting it still supplies the
+      first authoritative released-King id to the existing play handler. On an
+      opponent's turn it becomes a noninteractive status line. In both states
+      the recessed Brig strip becomes a responsive live-text `JAILBREAK` banner.
+      No banner bitmap is required and no hardcoded card state was introduced.
+    - The compact active state has its own short-phone proportions: a 60px event
+      shelf, tighter tabletop seams and smaller board-only card faces. Hand card
+      targets remain 44px wide, the active King group remains larger than 44px,
+      and all four Runs remain broad panel-sized targets.
+    - Browser interaction verification covered selecting the event King group,
+      tapping a Run and opening the existing Captain's Orders direction modal.
+      The opponent state exposes no `data-jb` target. Couch mode at 844×390 still
+      reparents Brig to `.rightCol`, Draw to `.handInner`, hides the event shelf
+      and has no document overflow. Browser logs contained no warnings/errors.
+    - Regression checks passed: `test-engine-sync.js`, `test-round-end.js`,
+      `test-draw-rule.js` and `test-flap-cost.js`. The Playwright-dependent
+      `test-tap-guards.js` could not run in this checkout because Playwright is
+      not installed; its relevant select-King → tap-Run path was exercised in
+      the in-app browser instead.
