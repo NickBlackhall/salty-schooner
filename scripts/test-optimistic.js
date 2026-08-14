@@ -120,7 +120,7 @@ async function landsBeforeServer(page) {
   const hand = await handCards(page);
   const sent = await page.evaluate(() => window.__calls.length);
   const settled = await page.evaluate(() => window.__pending.length);
-  return { pass: len === 4 && top === '8♠' && hand === 4 && sent === 1 && settled === 1,
+  return { pass: len === 4 && top === '8' && hand === 4 && sent === 1 && settled === 1,
            detail: `runLen=${len} visibleTop=${top} hand=${hand} sent=${sent} stillPending=${settled}` };
 }
 
@@ -136,7 +136,7 @@ async function secondTapAccepted(page) {
   const sent = await page.evaluate(() => window.__calls.length);
   // Both plays are on the board; only ONE request has gone out, because sends
   // are chained rather than raced.
-  return { pass: len === 5 && top === '9♥' && sent === 1,
+  return { pass: len === 5 && top === '9' && sent === 1,
            detail: `runLen=${len} visibleTop=${top} requestsSent=${sent}` };
 }
 
@@ -242,7 +242,7 @@ async function stalePollDoesNotSnapBack(page) {
   const topAfterA = await runTop(page, 0);
 
   return {
-    pass: afterPredict === 5 && afterStalePoll === 5 && afterA === 5 && topAfterA === '9♥',
+    pass: afterPredict === 5 && afterStalePoll === 5 && afterA === 5 && topAfterA === '9',
     detail: `predicted=${afterPredict} afterStalePoll=${afterStalePoll} afterAconfirm=${afterA} top=${topAfterA}`
   };
 }

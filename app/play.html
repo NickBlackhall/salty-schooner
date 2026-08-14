@@ -345,48 +345,73 @@
   #gameUi[data-mode="remote"] .brigBox.jailbreakActive .brigInner {
     width:100%; height:100%; max-height:56vh; overflow-y:auto; }
   #gameUi[data-mode="remote"] .brigBox.jailbreakActive .card { width:11vw; font-size:3.4vw; }
-  /* The whole mid section becomes one column: hand, then ports, then the
-     HOLD/Brig pair. */
+  /* Nick, 2026-08-14, second pass on remote mode's bottom section — reference
+     image showed Draw Cards as a full-width banner ABOVE a [HOLD | hand] row,
+     with HOLD as its own simple box (his call: "give up on the decorative
+     frame... two separate boxes", not merged into the hand's wood panel). That
+     needs .leftCol to place FOUR things (draw / hold / hand / ports), where it
+     used to flex-stack two — a small named grid, direct children reparented in
+     by render() (see the JS comment by holdBoxEl2/drawBtnEl). Couch mode below
+     is untouched: #drawBtn and .holdBox live back in their original couch-only
+     parents there, this grid never applies to them. */
   #gameUi[data-mode="remote"] .midRow { grid-template-columns:1fr; gap:.9dvh; }
-  #gameUi[data-mode="remote"] .leftCol { gap:.9dvh; }
-  /* The one place the stack goes sideways again — HOLD and the Brig are both
-     square frames, so side by side they cost one row instead of two.
-     aspect-ratio, NOT a stretched width: frame-hold.png and frame-brig.png are
-     both 512x512 SQUARE art drawn at 100% 100%, and letting them fill a wide
-     half-row smears them — the documented trap that broke the old player
-     plaques. Sized off height and centred, so they stay square at any width. */
-  /* Held ONLY the HOLD box now — the Brig lives in .tiltStage (or, mid-Jailbreak,
-     escaped to a fixed overlay) in remote mode. A lone square centred in a row
-     built for two looked orphaned, floating in mostly-empty space (real
-     screenshot, not guessed) — shrunk to just its own footprint rather than
-     claiming a full-width row sized for a pair. Deliberately NOT merged into
-     .leftCol: that column's flex-direction:column is what keeps the hand
-     stacked above the Ports, and .rightCol is a separate sibling specifically
-     so this box can never affect that. */
-  #gameUi[data-mode="remote"] .rightCol { width:26vw; height:26vw; margin:0 auto; }
-  #gameUi[data-mode="remote"] .holdBox { flex:1 1 auto; width:100%; height:100%; aspect-ratio:1/1; }
-  /* Couch mode's sizing (both boxes, side by side) is untouched below — this
-     block only ever applies inside data-mode="remote". */
-  #gameUi[data-mode="remote"] .rightCol > .brigBox { flex:0 0 auto; height:100%; aspect-ratio:1/1; }
+  #gameUi[data-mode="remote"] .leftCol { display:grid; gap:1vw 2vw;
+                                         grid-template-columns:auto 1fr;
+                                         grid-template-areas:"draw draw" "hold hand" "ports ports"; }
+  #gameUi[data-mode="remote"] #drawBtn { grid-area:draw; }
+  #gameUi[data-mode="remote"] .holdBox { grid-area:hold; }
+  #gameUi[data-mode="remote"] #handSection { grid-area:hand; }
+  #gameUi[data-mode="remote"] .portsGrid { grid-area:ports; }
+
+  /* .rightCol held HOLD and the Brig; both have moved elsewhere in remote mode
+     (HOLD into .leftCol's grid above, Brig into the tilted board or its own
+     escaped overlay), so it is left with nothing in it here — collapsed rather
+     than left as an empty box taking up a grid row for no reason. */
+  #gameUi[data-mode="remote"] .rightCol { display:none; }
+
+  /* DRAW CARDS as a real banner, not the floating pill it was: in-flow, full
+     width, its own grid row. The pill was Nick's 2026-08-11 request; this
+     supersedes it on his review of the reference image — 2026-08-14: "give up
+     on the decorative frame... this will save some screen space." Still
+     contextual — render() only un-hides it when a draw is actually offered,
+     exactly as before; the grid area simply collapses when it is hidden,
+     rather than the pill's old position:absolute overlap. */
+  #gameUi[data-mode="remote"] #drawBtn { width:100%; white-space:nowrap;
+                                         font-size:2.6vw; line-height:1; padding:1.8vw 2vw;
+                                         border-radius:1.4vw; box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4); }
+
+  /* HOLD, simplified. frame-hold.png was a 512x512 SQUARE asset — fine filling
+     its own dedicated row, wrong once it has to sit narrow beside the hand at
+     whatever height the hand row happens to need; stretching it would be the
+     same trap that broke the old player plaques (documented elsewhere in this
+     file). Dropped for a plain bordered box instead — same gold-on-dark
+     language as the Ports tiles below it, so it reads as part of the same
+     family rather than a third distinct style. */
+  /* align-self:stretch was tried first and was wrong: it matched HOLD's height
+     to the hand ROW's height, and when the hand row was even slightly taller
+     than expected (wrapped to two lines — see the card-width fix below), HOLD
+     stretched into a tall mostly-empty box. Sized off its own content instead,
+     independent of whatever the hand row ends up being. */
+  #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:start;
+                                         width:11.5vw; padding:.7vw;
+                                         border:.3vw solid rgba(201,162,39,.6);
+                                         border-radius:1.4vw; background:rgba(8,40,44,.55); }
+  #gameUi[data-mode="remote"] .holdBox::after { display:none; }
+  #gameUi[data-mode="remote"] .holdInner { width:100%; height:100%; }
+  #gameUi[data-mode="remote"] .holdInner .card { width:9.5vw; font-size:4vw; }
+  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:1.6vw; }
+
   #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
                                              border-width:3.5vw;
                                              border-image-width:3.5vw; }
-  #gameUi[data-mode="remote"] .handRow { gap:1.2vw; flex-wrap:wrap; }
-  #gameUi[data-mode="remote"] #handRow .card { width:12.5vw; font-size:4vw; }
-  /* Contextual overlay, not a permanent column. It only exists in the DOM when
-     drawable at all (render() toggles .hidden), so this only has to answer "how
-     does it sit when shown" — position:absolute pulls it out of .handInner's
-     flex flow, so .handRow becomes the only flowed child and claims the full
-     width on its own, with nothing left holding it back. Nick, 2026-08-11:
-     "smaller, wider... appears over the hand when needed" — sized as a small
-     pill, not the full-width bar it started as, which was still too big. */
-  #gameUi[data-mode="remote"] #drawBtn { position:absolute; top:-1.6vw; left:50%;
-                                         transform:translateX(-50%); z-index:5;
-                                         flex:0 0 auto; width:auto; white-space:nowrap;
-                                         font-size:2.4vw; line-height:1; padding:1.6vw 4vw;
-                                         border-radius:999px; box-shadow:0 .6vw 1.6vw rgba(0,0,0,.5); }
   #gameUi[data-mode="remote"] .handInner { justify-content:center; }
-  #gameUi[data-mode="remote"] #handRow .card { width:14vw; font-size:4.4vw; }
+  #gameUi[data-mode="remote"] .handRow { gap:1.2vw; flex-wrap:wrap; }
+  /* Bigger, and simpler: dropping the suit glyph everywhere (cardHtml() and
+     four other render sites, 2026-08-14 — confirmed against engine.js first,
+     suit is never read by any rule, only ever cosmetic) freed up width a
+     single rank character can spend on being larger rather than sharing space
+     with a symbol nobody needed to read to play. */
+  #gameUi[data-mode="remote"] #handRow .card { width:11vw; font-size:4.6vw; }
   #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; gap:1.4vw; padding:1.4vw; }
   #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
@@ -1534,7 +1559,7 @@ function cardHtml(c, extraClass) {
   const wild = c.rank === 'K' && c.effectiveValue;
   const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
   const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
-  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${c.suit}${as}</span>`;
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${as}</span>`;
 }
 
 // Spreads a whole Port pile open — mirrors togglePortFan() in app/index.html.
@@ -1958,7 +1983,7 @@ function renderImpl(view) {
 
   document.getElementById('handRow').innerHTML = view.yourHand.map(c => {
     const sel = selected && selected.zone === 'hand' && selected.card.id === c.id;
-    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}${c.suit}</span>`;
+    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}</span>`;
   }).join('') || '<span class="meta">Empty</span>';
   document.querySelectorAll('#handRow .card').forEach(el => {
     el.addEventListener('click', () => {
@@ -1994,7 +2019,7 @@ function renderImpl(view) {
   document.getElementById('holdCard').innerHTML = (() => {
     if (!view.yourGoalTop) return '<span class="meta">Cleared!</span>';
     const sel = selected && selected.zone === 'goal';
-    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}${view.yourGoalTop.suit}</span>`;
+    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}</span>`;
   })();
   const holdTop = document.getElementById('holdTop');
   if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
@@ -2030,9 +2055,9 @@ function renderImpl(view) {
   document.getElementById('brigStrip').innerHTML =
     jailbreakMine.map(c => {
       const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
-      return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+      return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}</span>`;
     }).join('')
-    + brigWaiting.map(c => `<span class="card">${c.rank}${c.suit}</span>`).join('');
+    + brigWaiting.map(c => `<span class="card">${c.rank}</span>`).join('');
   document.getElementById('brigCount').textContent = mineToPlay
     ? `JAILBREAK — play ${b.releasedKings.length}`
     : (remote ? `${b.waitingCount} in the Brig` : '');
@@ -2063,6 +2088,32 @@ function renderImpl(view) {
   } else {
     const rightColEl = document.querySelector('.rightCol');
     if (brigBoxEl.parentElement !== rightColEl) rightColEl.appendChild(brigBoxEl);
+  }
+
+  // HOLD and Draw Cards, same appendChild-moves-not-recreates technique as the
+  // Brig above. Nick, 2026-08-14: Draw Cards should read as a full-width
+  // banner rather than the floating pill, and HOLD should sit beside the hand
+  // — its own simpler box, not sharing the hand's wood panel — instead of its
+  // own separate row at the bottom. .leftCol becomes a small grid in remote
+  // mode for exactly this (see the CSS), which needs #drawBtn and .holdBox as
+  // DIRECT children of .leftCol alongside the two that were already there.
+  //
+  // Neither #handSection nor .handInner is ever innerHTML-rebuilt (only
+  // #handRow, a child, is) — the same fact that made the Brig fix safe applies
+  // here: these are stable containers, safe to hold a moved node indefinitely.
+  const drawBtnEl = document.getElementById('drawBtn');
+  const holdBoxEl2 = document.querySelector('.holdBox');
+  const leftColEl = document.querySelector('.leftCol');
+  const handInnerEl = document.querySelector('.handInner');
+  if (remote) {
+    if (drawBtnEl.parentElement !== leftColEl) leftColEl.insertBefore(drawBtnEl, leftColEl.firstChild);
+    if (holdBoxEl2.parentElement !== leftColEl) leftColEl.appendChild(holdBoxEl2);
+  } else {
+    // Couch: exactly where they always were — first in .handInner (beside the
+    // hand row), and in .rightCol (beside the Brig, handled above).
+    if (drawBtnEl.parentElement !== handInnerEl) handInnerEl.insertBefore(drawBtnEl, handInnerEl.firstChild);
+    const rightColEl2 = document.querySelector('.rightCol');
+    if (holdBoxEl2.parentElement !== rightColEl2) rightColEl2.insertBefore(holdBoxEl2, rightColEl2.firstChild);
   }
 
   document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
