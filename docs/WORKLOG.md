@@ -1363,3 +1363,28 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       `test-tap-guards.js` could not run in this checkout because Playwright is
       not installed; its relevant select-King → tap-Run path was exercised in
       the in-app browser instead.
+
+26. `Remote geometry calibration from the 390×844 phone reference` — **visual
+    layout change only; rules, server state, `/tv` and couch mode are unchanged.**
+    - Normal-state table and private-dock positions now produce a measured
+      46.4px visual gap between the lower Runs and Draw Cards at 390×844 (49.4px
+      at 430×932). The movement tapers to zero at the 320×568 height floor, so
+      the compact controller remains one screen instead of forcing overlap or
+      scroll. Draw's permanently reserved row and conditional visibility are
+      unchanged.
+    - The hand background loses 30px from each side at the reference width and
+      remains untrimmed at 320px. Its five cards retain 44×61.6px targets at
+      320/390; HOLD moves into the freed left space and retains its own 44px
+      target. Draw, the hand/HOLD row and Ports now meet with zero row gap.
+    - Ports remain 85.8px tall at 390px (responsive 78–94px), derived from their
+      52.6×73.7px card rather than an arbitrary leftover. Full card faces,
+      badges and counts fit inside the panel.
+    - The teal tabletop slab and lower lip are removed. The real panels,
+      perspective projection and shadows now provide the depth; this preserves
+      the liked far-Runs → Brig → near-Runs staircase without a competing teal
+      silhouette. The table is inset and optically recentered so transformed
+      lower corners paint inside the screen instead of being clipped.
+    - Browser-verified normal, own-Jailbreak and opponent-Jailbreak states at
+      320×568, 390×844 and 430×932. All document dimensions equal the viewport,
+      the smallest hand/HOLD targets remain 44px, and browser logs contain no
+      warnings or errors.
