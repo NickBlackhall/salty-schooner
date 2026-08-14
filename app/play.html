@@ -242,11 +242,12 @@
                                    at 390x844. It tapers to zero at the 320x568
                                    floor, where there is no spare vertical room. */
                                 --remote-stack-shift:clamp(0px,calc(18.2dvh - 103.4px),50px);
-                                /* With the two private-row gaps removed and the
-                                   old teal table lip gone, 85px of dock lift
-                                   produces the requested 46px VISUAL gap at
-                                   390x844. It also tapers to zero at 320x568. */
-                                --remote-dock-lift:clamp(0px,calc(30.8dvh - 174.9px),120px);
+                                /* The dock is taller now (real row spacing and
+                                   a Port row that fits card+count), so it needs
+                                   less upward translation to retain the table
+                                   gap. This still tapers to zero at 320x568. */
+                                --remote-dock-lift:clamp(0px,calc(19.93dvh - 113.2px),90px);
+                                --remote-private-gap:clamp(2px,calc(2.17dvh - 10.3px),8px);
                                 /* 30px off each side at 390w; no trim at 320w,
                                    where five 44px targets already fill the row. */
                                 --remote-hand-trim:clamp(0px,calc(85.7vw - 274.2px),60px);
@@ -534,9 +535,10 @@
      parents there, this grid never applies to them. */
   #gameUi[data-mode="remote"] .midRow { flex:0 0 auto; grid-template-columns:1fr; gap:0;
                                          transform:translateY(calc(0px - var(--remote-dock-lift))); }
-  #gameUi[data-mode="remote"] .leftCol { display:grid; row-gap:0; column-gap:2vw;
+  #gameUi[data-mode="remote"] .leftCol { display:grid;
+                                         row-gap:var(--remote-private-gap); column-gap:2vw;
                                          grid-template-columns:auto 1fr;
-                                         grid-template-rows:44px 64px clamp(78px,22vw,94px);
+                                         grid-template-rows:44px 64px clamp(82px,25.65vw,108px);
                                          grid-template-areas:"draw draw" "hold hand" "ports ports"; }
   #gameUi[data-mode="remote"] #drawBtn { grid-area:draw; }
   #gameUi[data-mode="remote"] .holdBox { grid-area:hold; }
@@ -599,8 +601,8 @@
   #gameUi[data-mode="remote"] #handRow .card {
     width:clamp(44px,11.2vw,50px); font-size:clamp(13px,3.7vw,17px);
   }
-  /* The grid row above is 22vw (85.8px at the 390px reference), capped 78-94:
-     enough for the 5:7 Port card, badge and count without clipping. */
+  /* 100px at the 390px reference: the 73.7px card, its count, panel padding
+     and borders now fit as a unit instead of the face protruding above/below. */
   #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; height:100%; gap:1.4vw; padding:1.4vw; }
   #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }

@@ -1388,3 +1388,19 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       320×568, 390×844 and 430×932. All document dimensions equal the viewport,
       the smallest hand/HOLD targets remain 44px, and browser logs contain no
       warnings or errors.
+
+27. `Private-dock breathing room and true Port-card fit` — **remote CSS follow-up
+    only; no interaction, rule, server, `/tv` or couch behavior changed.**
+    - Draw→hand and hand→Ports now carry 8px reference gaps instead of touching.
+      On the 320×568 floor those gaps taper to 2px, preserving the one-screen
+      requirement and the 44px hand/HOLD targets.
+    - The Ports row is now width-derived at 82–108px (100px at 390×844). At the
+      reference size, each 52.6×73.7px Port card has 8.7px clearance above and
+      17.7px below, leaving real room for the count, padding and panel borders.
+      At 320×568 the row remains 82px and retains 7px/14.5px clearances.
+    - The taller, spaced private dock consumes previously unused lower-screen
+      space rather than changing the calibrated table relationship: the normal
+      390×844 table-to-Draw gap remains 46.2px.
+    - Browser-verified normal and own-Jailbreak layouts at 320×568, 390×844 and
+      430×932 with viewport-equal document dimensions and no console warnings
+      or errors.
