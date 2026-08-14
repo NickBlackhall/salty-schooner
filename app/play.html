@@ -284,59 +284,50 @@
    * grid-area placement only works on DIRECT children of the grid — so putting
    * it in the middle of this 5-cell layout needs an actual DOM move, done in
    * render() below, not a CSS-only trick. */
-  /* Height in vw, NOT vh/flex: the board's proportions should follow its own
-     width, so it looks the same shape on a stubby phone and a tall one, rather
-     than stretching to whatever height happens to be spare. */
-  /* margin-top:auto keeps the personal controls in thumb reach. On a tall phone
-     that used to leave a visually empty gulf under the opponents, though, so
-     the stage now paints a foreshortened wood plane UP through that spare room.
-     The RUN tiles keep their proportions; the environment, not the controls,
-     absorbs the extra height. */
+  /* Height follows phone width with pixel caps, NOT vh/flex: the board keeps
+     the prototype's proportions on both stubby and tall phones instead of
+     stretching to whatever vertical space happens to be spare. */
+  /* The tabletop proportions come from the approved 3D prototype: two equal
+     Run rows around a Brig row roughly 44% as tall, separated by an 8px seam.
+     The stage scales between the prototype's 320-430px phone sizes without
+     distributing spare height between those rows. */
   #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
                                            margin-top:auto;
-                                           height:72vw; perspective:135vw;
-                                           perspective-origin:50% -18%;
+                                           height:clamp(318px,86vw,386px);
+                                           perspective:900px;
+                                           perspective-origin:50% 38%;
                                            isolation:isolate; overflow:visible; }
   #gameUi[data-mode="remote"] .tiltStage::before {
     content:""; position:absolute; z-index:-2; pointer-events:none;
-    top:-22dvh; left:-1vw; right:-1vw; bottom:-2vw;
-    clip-path:polygon(14% 0, 86% 0, 100% 100%, 0 100%);
+    top:-14dvh; left:.8vw; right:.8vw; bottom:-1.4vw;
+    clip-path:polygon(14% 0,86% 0,100% 100%,0 100%);
+    border-bottom:clamp(2px,.7vw,3px) solid rgba(213,169,51,.58);
+    border-radius:0 0 clamp(16px,5vw,25px) clamp(16px,5vw,25px);
     background:
-      linear-gradient(to bottom, rgba(7,31,34,.45), rgba(14,58,62,.34) 24%, rgba(28,17,9,.68) 72%),
-      url("/assets/tex-wood.webp") center / 320px;
-    border-bottom:.7vw solid rgba(240,208,137,.38);
-    box-shadow:0 2.8vw 4vw rgba(0,0,0,.55), inset 0 0 0 .35vw rgba(201,162,39,.2);
-    opacity:.92;
+      repeating-linear-gradient(90deg, transparent 0 58px, rgba(255,255,255,.025) 58px 60px),
+      linear-gradient(145deg,#0d4c54,#062f37);
+    box-shadow:0 2.8vw 4vw rgba(0,0,0,.52), inset 0 0 0 1px rgba(240,208,137,.12);
   }
   #gameUi[data-mode="remote"] .tiltStage::after {
     content:""; position:absolute; z-index:3; pointer-events:none;
-    left:-.3vw; right:-.3vw; bottom:-1.6vw; height:3.8vw;
+    left:2vw; right:2vw; bottom:-2.3vw; height:3.8vw;
     border-radius:0 0 2vw 2vw;
-    background:linear-gradient(to bottom, #6e481f 0 24%, #2c190d 28% 72%, #120a06 100%);
+    background:linear-gradient(to bottom,#315b59 0 20%,#12383d 24% 62%,#041a20 100%);
     box-shadow:0 1.3vw 2.4vw rgba(0,0,0,.62), inset 0 .35vw rgba(240,208,137,.24);
   }
   /* .tiltBoard, NOT .runsRow, carries the grid/rotateX — see the HTML comment
      for why: #runsGrid's innerHTML is fully replaced every render(), which
      would destroy anything reparented directly inside it. */
-  #gameUi[data-mode="remote"] .tiltBoard { position:absolute; inset:1vw;
+  #gameUi[data-mode="remote"] .tiltBoard { position:absolute; inset:clamp(6px,2vw,10px);
                                            display:grid;
                                            grid-template-columns:repeat(2,1fr);
-                                           /* auto, not 1fr: a run tile is as
-                                              tall as a card plus its label and
-                                              no taller. 1fr made every tile
-                                              stretch to fill the stage, which
-                                              left cards swimming in empty felt
-                                              and read as distortion under the
-                                              tilt. align-content centres the
-                                              whole board in whatever height is
-                                              left rather than top-anchoring it. */
-                                           grid-template-rows:auto auto auto;
-                                           align-content:space-between;
+                                           grid-template-rows:minmax(0,1fr) clamp(48px,13.5vw,58px) minmax(0,1fr);
+                                           align-content:stretch;
                                            grid-template-areas:"run0 run1" "brig brig" "run2 run3";
-                                           gap:1.4vw;
+                                           column-gap:8px; row-gap:8px;
                                            transform-style:preserve-3d;
-                                           transform:rotateX(24deg);
-                                           transform-origin:50% 100%; }
+                                           transform:rotateX(34deg);
+                                           transform-origin:50% 50%; }
   /* display:contents removes #runsGrid's own box from layout entirely — its
      four .run children become effective direct grid items of .tiltBoard, so
      grid-area placement on [data-run] below still works, while render()'s
@@ -350,22 +341,18 @@
   #gameUi[data-mode="remote"] .run[data-run="1"] { grid-area:run1; }
   #gameUi[data-mode="remote"] .run[data-run="2"] { grid-area:run2; }
   #gameUi[data-mode="remote"] .run[data-run="3"] { grid-area:run3; }
-  /* Extra padding at the BOTTOM only: with content-sized rows the cards ended
-     up flush against the tile's lower border (measured flush-to-0.5px at
-     320w), which read as the cards bursting out of the tile. The tile needs to
-     visibly contain them. */
-  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:2.1vw 1vw 2.3vw;
+  #gameUi[data-mode="remote"] .run { min-height:0; padding:8px;
                                      position:relative; overflow:visible;
                                      transform:translateZ(1.4vw); }
   #gameUi[data-mode="remote"] .runLabel {
-    align-self:center; margin:0 0 1vw; padding:.35vw 2vw;
+    align-self:center; margin:0 0 4px; padding:2px 8px;
     border-radius:999px; background:rgba(63,43,20,.09);
     font-size:clamp(9px,2.75vw,12px); line-height:1;
-    transform:rotateX(-5deg) translateZ(.7vw);
+    transform:translateZ(5px);
   }
-  #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:3.7vw; }
+  #gameUi[data-mode="remote"] .run .card { width:48px; font-size:clamp(14px,3.7vw,17px); }
   #gameUi[data-mode="remote"] .run .cardRow {
-    transform:rotateX(-5deg) translateZ(.5vw); transform-origin:50% 100%;
+    transform:translateZ(5px); transform-origin:50% 100%;
   }
 
   /* The Brig is a purpose-built iron gutter, not the square 512x512 frame art
@@ -373,26 +360,36 @@
      active remote states, so it never covers Runs, the hand or Ports. */
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox { grid-area:brig; flex:0 0 auto;
                                                       height:auto; aspect-ratio:auto;
-                                                      min-height:12vw; padding:.8vw 2vw;
-                                                      border:.55vw solid #70553a;
-                                                      border-top-color:#2a211b;
-                                                      border-bottom-color:#a37a45;
-                                                      border-radius:1.2vw;
-                                                      background:
-                                                        linear-gradient(rgba(13,12,12,.9),rgba(28,24,22,.95)),
-                                                        url("/assets/tex-stone.webp") center / 180px;
-                                                      box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
-                                                                 inset 0 -.45vw rgba(240,208,137,.13),
-                                                                 0 .8vw 1.5vw rgba(0,0,0,.5);
-                                                      transform:translateZ(.8vw); }
-  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::after { display:none; }
+                                                      min-height:0; padding:5px 12px;
+                                                      overflow:hidden;
+                                                      border:4px solid #665f55;
+                                                      border-top-color:#393631;
+                                                      border-bottom-color:#8b8173;
+                                                      border-radius:9px;
+                                                      background:linear-gradient(180deg,#111313,#292725);
+                                                      box-shadow:inset 0 8px 16px rgba(0,0,0,.88),
+                                                                 inset 0 -2px rgba(239,214,128,.08),
+                                                                 0 3px 7px rgba(0,0,0,.48);
+                                                      transform:translateZ(2px); }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::before {
+    content:""; position:absolute; z-index:0; pointer-events:none; inset:0;
+    background:repeating-linear-gradient(90deg,transparent 0 24px,rgba(193,183,168,.15) 24px 27px);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::after {
+    content:""; display:block; position:absolute; z-index:2; pointer-events:none; inset:0;
+    background:
+      radial-gradient(circle at 7px 7px,#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at calc(100% - 7px) 7px,#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at 7px calc(100% - 7px),#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px),
+      radial-gradient(circle at calc(100% - 7px) calc(100% - 7px),#d1b56b 0 1.5px,#392f24 2px 3.5px,transparent 4px);
+  }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox .brigInner {
     width:100%; height:100%; min-width:0; flex-direction:row;
     justify-content:center; gap:1.4vw; overflow:visible;
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox #brigStrip {
     flex:0 1 auto; min-width:0; flex-wrap:nowrap; align-items:center;
-    transform:rotateX(-5deg) translateZ(.5vw); transform-origin:50% 100%;
+    transform:translateZ(5px); transform-origin:50% 100%;
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox .card { width:6.5vw; font-size:2vw; }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox .panelCount {
@@ -400,28 +397,30 @@
     font-size:clamp(8px,2.2vw,11px); letter-spacing:.04em;
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive {
-    min-height:17vw; border-color:var(--gold);
+    min-height:0; border-color:var(--gold);
     box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
                0 0 2.8vw rgba(240,208,137,.58), 0 .8vw 1.5vw rgba(0,0,0,.5);
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .jbStack {
-    width:clamp(48px,12vw,54px); font-size:clamp(14px,4vw,18px);
+    width:44px; min-height:44px; aspect-ratio:5/6; font-size:clamp(14px,4vw,18px);
     box-shadow:4px 0 0 #ddd8ca, 8px 0 0 #aaa59a, 0 .8vw 1.6vw rgba(0,0,0,.6);
   }
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive #brigStrip {
     padding-right:12px;
   }
   .jbStackCount {
-    position:absolute; right:-10px; top:-9px; min-width:25px; height:25px;
+    position:absolute; right:-10px; top:1px; min-width:25px; height:25px;
     padding:0 5px; border-radius:999px; display:flex; align-items:center; justify-content:center;
     background:var(--gold); color:#25190a; border:2px solid #f0d089;
     font:bold 11px/1 var(--sans); box-shadow:0 2px 5px rgba(0,0,0,.55);
   }
-  @media (orientation:portrait) and (min-height:720px) {
-    /* Tall phones provide real visual depth. Spend it by moving the far Run row
-       up the painted table instead of leaving all gameplay clustered at its
-       near edge; the tiles themselves remain content-sized. */
-    #gameUi[data-mode="remote"] .tiltBoard { top:-12dvh; }
+  @media (max-width:360px) {
+    #gameUi[data-mode="remote"] .run .card { width:42px; }
+  }
+  @media (orientation:portrait) and (max-height:650px) {
+    /* Preserve the same row ratio on short phones, but compress the total stage
+       enough that the private controls remain reachable without a tall scroll. */
+    #gameUi[data-mode="remote"] .tiltStage { height:72vw; }
   }
   /* Nick, 2026-08-14, second pass on remote mode's bottom section — reference
      image showed Draw Cards as a full-width banner ABOVE a [HOLD | hand] row,

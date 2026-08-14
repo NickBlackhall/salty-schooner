@@ -1302,3 +1302,30 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       `test-draw-rule.js` and `test-flap-cost.js` all pass. `shoot-tilt.js`
       comments now describe the in-table grouped-stack design rather than the
       superseded fixed-overlay treatment.
+
+24. `Match the remote board to the approved 3D prototype proportions` —
+    **visual/UI follow-up only; rules and server state remain untouched.** Nick
+    reviewed entry 23 on a physical phone and identified two real mismatches:
+    the literal wood surface was not working, and `align-content:space-between`
+    was inserting large gaps between Run 1/2, the Brig and Run 3/4.
+    - The grid now copies the prototype's structure: two equal Run rows around
+      a Brig row roughly 44% as tall, with fixed 8px seams. No spare height is
+      distributed between gameplay bands.
+    - The prototype's camera values are restored (`perspective:900px`, centered
+      34° tabletop pivot). Run cards are capped at 48px, or 42px at 360px and
+      below, and the extra counter-rotation was removed. The faces are CSS and
+      live text rather than raster card images; the softness Nick saw came from
+      perspective resampling oversized `vw` cards, not an asset-resolution
+      ceiling.
+    - The wood plane is replaced by a dark teal graphic tabletop. The Brig keeps
+      its approved shallow recessed position and adds quiet cell bars, corner
+      rivets and a deeper inset shadow. An active eight-King Jailbreak stays
+      inside the same row as one 44px-minimum counted stack.
+    - Draw Cards remains conditional, exactly as before. Browser verification
+      explicitly covered both states: when unavailable its bounding box is
+      0×0 and the hand closes the vacated grid row; when available it remains a
+      44px-high full-width target.
+    - Browser-verified at 320×568, 390×844 and 430×932 with no document overflow
+      or console warnings. Also verified a realistic eight-King Jailbreak,
+      stack selection → Run tap → King direction modal, and couch mode at
+      844×390 with the Brig and Draw button still in their original parents.
