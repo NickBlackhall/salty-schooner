@@ -255,9 +255,15 @@
   #gameUi[data-mode="remote"] .topBar { gap:2vw; }
   #gameUi[data-mode="remote"] .topLogo { display:none; }
   /* 2x2 rather than 4-across: four run tiles side by side in portrait leaves
-     each one narrower than a single card. Grows into whatever the fixed rows
-     below leave over, so slack lands in the tap targets instead of pooling as
-     dead space at the bottom. */
+     each one narrower than a single card.
+     It USED to grow into whatever height the rows below left over, on the
+     theory that slack was better spent on tap targets than pooled as dead
+     space. Nick overruled that on 2026-08-14, looking at a real phone: "the
+     runs area looks too stretched... it makes the cards look kind of
+     distorted... you're really trying to fill up the whole phone space at the
+     expense of proportions." So the board is now sized by PROPORTION — height
+     follows its own width and content, and leftover screen height is allowed
+     to just be leftover. Don't reintroduce a flex-grow here. */
   /* ---- Tabletop tilt (remote only) -------------------------------------------
    * Nick, 2026-08-11: "i really do like the 3d table foreshortening... we
    * should lean into that." Grafted onto the EXISTING #runsGrid/.run/.brigBox
@@ -278,8 +284,18 @@
    * grid-area placement only works on DIRECT children of the grid — so putting
    * it in the middle of this 5-cell layout needs an actual DOM move, done in
    * render() below, not a CSS-only trick. */
-  #gameUi[data-mode="remote"] .tiltStage { flex:1 1 auto; position:relative;
-                                           min-height:38vh; perspective:130vw;
+  /* Height in vw, NOT vh/flex: the board's proportions should follow its own
+     width, so it looks the same shape on a stubby phone and a tall one, rather
+     than stretching to whatever height happens to be spare. */
+  /* margin-top:auto, NOT justify-content:center on #gameUi — the container is
+     overflow-y:auto, and centering a scrollable flex column makes overflowing
+     content unreachable off the top. An auto margin only claims space that is
+     genuinely free, so it collapses to 0 the moment the layout gets tight.
+     Effect: leftover height becomes a gap up under the opponent rail, and the
+     board + hand + Ports settle at the bottom, in thumb reach. */
+  #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
+                                           margin-top:auto;
+                                           height:68vw; perspective:130vw;
                                            perspective-origin:50% -10%; }
   /* .tiltBoard, NOT .runsRow, carries the grid/rotateX — see the HTML comment
      for why: #runsGrid's innerHTML is fully replaced every render(), which
@@ -287,7 +303,17 @@
   #gameUi[data-mode="remote"] .tiltBoard { position:absolute; inset:1vw;
                                            display:grid;
                                            grid-template-columns:repeat(2,1fr);
-                                           grid-template-rows:1fr auto 1fr;
+                                           /* auto, not 1fr: a run tile is as
+                                              tall as a card plus its label and
+                                              no taller. 1fr made every tile
+                                              stretch to fill the stage, which
+                                              left cards swimming in empty felt
+                                              and read as distortion under the
+                                              tilt. align-content centres the
+                                              whole board in whatever height is
+                                              left rather than top-anchoring it. */
+                                           grid-template-rows:auto auto auto;
+                                           align-content:center;
                                            grid-template-areas:"run0 run1" "brig brig" "run2 run3";
                                            gap:1.4vw;
                                            transform-style:preserve-3d;
@@ -306,7 +332,11 @@
   #gameUi[data-mode="remote"] .run[data-run="1"] { grid-area:run1; }
   #gameUi[data-mode="remote"] .run[data-run="2"] { grid-area:run2; }
   #gameUi[data-mode="remote"] .run[data-run="3"] { grid-area:run3; }
-  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw;
+  /* Extra padding at the BOTTOM only: with content-sized rows the cards ended
+     up flush against the tile's lower border (measured flush-to-0.5px at
+     320w), which read as the cards bursting out of the tile. The tile needs to
+     visibly contain them. */
+  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw 1vw 2.2vw;
                                      transform:translateZ(1.4vw); }
   #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:4vw; }
 
@@ -416,7 +446,13 @@
   #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
   #gameUi[data-mode="remote"] .port .count { font-size:2vw; }
-  #gameUi[data-mode="remote"] .holdInner .card { width:14vw; font-size:4.2vw; }
+  /* NOTE: the old `.holdInner .card { width:14vw }` and `.holdInner
+     .panelCount { font-size:2vw }` used to live here. They were byte-identical
+     selectors to the ones in the HOLD block above and, sitting later in the
+     sheet, silently won — so the new narrower HOLD sizing was dead on arrival
+     and the card overflowed its own box on both sides (measured: 60.2px card
+     in a 49.4px box at 430w). Sized in ONE place now, up in the HOLD block.
+     Don't re-add a `.holdInner .card` rule down here. */
   #gameUi[data-mode="remote"] .brigInner .card { width:7vw; font-size:2.4vw; }
   /* A Jailbreak releases every King in the Brig at once and all of them must
      stay reachable, so this one cannot be capped the way the waiting preview is
@@ -426,7 +462,6 @@
      tappable. */
   #gameUi[data-mode="remote"] .brigInner { overflow:auto; }
   #gameUi[data-mode="remote"] .panelCount { font-size:2vw; }
-  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:2vw; }
   #gameUi[data-mode="remote"] .topLogo { height:6dvh; }
   #gameUi[data-mode="remote"] .turnPill { font-size:2.6dvh; padding:.3dvh 1.6dvh .3dvh .4dvh; }
   #gameUi[data-mode="remote"] .pillMenu { font-size:2dvh; padding:1.6dvh 1.6dvh; }
