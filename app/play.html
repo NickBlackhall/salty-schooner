@@ -578,7 +578,12 @@ const Perf = {
   renders: [],
   seq: 0,
   counts: { tapGestures: 0, lostTaps: 0, swallowed: 0, rendersSuppressed: 0, rendersDeferred: 0,
-            predicted: 0, resyncs: 0 },
+            predicted: 0, resyncs: 0,
+            // Doorbell pulses that did NOT cost a get-state invocation, split by
+            // why. rendersSuppressed counts renders avoided AFTER the fetch;
+            // these count the fetch itself never happening, which is the only
+            // one of the two that shows up on a Netlify bill.
+            doorbellSuppressed: 0, doorbellHeld: 0, doorbellHeldFollowup: 0, doorbellHeldTimedOut: 0 },
   // Renders split by what asked for them, and every poll tagged with whether
   // the doorbell was live at the time. Without this it is impossible to tell a
   // screen sitting on the 45s safety net from one that has silently fallen back
@@ -712,6 +717,9 @@ const Perf = {
       + `renders: ${this.renders.length} drawn, ${s.counts.rendersSuppressed} skipped`
       + ` (unchanged), ${s.counts.rendersDeferred} held for a gesture\n`
       + `polls while realtime live: ${this.polls.live}, while down: ${this.polls.down}\n`
+      + `doorbell fetches avoided: ${s.counts.doorbellSuppressed} already-known`
+      + `, ${s.counts.doorbellHeld} held`
+      + ` (${s.counts.doorbellHeldFollowup} still needed, ${s.counts.doorbellHeldTimedOut} timed out)\n`
       + 'by cause: ' + (Object.keys(this.byCause).map(k =>
           `${k} ${this.byCause[k].drawn}drawn/${this.byCause[k].skipped}skipped`).join(', ') || '—') + '\n\n'
       + s.ms.map(r => `${r.metric}  n=${r.n}  p50 ${n(r.p50)}  p75 ${n(r.p75)}  p95 ${n(r.p95)}`).join('\n');
@@ -1047,9 +1055,19 @@ async function drainQueue() {
       Perf.finish(a.rec, 'accepted');
       playQueue.shift();
       applyView(res.view, 'action');
+      settleHeldPulse();
     }
     poller.kick();
-  } finally { draining = false; }
+  } finally {
+    draining = false;
+    // MUST be here, not only at the per-confirm settle inside the loop. The
+    // rejection path awaits reconcile() from inside this try, so draining is
+    // still true while reconcile runs — settleHeldPulse() called from there sees
+    // nonPredictBlocked() and bails, stranding a held pulse until its 6s
+    // timeout. A genuine opponent move would then be up to six seconds late.
+    // Running it once more after draining clears covers every exit path.
+    settleHeldPulse();
+  }
 }
 
 // A rejected prediction means the board on screen is not the board the server
@@ -1075,6 +1093,7 @@ async function reconcile(msg) {
     showToast('Switching to server-confirmed plays for the rest of this game.');
   }
   render(shownView(), 'reconcile');
+  settleHeldPulse();
 }
 
 // True while ANY action POST is outstanding, not just an optimistic run play.
@@ -1178,21 +1197,109 @@ const poller = createPoller({
 
 // Declared after the poller because its handler calls poller.wake(); function
 // hoisting does not apply to `const`.
+// ---- Doorbell self-echo suppression -----------------------------------------
+// Measured: a whole round's doorbell renders were "poll:doorbell 2drawn/60skipped"
+// — 60 fetches for a pulse that turned out to already be known. render-skip
+// saves phone work, NOT the fetch: poll() calls Api.getPlayerState() BEFORE
+// applyView() ever gets to decide the result was unchanged, so every one of
+// those 60 was a full Netlify invocation regardless.
+//
+// The obvious fix — skip the fetch if the pulse's own version is already
+// covered by lastView.stateVersion — is correct but incomplete, because of a
+// SPECIFIC ordering fact in submit-action.js: it writes the room, THEN awaits
+// bumpPulse(), THEN returns the HTTP response. The realtime broadcast and the
+// HTTP response therefore start their trips back to this same phone at
+// different points, over different transports, and either can arrive first.
+// So for MY OWN action, the pulse can legitimately reach here BEFORE the
+// response to the very request that caused it — at which point lastView still
+// shows the OLD version, the naive check says "newer, go fetch", and that
+// fetch is redundant anyway: the answer was already in flight on its own.
+//
+// So: a pulse arriving while something of mine is outstanding is HELD rather
+// than fetched or dropped. Once that action settles — from whatever wins the
+// race, its own response — settleHeldPulse() checks whether the version that
+// arrived is now covered. Covered: nothing to do, the redundant fetch was
+// avoided entirely. Not covered: something ELSE also changed while mine was in
+// flight (the opponent, most likely), and that genuinely needs a fetch.
+let heldPulseVersion = null;
+let heldPulseTimer = null;
+// Generous on purpose. This is a backstop for something going wrong (a request
+// that hangs with no response, network death mid-action), not the normal path
+// — the normal path resolves via settleHeldPulse() within a round trip. A real
+// opponent move must never be muted indefinitely by a stuck local action, so
+// this always wins eventually regardless of what is stuck.
+const HELD_PULSE_MAX_MS = 6000;
+
+function handlePulse(version, meta) {
+  if (meta && meta.programmatic) {
+    nextPollCause = 'visibility';
+    poller.refresh();
+    return;
+  }
+  nextPollCause = 'doorbell';
+
+  if (typeof version === 'number' && lastView && typeof lastView.stateVersion === 'number'
+      && version <= lastView.stateVersion) {
+    // Already known — from an earlier poll, or from an action response that
+    // beat this pulse here. The common, cheap case; no hold needed.
+    Perf.counts.doorbellSuppressed++;
+    return;
+  }
+
+  if (nonPredictBlocked()) {
+    // Something of mine is outstanding — most likely MY OWN action, whose
+    // response will bring lastView.stateVersion up to date momentarily without
+    // any help from this pulse. Remember the highest version seen and let
+    // settleHeldPulse() decide once that response lands, rather than racing it.
+    if (typeof version === 'number' && (heldPulseVersion === null || version > heldPulseVersion)) {
+      heldPulseVersion = version;
+    }
+    Perf.counts.doorbellHeld++;
+    clearTimeout(heldPulseTimer);
+    heldPulseTimer = setTimeout(() => {
+      if (heldPulseVersion === null) return;
+      heldPulseVersion = null;
+      Perf.counts.doorbellHeldTimedOut++;
+      poller.wake();
+    }, HELD_PULSE_MAX_MS);
+    return;
+  }
+
+  // Nothing of mine outstanding: a genuine, unexplained change. wake() rather
+  // than kick() — the idle stop may already have fired and put up the paused
+  // panel, and a player returning to the table should not have to find the
+  // Resume button before the game starts moving again.
+  poller.wake();
+}
+
+// Called at every point a local action has just fully settled — success,
+// server rejection (via reconcile's own resync), or the legacy pending-play
+// timeout failsafe. A no-op the overwhelming majority of the time (nothing was
+// held), which is why it is cheap to call from several places rather than
+// threading a single "did settle" event through all of them.
+function settleHeldPulse() {
+  if (heldPulseVersion === null) return;
+  if (!lastView || typeof lastView.stateVersion !== 'number') return;
+  if (lastView.stateVersion >= heldPulseVersion) {
+    // Covered by what just landed. The fetch this held was never made.
+    heldPulseVersion = null;
+    clearTimeout(heldPulseTimer);
+    return;
+  }
+  if (nonPredictBlocked()) return;   // still something else outstanding — recheck at ITS settle point
+  // Fully settled and still doesn't cover it: something else changed too
+  // (the opponent acted while mine was in flight). This is the genuine case
+  // the hold exists to still catch, not to suppress.
+  heldPulseVersion = null;
+  clearTimeout(heldPulseTimer);
+  Perf.counts.doorbellHeldFollowup++;
+  poller.wake();
+}
+
 const doorbell = createDoorbell({
   roomId: () => roomId,
   label: 'play',
-  // wake() rather than kick(): the idle stop may already have fired and put up
-  // the paused panel, and a player returning to the table should not have to
-  // find the Resume button before the game starts moving again. No DOM cleanup
-  // here — render() either hides waitPanel outright or rewrites its contents,
-  // so the paused card clears itself on the fetch this triggers.
-  // A real pulse means a human played, so it may restart a paused screen. The
-  // visibility nudge is machinery and routes to refresh(), which no-ops when
-  // stopped — otherwise a phone waking in a pocket revives a dead game.
-  onChange: (version, meta) => {
-    nextPollCause = (meta && meta.programmatic) ? 'visibility' : 'doorbell';
-    return (meta && meta.programmatic) ? poller.refresh() : poller.wake();
-  },
+  onChange: handlePulse,
   // Recompute the delay on a connection change, so losing the socket restores
   // fast polling rather than waiting out one more 45s safety-net tick.
   //
@@ -1459,6 +1566,7 @@ async function sendPlay(cardId, runIndex, kingChoice, rec) {
     // mark as "the board was told", not always "pixels changed".
     Perf.mark(rec, 'rendered');
     Perf.finish(rec, 'accepted');
+    settleHeldPulse();
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
     Perf.finish(rec, 'server-rejected');
@@ -1486,6 +1594,7 @@ async function discardTo(portIndex) {
     selected = null;
     Sfx.play('discard');
     applyView(res.view, 'action');
+    settleHeldPulse();
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) {
     Sfx.play('illegal');
@@ -1506,6 +1615,7 @@ document.getElementById('drawBtn').addEventListener('click', async () => {
     }));
     Sfx.play('ui');
     applyView(res.view, 'action');
+    settleHeldPulse();
     poller.kick();   // act, then re-sync at once rather than waiting out a backed-off delay
   } catch (e) { Sfx.play('illegal'); showToast(e.message); }
 });
