@@ -589,13 +589,13 @@
      file). Dropped for a plain bordered box instead — same gold-on-dark
      language as the Ports tiles below it, so it reads as part of the same
      family rather than a third distinct style. */
-  /* HOLD is deliberately 94px tall and bottom-aligned: the extra 30px grows
+  /* HOLD is deliberately 99px tall and bottom-aligned: the extra height grows
      upward without moving the hand or Ports. Negative inline margins cancel
      the extra 20px of visual width in grid sizing, so the hand column stays
      exactly where it was while HOLD expands 10px on either side. */
   #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:end;
                                          width:calc(clamp(48px,13vw,58px) + 20px);
-                                         height:94px; min-height:0;
+                                         height:99px; min-height:0;
                                          margin-inline:-10px;
                                          transform:translateX(var(--remote-hand-side-trim)) translateY(40px);
                                          padding:clamp(2px,.7vw,4px);
