@@ -1424,3 +1424,22 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
     - Browser-verified normal, own-Jailbreak and opponent-Jailbreak states at
       320×568, 390×844 and 430×932. All remain exactly one viewport, hand/HOLD
       targets remain at least 44px, and browser logs contain no errors/warnings.
+
+29. `Photoshop-aligned private dock proportions` — **remote presentation only;
+    game rules, server state, interaction dispatch, `/tv` and couch mode are
+    unchanged.**
+    - The hand panel is widened to roughly 74% of the 390px reference screen and
+      right-aligned, while HOLD remains a separate card-sized control at left.
+      At the 320px width floor the hand expands to the full available column so
+      all five hand cards remain 44px-wide touch targets.
+    - Draw Cards keeps its permanent 44px hit row and conditional visibility,
+      but its visible 75%-width banner now aligns over the hand instead of the
+      combined HOLD-plus-hand footprint.
+    - The Ports panel is centered at 85% width, matching the narrower dock in
+      the supplied mockup while leaving every Port tile substantially wider than
+      the 44px touch-target floor.
+    - Occupied Ports now show their pile size only in the gold badge. Empty
+      Ports retain the small `0`, since no badge exists in that state.
+    - Browser-verified normal layouts at 320×568, 390×844 and 430×932. Document
+      dimensions remain exactly equal to the viewport; the smallest hand cards
+      are 44px wide and the smallest Port tiles are 58px wide.
