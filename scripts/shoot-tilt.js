@@ -1,6 +1,6 @@
 // Screenshots the tabletop-tilt board (2026-08-14) across the widths and states
-// that actually stress it: the Brig reparenting (passive tilted vs. active
-// Jailbreak escaping the transform entirely), the opponent rail at both
+// that actually stress it: the Brig's passive and active in-table states,
+// the grouped released-King stack, the opponent rail at both
 // player-count extremes, and the slice(-3) run renderer under a long run. Same
 // technique as shoot-play.js — stub the view, hit the real render() — just a
 // wider matrix, per review: four phone widths, three Brig states, 2 vs 6
@@ -115,7 +115,7 @@ async function shoot(name, { width = 390, height = 844, mode = 'remote', tweak, 
       return v;
     }}));
     // The dangerous state: an active Jailbreak with the full 24-King deck-per-
-    // player maximum, on MY turn — must escape the tilt entirely.
+    // player maximum, on MY turn — must stay compact without covering sources.
     allErrs.push(...await shoot(`tilt-${w}-jailbreak-24.png`, { width: w, tweak: v => {
       const suits = ['♠','♥','♦','♣'];
       v.brig = {
@@ -157,8 +157,8 @@ async function shoot(name, { width = 390, height = 844, mode = 'remote', tweak, 
     after: page => page.evaluate(() => { beginPendingPlay('1', 0); })
   }));
 
-  // Couch mode — must be pixel-identical to before this session; the wrapper
-  // and reparenting must have zero effect outside data-mode="remote".
+  // Couch mode — its layout path is unchanged; the remote wrapper and Brig
+  // reparenting must have zero effect outside data-mode="remote".
   allErrs.push(...await shoot('tilt-couch-untouched.png', { width: 844, height: 390, mode: 'couch' }));
 
   console.log(allErrs.length ? `\n${allErrs.length} PAGE ERROR(S)` : '\nNo page errors across the matrix.');

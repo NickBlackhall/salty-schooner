@@ -1272,3 +1272,33 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
       gone, the promised-vs-dealt count matching, and no double-dip. All pass.
     - `docs/RULES.md` §8 rewritten, §13 change log and §14 conformance table
       updated. **The hot-seat build is now two rule changes behind, deliberately.**
+
+23. `Remote tilted-tabletop readability and interaction polish` — **visual/UI
+    change only; no game, scoring, draw, King, Brig or Jailbreak rule changed.**
+    - The remote Runs and Brig now read as one continuous foreshortened ship's
+      table instead of five cards floating in separate depth bands. A painted
+      wood plane fills the otherwise empty tall-phone space, while the far and
+      near Run rows keep content-sized tiles and the bottom controls remain in
+      thumb reach.
+    - The Brig is an iron gutter between the rows rather than the square Brig
+      frame stretched into a strip. During a Jailbreak it stays in that gutter;
+      the released Kings render as one large, counted stack (`×24` at the real
+      maximum), backed by the first real released-King id. Playing it therefore
+      still uses the existing authoritative handler, and the count decrements
+      after each play. This also keeps the other legal sources — hand, HOLD and
+      Ports — visible and tappable throughout the Jailbreak.
+    - The remote hand remains a straight five-card row. At the 320px minimum,
+      each hand card and HOLD card is 44px wide and Draw Cards is a 44px-high
+      full-width banner. The opponent rail now uses compact rank+suit status
+      plaques rather than illegible miniature card components. Suit glyphs were
+      restored everywhere as redundant recognition cues; rules continue to
+      ignore suit.
+    - Browser-verified with the real `render()` path at 320×568, 390×844 and
+      430×932, including six players, a 24-King active Jailbreak, selection of
+      the grouped stack and the King direction modal. No horizontal/vertical
+      overflow or console errors. Couch mode was also checked at 844×390: the
+      Brig remains in `.rightCol` and the layout does not scroll.
+    - Regression checks: `test-engine-sync.js`, `test-round-end.js`,
+      `test-draw-rule.js` and `test-flap-cost.js` all pass. `shoot-tilt.js`
+      comments now describe the in-table grouped-stack design rather than the
+      superseded fixed-overlay treatment.

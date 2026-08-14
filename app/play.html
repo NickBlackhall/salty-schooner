@@ -252,7 +252,7 @@
   #gameUi[data-mode="remote"] .handRow { min-width:0; }
   /* Portrait has no room for decoration beside the turn pill; the logo is the
      first thing to go rather than the thing that pushes everything else out. */
-  #gameUi[data-mode="remote"] .topBar { gap:2vw; }
+  #gameUi[data-mode="remote"] .topBar { position:relative; z-index:5; gap:2vw; }
   #gameUi[data-mode="remote"] .topLogo { display:none; }
   /* 2x2 rather than 4-across: four run tiles side by side in portrait leaves
      each one narrower than a single card.
@@ -287,16 +287,34 @@
   /* Height in vw, NOT vh/flex: the board's proportions should follow its own
      width, so it looks the same shape on a stubby phone and a tall one, rather
      than stretching to whatever height happens to be spare. */
-  /* margin-top:auto, NOT justify-content:center on #gameUi — the container is
-     overflow-y:auto, and centering a scrollable flex column makes overflowing
-     content unreachable off the top. An auto margin only claims space that is
-     genuinely free, so it collapses to 0 the moment the layout gets tight.
-     Effect: leftover height becomes a gap up under the opponent rail, and the
-     board + hand + Ports settle at the bottom, in thumb reach. */
+  /* margin-top:auto keeps the personal controls in thumb reach. On a tall phone
+     that used to leave a visually empty gulf under the opponents, though, so
+     the stage now paints a foreshortened wood plane UP through that spare room.
+     The RUN tiles keep their proportions; the environment, not the controls,
+     absorbs the extra height. */
   #gameUi[data-mode="remote"] .tiltStage { flex:0 0 auto; position:relative;
                                            margin-top:auto;
-                                           height:68vw; perspective:130vw;
-                                           perspective-origin:50% -10%; }
+                                           height:72vw; perspective:135vw;
+                                           perspective-origin:50% -18%;
+                                           isolation:isolate; overflow:visible; }
+  #gameUi[data-mode="remote"] .tiltStage::before {
+    content:""; position:absolute; z-index:-2; pointer-events:none;
+    top:-22dvh; left:-1vw; right:-1vw; bottom:-2vw;
+    clip-path:polygon(14% 0, 86% 0, 100% 100%, 0 100%);
+    background:
+      linear-gradient(to bottom, rgba(7,31,34,.45), rgba(14,58,62,.34) 24%, rgba(28,17,9,.68) 72%),
+      url("/assets/tex-wood.webp") center / 320px;
+    border-bottom:.7vw solid rgba(240,208,137,.38);
+    box-shadow:0 2.8vw 4vw rgba(0,0,0,.55), inset 0 0 0 .35vw rgba(201,162,39,.2);
+    opacity:.92;
+  }
+  #gameUi[data-mode="remote"] .tiltStage::after {
+    content:""; position:absolute; z-index:3; pointer-events:none;
+    left:-.3vw; right:-.3vw; bottom:-1.6vw; height:3.8vw;
+    border-radius:0 0 2vw 2vw;
+    background:linear-gradient(to bottom, #6e481f 0 24%, #2c190d 28% 72%, #120a06 100%);
+    box-shadow:0 1.3vw 2.4vw rgba(0,0,0,.62), inset 0 .35vw rgba(240,208,137,.24);
+  }
   /* .tiltBoard, NOT .runsRow, carries the grid/rotateX — see the HTML comment
      for why: #runsGrid's innerHTML is fully replaced every render(), which
      would destroy anything reparented directly inside it. */
@@ -313,11 +331,11 @@
                                               whole board in whatever height is
                                               left rather than top-anchoring it. */
                                            grid-template-rows:auto auto auto;
-                                           align-content:center;
+                                           align-content:space-between;
                                            grid-template-areas:"run0 run1" "brig brig" "run2 run3";
                                            gap:1.4vw;
                                            transform-style:preserve-3d;
-                                           transform:rotateX(28deg);
+                                           transform:rotateX(24deg);
                                            transform-origin:50% 100%; }
   /* display:contents removes #runsGrid's own box from layout entirely — its
      four .run children become effective direct grid items of .tiltBoard, so
@@ -336,45 +354,75 @@
      up flush against the tile's lower border (measured flush-to-0.5px at
      320w), which read as the cards bursting out of the tile. The tile needs to
      visibly contain them. */
-  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw 1vw 2.2vw;
+  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:2.1vw 1vw 2.3vw;
+                                     position:relative; overflow:visible;
                                      transform:translateZ(1.4vw); }
-  #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:4vw; }
+  #gameUi[data-mode="remote"] .runLabel {
+    align-self:center; margin:0 0 1vw; padding:.35vw 2vw;
+    border-radius:999px; background:rgba(63,43,20,.09);
+    font-size:clamp(9px,2.75vw,12px); line-height:1;
+    transform:rotateX(-5deg) translateZ(.7vw);
+  }
+  #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:3.7vw; }
+  #gameUi[data-mode="remote"] .run .cardRow {
+    transform:rotateX(-5deg) translateZ(.5vw); transform-origin:50% 100%;
+  }
 
-  /* The Brig, compact and tilted with the runs — this is the PASSIVE state
-     only (waiting Kings, or nobody's turn). render() reparents it here, as a
-     direct child of .tiltBoard (a grid sibling of #runsGrid, never inside it —
-     see the HTML/CSS comments above for why that distinction is load-bearing). */
+  /* The Brig is a purpose-built iron gutter, not the square 512x512 frame art
+     squeezed into a strip. It stays between the Run rows in BOTH passive and
+     active remote states, so it never covers Runs, the hand or Ports. */
   #gameUi[data-mode="remote"] .tiltBoard > .brigBox { grid-area:brig; flex:0 0 auto;
                                                       height:auto; aspect-ratio:auto;
-                                                      min-height:11vw;
-                                                      transform:translateZ(2.4vw); }
-  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .brigInner { width:88%; height:86%; }
-  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .card { width:6vw; font-size:2vw; }
-
-  /* THE ACTIVE JAILBREAK STATE — every released King must stay reachable, and
-     up to 24 can be released at once (one deck PER PLAYER, the same arithmetic
-     that overflowed /tv's Brig on 2026-08-07). A compact tilted strip cannot
-     hold that, and position:fixed cannot rescue it either: rotateX() on
-     .runsRow makes THAT the containing block for anything fixed inside it, so
-     an element left nested there stays trapped in the tilted 3D space with
-     skewed hit-testing. render() moves it to be a direct child of #gameUi
-     instead — actually escaping the transform, not just restyling in place.
-     Styled as a flat panel like the King-direction modal, not a stretched copy
-     of the square frame-brig.png (the same trap that broke the old player
-     plaques: that art is 512x512 and only ever meant to be square). */
-  #gameUi[data-mode="remote"] > .brigBox.jailbreakActive {
-    position:fixed; left:2.5vw; right:2.5vw; bottom:2vh; z-index:45;
-    max-height:60vh; height:auto; aspect-ratio:auto;
-    border-radius:1.6dvh; box-shadow:0 1dvh 4dvh rgba(0,0,0,.7);
+                                                      min-height:12vw; padding:.8vw 2vw;
+                                                      border:.55vw solid #70553a;
+                                                      border-top-color:#2a211b;
+                                                      border-bottom-color:#a37a45;
+                                                      border-radius:1.2vw;
+                                                      background:
+                                                        linear-gradient(rgba(13,12,12,.9),rgba(28,24,22,.95)),
+                                                        url("/assets/tex-stone.webp") center / 180px;
+                                                      box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
+                                                                 inset 0 -.45vw rgba(240,208,137,.13),
+                                                                 0 .8vw 1.5vw rgba(0,0,0,.5);
+                                                      transform:translateZ(.8vw); }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox::after { display:none; }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .brigInner {
+    width:100%; height:100%; min-width:0; flex-direction:row;
+    justify-content:center; gap:1.4vw; overflow:visible;
   }
-  #gameUi[data-mode="remote"] .brigBox.jailbreakActive::after { display:none; }
-  #gameUi[data-mode="remote"] .brigBox.jailbreakActive {
-    background:linear-gradient(rgba(28,16,8,.97), rgba(20,12,6,.98));
-    border:.4dvh solid var(--gold);
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox #brigStrip {
+    flex:0 1 auto; min-width:0; flex-wrap:nowrap; align-items:center;
+    transform:rotateX(-5deg) translateZ(.5vw); transform-origin:50% 100%;
   }
-  #gameUi[data-mode="remote"] .brigBox.jailbreakActive .brigInner {
-    width:100%; height:100%; max-height:56vh; overflow-y:auto; }
-  #gameUi[data-mode="remote"] .brigBox.jailbreakActive .card { width:11vw; font-size:3.4vw; }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .card { width:6.5vw; font-size:2vw; }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .panelCount {
+    flex:0 0 auto; white-space:nowrap; font-family:var(--serif);
+    font-size:clamp(8px,2.2vw,11px); letter-spacing:.04em;
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive {
+    min-height:17vw; border-color:var(--gold);
+    box-shadow:inset 0 1.5vw 2.4vw rgba(0,0,0,.75),
+               0 0 2.8vw rgba(240,208,137,.58), 0 .8vw 1.5vw rgba(0,0,0,.5);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive .jbStack {
+    width:clamp(48px,12vw,54px); font-size:clamp(14px,4vw,18px);
+    box-shadow:4px 0 0 #ddd8ca, 8px 0 0 #aaa59a, 0 .8vw 1.6vw rgba(0,0,0,.6);
+  }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox.jailbreakActive #brigStrip {
+    padding-right:12px;
+  }
+  .jbStackCount {
+    position:absolute; right:-10px; top:-9px; min-width:25px; height:25px;
+    padding:0 5px; border-radius:999px; display:flex; align-items:center; justify-content:center;
+    background:var(--gold); color:#25190a; border:2px solid #f0d089;
+    font:bold 11px/1 var(--sans); box-shadow:0 2px 5px rgba(0,0,0,.55);
+  }
+  @media (orientation:portrait) and (min-height:720px) {
+    /* Tall phones provide real visual depth. Spend it by moving the far Run row
+       up the painted table instead of leaving all gameplay clustered at its
+       near edge; the tiles themselves remain content-sized. */
+    #gameUi[data-mode="remote"] .tiltBoard { top:-12dvh; }
+  }
   /* Nick, 2026-08-14, second pass on remote mode's bottom section — reference
      image showed Draw Cards as a full-width banner ABOVE a [HOLD | hand] row,
      with HOLD as its own simple box (his call: "give up on the decorative
@@ -407,7 +455,8 @@
      exactly as before; the grid area simply collapses when it is hidden,
      rather than the pill's old position:absolute overlap. */
   #gameUi[data-mode="remote"] #drawBtn { width:100%; white-space:nowrap;
-                                         font-size:2.6vw; line-height:1; padding:1.8vw 2vw;
+                                         min-height:44px; font-size:clamp(11px,3vw,14px);
+                                         line-height:1; padding:1.8vw 2vw;
                                          border-radius:1.4vw; box-shadow:0 .5vw 1.2vw rgba(0,0,0,.4); }
 
   /* HOLD, simplified. frame-hold.png was a 512x512 SQUARE asset — fine filling
@@ -423,25 +472,29 @@
      stretched into a tall mostly-empty box. Sized off its own content instead,
      independent of whatever the hand row ends up being. */
   #gameUi[data-mode="remote"] .holdBox { flex:0 0 auto; align-self:start;
-                                         width:11.5vw; padding:.7vw;
+                                         width:clamp(48px,13vw,58px); min-height:64px;
+                                         padding:clamp(2px,.7vw,4px);
                                          border:.3vw solid rgba(201,162,39,.6);
                                          border-radius:1.4vw; background:rgba(8,40,44,.55); }
   #gameUi[data-mode="remote"] .holdBox::after { display:none; }
   #gameUi[data-mode="remote"] .holdInner { width:100%; height:100%; }
-  #gameUi[data-mode="remote"] .holdInner .card { width:9.5vw; font-size:4vw; }
-  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:1.6vw; }
+  #gameUi[data-mode="remote"] .holdInner .card {
+    width:clamp(44px,11.5vw,52px); font-size:clamp(13px,3.8vw,17px);
+  }
+  #gameUi[data-mode="remote"] .holdInner .panelCount { font-size:clamp(8px,2vw,10px); }
 
   #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
-                                             border-width:3.5vw;
-                                             border-image-width:3.5vw; }
-  #gameUi[data-mode="remote"] .handInner { justify-content:center; }
-  #gameUi[data-mode="remote"] .handRow { gap:1.2vw; flex-wrap:wrap; }
-  /* Bigger, and simpler: dropping the suit glyph everywhere (cardHtml() and
-     four other render sites, 2026-08-14 — confirmed against engine.js first,
-     suit is never read by any rule, only ever cosmetic) freed up width a
-     single rank character can spend on being larger rather than sharing space
-     with a symbol nobody needed to read to play. */
-  #gameUi[data-mode="remote"] #handRow .card { width:11vw; font-size:4.6vw; }
+                                             min-height:64px;
+                                             border-width:1.6vw;
+                                             border-image-width:1.6vw; }
+  #gameUi[data-mode="remote"] .handInner { justify-content:center; padding:.4vw; }
+  #gameUi[data-mode="remote"] .handRow { gap:.8vw; flex-wrap:nowrap; }
+  /* Five playable cards still fit beside HOLD at 320px, but every face now
+     meets a 44px minimum touch width. Suits remain visible: they are cosmetic
+     to the rules, but valuable recognition and colour-blind redundancy. */
+  #gameUi[data-mode="remote"] #handRow .card {
+    width:clamp(44px,11.2vw,50px); font-size:clamp(13px,3.7vw,17px);
+  }
   #gameUi[data-mode="remote"] .portsGrid { flex:0 0 auto; width:100%; gap:1.4vw; padding:1.4vw; }
   #gameUi[data-mode="remote"] .port .card { width:13.5vw; font-size:4vw; }
   #gameUi[data-mode="remote"] .portBadge { min-width:6vw; height:6vw; font-size:2.8vw; }
@@ -453,14 +506,7 @@
      and the card overflowed its own box on both sides (measured: 60.2px card
      in a 49.4px box at 430w). Sized in ONE place now, up in the HOLD block.
      Don't re-add a `.holdInner .card` rule down here. */
-  #gameUi[data-mode="remote"] .brigInner .card { width:7vw; font-size:2.4vw; }
-  /* A Jailbreak releases every King in the Brig at once and all of them must
-     stay reachable, so this one cannot be capped the way the waiting preview is
-     (see render()). Scrolling inside the frame is the honest fallback: it keeps
-     the frame's proportions — frame-brig.png is a 512x512 SQUARE asset and
-     stretching it is a known trap — while guaranteeing the 24th King is still
-     tappable. */
-  #gameUi[data-mode="remote"] .brigInner { overflow:auto; }
+  #gameUi[data-mode="remote"] .brigInner .card { width:7vw; font-size:2.2vw; }
   #gameUi[data-mode="remote"] .panelCount { font-size:2vw; }
   #gameUi[data-mode="remote"] .topLogo { height:6dvh; }
   #gameUi[data-mode="remote"] .turnPill { font-size:2.6dvh; padding:.3dvh 1.6dvh .3dvh .4dvh; }
@@ -471,25 +517,31 @@
      and scrolls, this only stops each card being sized for landscape. */
   body[data-mode="remote"] .portFanOverlay .card { width:14vw; font-size:4.2vw; }
   #gameUi[data-mode="remote"] .runOpener { font-size:3vw; }
-  /* Sized to still fit five opponents (the six-player maximum) across a phone:
-     each chip is content-width with min-width:0, so they compress rather than
-     push the row off the edge. */
-  #gameUi[data-mode="remote"] .oppStrip { display:flex; flex:0 0 auto; gap:2vw;
+  /* Five compact status plaques fit across a 320px phone. They intentionally
+     do NOT draw miniature playing-card components: those fell to 9px type at
+     the six-player maximum. Rank+suit and HOLD count are the information. */
+  #gameUi[data-mode="remote"] .oppStrip { position:relative; z-index:5;
+                                          display:flex; flex:0 0 auto; gap:1vw;
                                           justify-content:center; align-items:stretch; }
-  #gameUi[data-mode="remote"] .opp { flex:0 1 auto; min-width:0; display:flex;
+  #gameUi[data-mode="remote"] .opp { flex:0 1 17.6vw; min-width:0; display:flex;
                                      flex-direction:column; align-items:center; gap:.5vw;
-                                     padding:1vw 1.8vw; border-radius:1.4vw;
+                                     padding:.8vw .6vw; border-radius:1.4vw;
                                      background:rgba(8,40,44,.55);
                                      border:.3vw solid rgba(201,162,39,.4); }
   #gameUi[data-mode="remote"] .opp.turn { border-color:var(--gold);
                                           background:rgba(120,92,16,.35); }
-  #gameUi[data-mode="remote"] .opp .card { width:9vw; font-size:2.8vw; }
-  #gameUi[data-mode="remote"] .oppName { font-family:var(--serif); font-size:2.8vw;
-                                         color:var(--gold-lt); max-width:22vw;
+  #gameUi[data-mode="remote"] .oppName { width:100%; font-family:var(--serif);
+                                         font-size:clamp(9px,2.65vw,12px);
+                                         color:var(--gold-lt); max-width:18vw;
                                          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #gameUi[data-mode="remote"] .oppCount { font-size:2.2vw; color:rgba(240,208,137,.75);
+  #gameUi[data-mode="remote"] .oppHold { min-height:5vw; display:flex; align-items:baseline;
+                                         justify-content:center; gap:.8vw; line-height:1; }
+  #gameUi[data-mode="remote"] .oppRank { font:bold clamp(15px,4.8vw,21px)/1 var(--sans); color:#fffdf7;
+                                         text-shadow:0 2px 4px rgba(0,0,0,.75); }
+  #gameUi[data-mode="remote"] .oppRank.red { color:#ef745b; }
+  #gameUi[data-mode="remote"] .oppCount { font-size:clamp(8px,2.15vw,10px); color:rgba(240,208,137,.78);
                                           white-space:nowrap; }
-  #gameUi[data-mode="remote"] .oppClear { font-size:2.4vw; color:var(--gold-lt); }
+  #gameUi[data-mode="remote"] .oppClear { font-size:clamp(9px,2.5vw,11px); color:var(--gold-lt); }
 
   /* ---- Modals ---------------------------------------------------------------
    * The King direction question and the Menu are both dimmed-backdrop modals,
@@ -1594,7 +1646,7 @@ function cardHtml(c, extraClass) {
   const wild = c.rank === 'K' && c.effectiveValue;
   const arrow = c.playedDirection === 'up' ? '↑' : c.playedDirection === 'down' ? '↓' : '';
   const as = wild ? `<span class="asBadge">${Engine.VALUE_NAMES[c.effectiveValue]}${arrow}</span>` : '';
-  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${as}</span>`;
+  return `<span class="card ${red ? 'red' : ''} ${wild ? 'king' : ''} ${extraClass || ''}">${c.rank}${c.suit}${as}</span>`;
 }
 
 // Spreads a whole Port pile open — mirrors togglePortFan() in app/index.html.
@@ -1992,11 +2044,15 @@ function renderImpl(view) {
   // the other seats go here.
   const oppStrip = document.getElementById('oppStrip');
   oppStrip.innerHTML = remote
-    ? (view.players || []).filter(p => p.seat !== view.yourSeat).map(p =>
-        `<div class="opp ${p.seat === view.currentSeat ? 'turn' : ''}">`
-        + `<div class="oppName">${p.name}</div>`
-        + (p.goalTop ? cardHtml(p.goalTop) : '<span class="oppClear">Cleared!</span>')
-        + `<div class="oppCount">${p.goalCount} in HOLD</div></div>`).join('')
+    ? (view.players || []).filter(p => p.seat !== view.yourSeat).map(p => {
+        const red = p.goalTop && (p.goalTop.suit === '♥' || p.goalTop.suit === '♦');
+        const status = p.goalTop
+          ? `<div class="oppHold"><span class="oppRank ${red ? 'red' : ''}">${p.goalTop.rank}${p.goalTop.suit}</span></div>`
+          : '<div class="oppHold"><span class="oppClear">Cleared!</span></div>';
+        return `<div class="opp ${p.seat === view.currentSeat ? 'turn' : ''}">`
+          + `<div class="oppName">${p.name}</div>${status}`
+          + `<div class="oppCount">${p.goalCount} in HOLD</div></div>`;
+      }).join('')
     : '';
 
   const showCards = remote;
@@ -2010,7 +2066,7 @@ function renderImpl(view) {
     // ruled out. Shown in both modes (Nick, 2026-08-10).
     const opener = r.cards.length === 0 ? '<div class="runOpener">A or Q</div>' : '';
     return `<div class="run direction-${r.direction || 'unset'} ${showCards ? 'showCards' : ''}" data-run="${i}">`
-      + `<div>RUN ${i + 1}</div>${opener}${cards}</div>`;
+      + `<div class="runLabel">RUN ${i + 1}</div>${opener}${cards}</div>`;
   }).join('');
   document.querySelectorAll('#runsGrid .run').forEach(el => {
     el.addEventListener('click', () => attemptPlay(Number(el.dataset.run)));
@@ -2018,7 +2074,7 @@ function renderImpl(view) {
 
   document.getElementById('handRow').innerHTML = view.yourHand.map(c => {
     const sel = selected && selected.zone === 'hand' && selected.card.id === c.id;
-    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}</span>`;
+    return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel?'selected':''}" data-id="${c.id}">${c.rank}${c.suit}</span>`;
   }).join('') || '<span class="meta">Empty</span>';
   document.querySelectorAll('#handRow .card').forEach(el => {
     el.addEventListener('click', () => {
@@ -2054,7 +2110,7 @@ function renderImpl(view) {
   document.getElementById('holdCard').innerHTML = (() => {
     if (!view.yourGoalTop) return '<span class="meta">Cleared!</span>';
     const sel = selected && selected.zone === 'goal';
-    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}</span>`;
+    return `<span class="card slot ${view.yourGoalTop.suit==='♥'||view.yourGoalTop.suit==='♦'?'red':''} ${sel?'selected':''}" id="holdTop">${view.yourGoalTop.rank}${view.yourGoalTop.suit}</span>`;
   })();
   const holdTop = document.getElementById('holdTop');
   if (holdTop) holdTop.addEventListener('click', () => selectCard('goal', view.yourGoalTop));
@@ -2077,24 +2133,32 @@ function renderImpl(view) {
   // the missing attribute is what makes that true rather than a check that could
   // be forgotten later (see the tap-target note at the top of this file).
   const jailbreakMine = mineToPlay ? b.releasedKings : [];
-  // Capped on purpose. The deck is one full deck PER PLAYER, so a 6-player game
-  // can put 24 Kings in the Brig — the same arithmetic that overflowed /tv's
-  // Brig frame in the 2026-08-07 session. These are context, not tap targets,
-  // and brigCount below states the true number, so drawing a bounded sample
-  // costs nothing and cannot overflow. Released Kings above are NOT capped:
-  // every one of them has to be playable.
+  // Waiting Kings are context rather than tap targets, so their preview stays
+  // capped. During a remote Jailbreak every released card is a rules-identical
+  // King; presenting 24 separate 35px targets made none of them usable. Draw a
+  // single large stack instead. Its data-jb points at the first real King, and
+  // the count decrements after each authoritative play. Nothing in the rules or
+  // server state changes — this is "take the next released King" on a phone.
   const BRIG_PREVIEW_MAX = 6;
   const brigWaiting = (!mineToPlay && remote)
     ? (b.waitingKings || []).slice(0, BRIG_PREVIEW_MAX)
     : [];
-  document.getElementById('brigStrip').innerHTML =
-    jailbreakMine.map(c => {
+  const jailbreakHtml = mineToPlay && remote && jailbreakMine.length
+    ? (() => {
+      const c = jailbreakMine[0];
       const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
-      return `<span class="card slot ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}</span>`;
-    }).join('')
-    + brigWaiting.map(c => `<span class="card">${c.rank}</span>`).join('');
+      const red = c.suit === '♥' || c.suit === '♦';
+      return `<span class="card slot jbStack ${red ? 'red' : ''} ${sel ? 'selected' : ''}" data-jb="${c.id}">`
+        + `${c.rank}${c.suit}<span class="jbStackCount">×${jailbreakMine.length}</span></span>`;
+    })()
+    : jailbreakMine.map(c => {
+      const sel = selected && selected.zone === 'jailbreak' && selected.card.id === c.id;
+      return `<span class="card slot ${c.suit==='♥'||c.suit==='♦'?'red':''} ${sel ? 'selected' : ''}" data-jb="${c.id}">${c.rank}${c.suit}</span>`;
+    }).join('');
+  document.getElementById('brigStrip').innerHTML = jailbreakHtml
+    + brigWaiting.map(c => `<span class="card ${c.suit==='♥'||c.suit==='♦'?'red':''}">${c.rank}${c.suit}</span>`).join('');
   document.getElementById('brigCount').textContent = mineToPlay
-    ? `JAILBREAK — play ${b.releasedKings.length}`
+    ? `JAILBREAK — ${b.releasedKings.length} TO PLAY`
     : (remote ? `${b.waitingCount} in the Brig` : '');
   // Move the Brig frame to wherever THIS mode/state needs it. appendChild MOVES
   // an existing node — nothing is re-created, so #brigStrip's own listeners
@@ -2102,17 +2166,12 @@ function renderImpl(view) {
   // sits under.
   //
   //   couch            -> .rightCol, next to HOLD (unchanged, always was here)
-  //   remote, passive  -> inside the tilted board, compact (grid-area: brig)
-  //   remote, MY turn  -> a direct child of #gameUi, escaping the tilt
-  //                       entirely (see the CSS comment: rotateX() on
-  //                       .runsRow makes it the containing block for anything
-  //                       position:fixed nested inside it, so "escaped" has to
-  //                       mean actually reparented, not just restyled)
+  //   remote           -> inside the tilted board (grid-area: brig); the active
+  //                       state uses one counted King stack, so it no longer
+  //                       needs an overlay that covers legal hand/Port plays
   const brigBoxEl = document.querySelector('.brigBox');
   brigBoxEl.classList.toggle('jailbreakActive', remote && mineToPlay);
-  if (remote && mineToPlay) {
-    if (brigBoxEl.parentElement !== gameUiEl) gameUiEl.appendChild(brigBoxEl);
-  } else if (remote) {
+  if (remote) {
     // .tiltBoard, NOT #runsGrid — appending inside #runsGrid would place the
     // Brig exactly where the very next render()'s innerHTML rebuild wipes it.
     // (Found this the hard way: it throws on the SECOND render, once
