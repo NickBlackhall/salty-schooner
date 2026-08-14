@@ -1443,3 +1443,23 @@ app, never `app/index.html`, so `APP_BUILD` stays at `v26 · build 16`.
     - Browser-verified normal layouts at 320×568, 390×844 and 430×932. Document
       dimensions remain exactly equal to the viewport; the smallest hand cards
       are 44px wide and the smallest Port tiles are 58px wide.
+
+30. `Private-control vertical spacing and sizing pass` — **remote CSS only;
+    rules, interaction dispatch, server views, `/tv` and couch mode are
+    unchanged.**
+    - Draw Cards moves upward exactly 20px without changing its reserved grid
+      row, the hand, HOLD, Ports or the board. At 390×844 its 44px hitbox retains
+      8.3px of separation from the transformed lower Runs; the 29px visible face
+      has 15.8px of visual separation.
+    - The hand background grows upward from 64px to 84px while its bottom edge
+      and the Ports remain fixed. All five hand cards scale from 44×61.6px to
+      48.75×68.25px at the 390px reference and center with equal side margins.
+      At the 320px width floor they retain their 44px minimum and all five still
+      fit on one line.
+    - HOLD grows upward from 64px to 94px and expands 20px in total width—10px
+      on each side—without changing the adjacent hand column. At 390px it
+      measures 70.7×94px and keeps its card centered.
+    - Verified with true mobile device metrics (`mobile:true`, touch emulation,
+      390×844 and 320×568). Both document dimensions remain exactly equal to the
+      viewport, and the protected header, opponent rail, Runs, Brig and Ports
+      positions remain unchanged.
