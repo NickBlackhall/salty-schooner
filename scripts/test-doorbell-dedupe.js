@@ -98,7 +98,7 @@ const fetches = page => page.evaluate(() => window.__fetches);
 const counts  = page => page.evaluate(() => JSON.parse(JSON.stringify(Perf.counts)));
 const tapPlay = async (page) => {
   await page.click('#handRow .card[data-id="1"]', { timeout: 4000 });
-  await page.click('#runsGrid .run[data-run="0"]', { timeout: 4000, position: { x: 8, y: 8 } });
+  await page.click('#runsGrid .run[data-run="0"]', { timeout: 4000 });
 };
 // The response submit-action would return for that play.
 const confirm = (page, version) => page.evaluate(v => {
@@ -183,7 +183,7 @@ async function multipleQueuedActions(page) {
   await tapPlay(page);
   await page.waitForTimeout(30);
   await page.click('#handRow .card[data-id="2"]', { timeout: 4000 });
-  await page.click('#runsGrid .run[data-run="0"]', { timeout: 4000, position: { x: 8, y: 8 } });
+  await page.click('#runsGrid .run[data-run="0"]', { timeout: 4000 });
   await page.waitForTimeout(30);
   await page.evaluate(() => handlePulse(44, { programmatic: false }));
   await confirm(page, 43);                       // first settles; queue still has one

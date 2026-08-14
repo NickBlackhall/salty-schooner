@@ -258,9 +258,93 @@
      each one narrower than a single card. Grows into whatever the fixed rows
      below leave over, so slack lands in the tap targets instead of pooling as
      dead space at the bottom. */
-  #gameUi[data-mode="remote"] .runsRow { flex:1 1 auto; grid-template-columns:repeat(2,1fr); gap:1.4vw; }
-  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw; }
+  /* ---- Tabletop tilt (remote only) -------------------------------------------
+   * Nick, 2026-08-11: "i really do like the 3d table foreshortening... we
+   * should lean into that." Grafted onto the EXISTING #runsGrid/.run/.brigBox
+   * elements and their real render() output — not new markup, not the
+   * hand-fan/vertical-Draw treatment from the reference mockup, which Nick
+   * separately said he does not want (the flat full-width hand/Draw/Ports
+   * built 2026-08-10 stays exactly as it is).
+   *
+   * WHY AN EXPLICIT-HEIGHT WRAPPER: `transform` never changes an element's
+   * layout box, only how it paints — rotateX on .runsRow directly would leave
+   * its ORIGINAL flex-assigned height reserved (dead space) while the tilted
+   * card corners paint outside a box sized for the untransformed rectangle
+   * (clipped, or clipping something below it). .tiltStage owns the real height
+   * and clips at a KNOWN boundary; .runsRow is absolutely positioned inside it
+   * purely for paint.
+   *
+   * The Brig lives in .rightCol in the HTML (shared with couch mode) and CSS
+   * grid-area placement only works on DIRECT children of the grid — so putting
+   * it in the middle of this 5-cell layout needs an actual DOM move, done in
+   * render() below, not a CSS-only trick. */
+  #gameUi[data-mode="remote"] .tiltStage { flex:1 1 auto; position:relative;
+                                           min-height:38vh; perspective:130vw;
+                                           perspective-origin:50% -10%; }
+  /* .tiltBoard, NOT .runsRow, carries the grid/rotateX — see the HTML comment
+     for why: #runsGrid's innerHTML is fully replaced every render(), which
+     would destroy anything reparented directly inside it. */
+  #gameUi[data-mode="remote"] .tiltBoard { position:absolute; inset:1vw;
+                                           display:grid;
+                                           grid-template-columns:repeat(2,1fr);
+                                           grid-template-rows:1fr auto 1fr;
+                                           grid-template-areas:"run0 run1" "brig brig" "run2 run3";
+                                           gap:1.4vw;
+                                           transform-style:preserve-3d;
+                                           transform:rotateX(28deg);
+                                           transform-origin:50% 100%; }
+  /* display:contents removes #runsGrid's own box from layout entirely — its
+     four .run children become effective direct grid items of .tiltBoard, so
+     grid-area placement on [data-run] below still works, while render()'s
+     wholesale innerHTML rebuild of #runsGrid stays exactly as cheap and
+     unconstrained as it already was everywhere else. */
+  #gameUi[data-mode="remote"] .runsRow { display:contents; }
+  /* Placement only — every OTHER .run rule (background, border, direction wash,
+     card sizing) is untouched, so the tap targets, the no-legality-hint
+     philosophy and the direction wash all carry over unchanged. */
+  #gameUi[data-mode="remote"] .run[data-run="0"] { grid-area:run0; }
+  #gameUi[data-mode="remote"] .run[data-run="1"] { grid-area:run1; }
+  #gameUi[data-mode="remote"] .run[data-run="2"] { grid-area:run2; }
+  #gameUi[data-mode="remote"] .run[data-run="3"] { grid-area:run3; }
+  #gameUi[data-mode="remote"] .run { min-height:16vw; padding:1vw;
+                                     transform:translateZ(1.4vw); }
   #gameUi[data-mode="remote"] .run .card { width:13.5vw; font-size:4vw; }
+
+  /* The Brig, compact and tilted with the runs — this is the PASSIVE state
+     only (waiting Kings, or nobody's turn). render() reparents it here, as a
+     direct child of .tiltBoard (a grid sibling of #runsGrid, never inside it —
+     see the HTML/CSS comments above for why that distinction is load-bearing). */
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox { grid-area:brig; flex:0 0 auto;
+                                                      height:auto; aspect-ratio:auto;
+                                                      min-height:11vw;
+                                                      transform:translateZ(2.4vw); }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .brigInner { width:88%; height:86%; }
+  #gameUi[data-mode="remote"] .tiltBoard > .brigBox .card { width:6vw; font-size:2vw; }
+
+  /* THE ACTIVE JAILBREAK STATE — every released King must stay reachable, and
+     up to 24 can be released at once (one deck PER PLAYER, the same arithmetic
+     that overflowed /tv's Brig on 2026-08-07). A compact tilted strip cannot
+     hold that, and position:fixed cannot rescue it either: rotateX() on
+     .runsRow makes THAT the containing block for anything fixed inside it, so
+     an element left nested there stays trapped in the tilted 3D space with
+     skewed hit-testing. render() moves it to be a direct child of #gameUi
+     instead — actually escaping the transform, not just restyling in place.
+     Styled as a flat panel like the King-direction modal, not a stretched copy
+     of the square frame-brig.png (the same trap that broke the old player
+     plaques: that art is 512x512 and only ever meant to be square). */
+  #gameUi[data-mode="remote"] > .brigBox.jailbreakActive {
+    position:fixed; left:2.5vw; right:2.5vw; bottom:2vh; z-index:45;
+    max-height:60vh; height:auto; aspect-ratio:auto;
+    border-radius:1.6dvh; box-shadow:0 1dvh 4dvh rgba(0,0,0,.7);
+  }
+  #gameUi[data-mode="remote"] .brigBox.jailbreakActive::after { display:none; }
+  #gameUi[data-mode="remote"] .brigBox.jailbreakActive {
+    background:linear-gradient(rgba(28,16,8,.97), rgba(20,12,6,.98));
+    border:.4dvh solid var(--gold);
+  }
+  #gameUi[data-mode="remote"] .brigBox.jailbreakActive .brigInner {
+    width:100%; height:100%; max-height:56vh; overflow-y:auto; }
+  #gameUi[data-mode="remote"] .brigBox.jailbreakActive .card { width:11vw; font-size:3.4vw; }
   /* The whole mid section becomes one column: hand, then ports, then the
      HOLD/Brig pair. */
   #gameUi[data-mode="remote"] .midRow { grid-template-columns:1fr; gap:.9dvh; }
@@ -271,10 +355,19 @@
      both 512x512 SQUARE art drawn at 100% 100%, and letting them fill a wide
      half-row smears them — the documented trap that broke the old player
      plaques. Sized off height and centred, so they stay square at any width. */
-  #gameUi[data-mode="remote"] .rightCol { width:100%; flex-direction:row; gap:3vw;
-                                          height:40vw; justify-content:center; }
-  #gameUi[data-mode="remote"] .holdBox,
-  #gameUi[data-mode="remote"] .brigBox { flex:0 0 auto; height:100%; aspect-ratio:1/1; }
+  /* Held ONLY the HOLD box now — the Brig lives in .tiltStage (or, mid-Jailbreak,
+     escaped to a fixed overlay) in remote mode. A lone square centred in a row
+     built for two looked orphaned, floating in mostly-empty space (real
+     screenshot, not guessed) — shrunk to just its own footprint rather than
+     claiming a full-width row sized for a pair. Deliberately NOT merged into
+     .leftCol: that column's flex-direction:column is what keeps the hand
+     stacked above the Ports, and .rightCol is a separate sibling specifically
+     so this box can never affect that. */
+  #gameUi[data-mode="remote"] .rightCol { width:26vw; height:26vw; margin:0 auto; }
+  #gameUi[data-mode="remote"] .holdBox { flex:1 1 auto; width:100%; height:100%; aspect-ratio:1/1; }
+  /* Couch mode's sizing (both boxes, side by side) is untouched below — this
+     block only ever applies inside data-mode="remote". */
+  #gameUi[data-mode="remote"] .rightCol > .brigBox { flex:0 0 auto; height:100%; aspect-ratio:1/1; }
   #gameUi[data-mode="remote"] #handSection { flex:0 0 auto; width:100%;
                                              border-width:3.5vw;
                                              border-image-width:3.5vw; }
@@ -462,7 +555,22 @@
        plaque). Not tap targets: no data-id, so no listener ever binds. -->
   <div class="oppStrip" id="oppStrip"></div>
 
-  <div class="runsRow" id="runsGrid"></div>
+  <!-- Couch mode ignores both wrappers entirely (no rule below targets them
+       there) — plain blocks, zero effect, .runsRow renders exactly as it
+       always has.
+       .tiltBoard, not .runsRow, is the actual CSS Grid / rotateX element in
+       remote mode. Necessary, not decorative: render() replaces #runsGrid's
+       ENTIRE innerHTML on every call, so anything reparented INSIDE it (the
+       Brig, for the passive tilted state) would be destroyed by the very next
+       render. .tiltBoard is never innerHTML-rebuilt, so the Brig can live
+       there as a permanent grid sibling of #runsGrid; #runsGrid itself goes
+       display:contents in remote mode so its freely-rebuilt .run children
+       still act as direct grid items of .tiltBoard for grid-area placement. -->
+  <div class="tiltStage" id="tiltStage">
+    <div class="tiltBoard" id="tiltBoard">
+      <div class="runsRow" id="runsGrid"></div>
+    </div>
+  </div>
 
   <div class="midRow">
     <div class="leftCol">
@@ -1928,6 +2036,35 @@ function renderImpl(view) {
   document.getElementById('brigCount').textContent = mineToPlay
     ? `JAILBREAK — play ${b.releasedKings.length}`
     : (remote ? `${b.waitingCount} in the Brig` : '');
+  // Move the Brig frame to wherever THIS mode/state needs it. appendChild MOVES
+  // an existing node — nothing is re-created, so #brigStrip's own listeners
+  // (bound below, every render) are unaffected by which parent it currently
+  // sits under.
+  //
+  //   couch            -> .rightCol, next to HOLD (unchanged, always was here)
+  //   remote, passive  -> inside the tilted board, compact (grid-area: brig)
+  //   remote, MY turn  -> a direct child of #gameUi, escaping the tilt
+  //                       entirely (see the CSS comment: rotateX() on
+  //                       .runsRow makes it the containing block for anything
+  //                       position:fixed nested inside it, so "escaped" has to
+  //                       mean actually reparented, not just restyled)
+  const brigBoxEl = document.querySelector('.brigBox');
+  brigBoxEl.classList.toggle('jailbreakActive', remote && mineToPlay);
+  if (remote && mineToPlay) {
+    if (brigBoxEl.parentElement !== gameUiEl) gameUiEl.appendChild(brigBoxEl);
+  } else if (remote) {
+    // .tiltBoard, NOT #runsGrid — appending inside #runsGrid would place the
+    // Brig exactly where the very next render()'s innerHTML rebuild wipes it.
+    // (Found this the hard way: it throws on the SECOND render, once
+    // #brigStrip has been destroyed along with everything else that was
+    // sitting inside #runsGrid.)
+    const tiltBoardEl = document.getElementById('tiltBoard');
+    if (brigBoxEl.parentElement !== tiltBoardEl) tiltBoardEl.appendChild(brigBoxEl);
+  } else {
+    const rightColEl = document.querySelector('.rightCol');
+    if (brigBoxEl.parentElement !== rightColEl) rightColEl.appendChild(brigBoxEl);
+  }
+
   document.querySelectorAll('#brigStrip [data-jb]').forEach(el => {
     el.addEventListener('click', () => {
       const c = view.brig.releasedKings.find(c => c.id === el.dataset.jb);

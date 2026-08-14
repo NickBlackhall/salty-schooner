@@ -106,7 +106,7 @@ const runTop = (page, i) => page.evaluate(i => {
 }, i);
 const handCards = page => page.evaluate(() => document.querySelectorAll('#handRow .card').length);
 const tapCard = async (page, id) => { await page.click(`#handRow .card[data-id="${id}"]`, { timeout: 4000 }); };
-const tapRun = async (page, i) => { await page.click(`#runsGrid .run[data-run="${i}"]`, { timeout: 4000, position: { x: 8, y: 8 } }); };
+const tapRun = async (page, i) => { await page.click(`#runsGrid .run[data-run="${i}"]`, { timeout: 4000 }); };
 
 // --- cases -------------------------------------------------------------------
 
