@@ -258,7 +258,6 @@
                                    card column at the 320w floor. */
                                 --remote-hand-trim:clamp(0px,calc(32.86vw - 105.15px),23px);
                                 --remote-hand-side-trim:clamp(0px,calc(27.14vw - 86.85px),19px);
-                                --remote-table-center:clamp(10px,3.6vw,14px);
                                 gap:.9dvh; padding:1dvh 2.5vw;
                                 overflow:hidden; }
   /* EVERY flex/grid child in this layout needs min-width:0. Without it a child
@@ -348,7 +347,7 @@
                                            grid-template-areas:"run0 run1" "brig brig" "run2 run3";
                                            column-gap:8px; row-gap:8px;
                                            transform-style:preserve-3d;
-                                           transform:translateX(calc(0px - var(--remote-table-center))) rotateX(34deg);
+                                           transform:rotateX(34deg);
                                            transform-origin:50% 50%; }
   /* display:contents removes #runsGrid's own box from layout entirely — its
      four .run children become effective direct grid items of .tiltBoard, so
