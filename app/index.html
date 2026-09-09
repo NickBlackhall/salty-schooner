@@ -1932,7 +1932,139 @@ function activeMusic() { return musicContext === 'game' ? gameMusic : titleMusic
 
 // Build stamp shown in the setup screen and the in-game MENU so the right build is easy to confirm.
 // Bump the number with every shipped change; it matches the latest docs/WORKLOG.md change entry.
-const APP_BUILD = 'v26 · build 16 · 2026-07-21';
+const APP_BUILD = 'v26 · build 17 · 2026-09-09';
+
+// ---- Cloud sync (build 17): mirror finished games to Supabase -------------------
+// The Tracker's record is per-device AND per-URL: phone, iPad and laptop each keep
+// their own, and a new deploy origin starts empty. This posts each finished game to
+// one insert-only Supabase table so the record pools in a single place.
+//
+// Rules this must never break (docs/MULTIPLAYER_PREP.md):
+//   * localStorage stays primary. This is a mirror, never the source of truth.
+//   * Best-effort only. No await on any game path, no blocking, no thrown errors.
+//     The game stays 100% playable with no network, an unreachable project, or a
+//     wrong key — every failure just leaves the record queued for a later attempt.
+//   * Insert-only. The client never reads and never updates. Re-sending is a no-op
+//     server-side (game_id is unique + resolution=ignore-duplicates).
+const CLOUD_BAR_OPEN = '<div style="margin:0 0 10px;padding:7px 10px;border-radius:6px;background:rgba(0,0,0,.22);border:1px solid rgba(212,175,55,.25);font-size:12px;color:#d9c9a3;">';
+const Cloud = {
+  // Supabase project credentials. A publishable/anon key is designed to ship in
+  // client code; the table's row-level security allows INSERT and nothing else, so
+  // this key cannot read, change or delete anything. Empty = sync simply off.
+  URL: '',
+  KEY: '',
+
+  TABLE: 'playtest_games',
+  DEVICE_KEY: 'saltySchoonerDeviceV1',
+  MAX_PER_RUN: 10,        // bound the work (and the payload) of any single sync pass
+  busy: false,
+  lastResult: null,
+
+  configured() { return !!(this.URL && this.KEY); },
+
+  // A random per-browser string so records can be grouped by device. Not tied to a
+  // person, a login or anything identifying — it exists to tell "the iPad" from
+  // "the phone" once records from both land in the same table.
+  deviceId() {
+    try {
+      let id = localStorage.getItem(this.DEVICE_KEY);
+      if (!id) { id = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem(this.DEVICE_KEY, id); }
+      return id;
+    } catch (e) { return 'd-unknown'; }
+  },
+  deviceLabel() {
+    const ua = navigator.userAgent || '';
+    const touch = (navigator.maxTouchPoints || 0) > 1;
+    let kind = 'desktop';
+    // iPadOS reports itself as Macintosh; the touch-point count is what separates them.
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) kind = 'iPad';
+    else if (/iPhone|iPod/.test(ua)) kind = 'iPhone';
+    else if (/Android/.test(ua)) kind = /Mobile/.test(ua) ? 'Android phone' : 'Android tablet';
+    let installed = false;
+    try { installed = !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); } catch (e) {}
+    return kind + (installed ? ' (installed)' : '');
+  },
+
+  row(g) {
+    return {
+      game_id: g.id,
+      build: APP_BUILD,
+      device_id: this.deviceId(),
+      device_label: this.deviceLabel(),
+      started: g.started || null,
+      ended: g.ended || null,
+      completed: !!g.completed,
+      abandoned: !!g.abandoned,
+      ended_early: !!g.endedEarly,
+      winner: g.winner || null,
+      rounds: g.rounds || null,
+      players: g.players || [],
+      scores: g.scores || null,
+      stats: g.stats || null,
+      round_log: g.roundLog || [],
+      turn_log: g.turnLog || []
+    };
+  },
+
+  // Finished games not yet mirrored. The imported V1 aggregate blob is skipped: it
+  // is a summary, not a game, and has no real record to contribute.
+  pending() {
+    const d = Telemetry.data || Telemetry.load();
+    return (d.games || []).filter(g => g && g.id && !g.cloudSynced && !g.legacy);
+  },
+
+  // Fire-and-forget. Callers must NOT await this.
+  async sync(reason) {
+    if (!this.configured() || this.busy) return 0;
+    let online = true;
+    try { online = navigator.onLine !== false; } catch (e) {}
+    if (!online) { this.lastResult = 'offline — will retry'; return 0; }
+
+    const queue = this.pending().slice(0, this.MAX_PER_RUN);
+    if (!queue.length) { this.lastResult = 'up to date'; return 0; }
+
+    this.busy = true;
+    let sent = 0, failed = 0;
+    // One row per request: a single rejected record can then never block the others,
+    // and each success is banked immediately rather than riding on the whole batch.
+    for (const g of queue) {
+      try {
+        const res = await fetch(this.URL + '/rest/v1/' + this.TABLE, {
+          method: 'POST',
+          headers: {
+            'apikey': this.KEY,
+            'Authorization': 'Bearer ' + this.KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=ignore-duplicates'
+          },
+          body: JSON.stringify(this.row(g))
+        });
+        if (res.ok) { g.cloudSynced = new Date().toISOString(); sent++; }
+        else { failed++; this.lastResult = 'failed (HTTP ' + res.status + ')'; break; }
+      } catch (e) { failed++; this.lastResult = 'failed (no network)'; break; }
+    }
+    if (sent) { try { Telemetry.save(); } catch (e) {} }
+    if (!failed) this.lastResult = 'synced ' + sent + ' game' + (sent === 1 ? '' : 's');
+    this.busy = false;
+    return sent;
+  },
+
+  // Never let a sync failure surface as an unhandled rejection during play.
+  syncSoon(reason) { try { Promise.resolve(this.sync(reason)).catch(() => {}); } catch (e) {} },
+
+  statusHtml() {
+    if (!this.configured()) {
+      return CLOUD_BAR_OPEN + 'Cloud sync: <b>off</b> — no Supabase project configured. Records stay on this device only.</div>';
+    }
+    const d = Telemetry.data || Telemetry.load();
+    const all = (d.games || []).filter(g => g && g.id && !g.legacy);
+    const done = all.filter(g => g.cloudSynced).length;
+    const waiting = all.length - done;
+    return CLOUD_BAR_OPEN + 'Cloud sync: <b>on</b> — ' + done + ' synced' +
+           (waiting ? ', <b>' + waiting + ' waiting</b>' : '') +
+           (this.lastResult ? ' · last attempt: ' + this.lastResult : '') + '</div>';
+  }
+};
 
 // ---- Playtest tracker: client-side telemetry with per-game records, persisted in localStorage ----
 // Fully offline. Survives closing the tab/browser on the same device+URL. A NEW Netlify Drop URL
@@ -1972,6 +2104,7 @@ const Telemetry = {
     this.data.games.push(g); this.data.current = null;
     this.mark('game-completed', (g.winner ? ('winner ' + g.winner) : '') + (g.endedEarly ? ' (ended early)' : ''), true);
     this.save();
+    Cloud.syncSoon('game-end'); // best-effort mirror; never awaited, never blocks
   },
   // Per-round records (build 15). Game-level scores gave one data point per game; a
   // 5-game sample contained 15 rounds, so recording each round triples the evidence for
@@ -2216,8 +2349,9 @@ function trackerDownload(filename, text, mime) {
   } catch (e) { window.prompt('Copy this data:', text); }
 }
 function showTelemetry() {
-  showModal('Playtest Tracker', Telemetry.summaryHtml(), [
+  showModal('Playtest Tracker', Cloud.statusHtml() + Telemetry.summaryHtml(), [
     { label: 'Close', action: hideModal },
+    { label: 'Sync now', action: () => { Cloud.sync('manual').then(n => { alert(Cloud.configured() ? ('Cloud sync: ' + Cloud.lastResult + '.') : 'Cloud sync is off — no Supabase project is configured in this build.'); showTelemetry(); }).catch(() => {}); } },
     { label: 'Copy all (JSON)', action: () => trackerCopy(Telemetry.toJSON(), 'Tracker data') },
     { label: 'Copy games (CSV)', action: () => trackerCopy(Telemetry.toCSV(), 'CSV') },
     { label: 'Copy turns (CSV)', action: () => trackerCopy(Telemetry.turnsToCSV(), 'Turn log') },
@@ -3329,6 +3463,12 @@ if (statsBtnEl) statsBtnEl.onclick = showTelemetry;
 const setupTrackerBtnEl = document.getElementById('setupTrackerBtn');
 if (setupTrackerBtnEl) setupTrackerBtnEl.onclick = showTelemetry;
 document.querySelectorAll('.buildStamp').forEach(el => { el.textContent = 'Build: ' + APP_BUILD; });
+
+// Cloud sync: flush anything left over from a previous session, and retry when the
+// device comes back online. Both are best-effort and cannot block or break the game.
+Telemetry.load();
+Cloud.syncSoon('boot');
+window.addEventListener('online', () => Cloud.syncSoon('reconnect'));
 if (musicToggle) musicToggle.onclick = toggleBackgroundMusic;
 if (entryMusicToggle) entryMusicToggle.onclick = toggleBackgroundMusic;
 document.getElementById('clearSelection').onclick = () => { selected=null; render(); };

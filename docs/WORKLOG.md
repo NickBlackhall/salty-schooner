@@ -4,7 +4,7 @@ Purpose: a running status doc so any collaborator — Claude, ChatGPT/Codex, or 
 can pick up where the last session left off. Read this and `MASTER_PROJECT_BRIEF.md`
 (the authority) before starting work.
 
-Last updated: 2026-07-21 (Claude / Opus) — build 16, per-turn telemetry (Tier 1).
+Last updated: 2026-09-09 (Claude / Opus) — build 17, Netlify continuous deploy + Supabase Tracker sync.
 
 ---
 
@@ -13,7 +13,8 @@ Last updated: 2026-07-21 (Claude / Opus) — build 16, per-turn telemetry (Tier 
 - **Canonical build:** `app/index.html` (v26 "Tappable Runs", internal version `v26-configurable-match`) plus `app/assets/`. This is the single source of truth, on `main`.
 - **Repo:** github.com/NickBlackhall/salty-schooner, branch `main` (pushed).
 - **Older prototype:** archived at `reference/salty_schooner_v11_ipad_fit.html` (do not treat as authoritative).
-- **Deploy:** Nick deploys manually to **Netlify Drop** (a throwaway site, separate from his usual Netlify site) from a zip. The "usual" live Netlify site may be an OLDER build until Nick re-drops the current one.
+- **Deploy:** **continuous deploy from GitHub** as of build 17 — `netlify.toml` publishes `app/`, so every push to `main` ships. One stable URL; no zip, no new origin per deploy. Netlify Drop is retired (`build-drop-zip.sh` kept as a fallback). Setup steps: `docs/DEPLOY_SETUP.md`.
+- **Supabase:** project holds one insert-only `playtest_games` table for Tracker sync (`supabase/migrations/0001_playtest_games.sql`). Not the multiplayer schema.
 
 ## Single-source-of-truth rule (important)
 
@@ -24,14 +25,19 @@ edited **outside git** and pushed straight to Netlify. To prevent recurrence:
 - Whoever produces a build (Claude or ChatGPT) must land it there — do not fork the game into a separate folder.
 - If Nick uploads a newer build as a loose folder, fold it into `app/` and commit.
 
-## Deploy workflow (Netlify Drop)
+## Deploy workflow (continuous deploy — build 17 onward)
 
-1. After any change to `app/`, rebuild the zip: `./build-drop-zip.sh`
-   - Produces `salty-schooner-app.zip` at the repo root (gitignored; ~19MB).
-   - `index.html` sits at the archive root — required by Netlify Drop.
-2. Nick downloads that zip from the VS Code Explorer (right-click → Download).
-3. Nick drags the zip onto https://app.netlify.com/drop → gets a new random URL.
-4. **Keep the zip current:** regenerate it whenever `app/` changes.
+1. Edit `app/`, bump `APP_BUILD`, add a change-history entry below.
+2. Run `node tests/cloud-sync.test.mjs`.
+3. Push to `main`. Netlify builds from `netlify.toml` (`publish = "app"`, no build command) and ships.
+4. Check the build stamp on the live site matches what you pushed.
+
+**Why this replaced Netlify Drop:** every Drop deploy produced a new random URL, and a
+new URL is a new origin — which wiped the Tracker's `localStorage` each time. The whole
+export-before / import-after ritual existed only to survive that. A stable URL removes it.
+`./build-drop-zip.sh` still works if a build needs handing to someone directly.
+
+Full setup (including the one-time Netlify connect and the Supabase keys): `docs/DEPLOY_SETUP.md`.
 
 ## Rules decisions ratified by Nick (2026-07-20)
 
@@ -46,9 +52,9 @@ See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle
 - In-game **MENU (☰) → 📊 Tracker**. Client-side only, persisted in `localStorage` (key `saltySchoonerTrackerV2`).
 - **Per-game records:** each game stores start/end time, players, rounds config, winner, final scores, and its own stat counts (King-opener re-deals, runs completed, deck recycles, jailbreaks triggered/succeeded/failed, failed-jailbreak Kings, curse penalty cards, hard stalls). The panel shows lifetime totals (summed across games) plus a recent-games list.
 - **Buttons:** Copy all (JSON), Copy games (CSV), Download CSV, Import/restore (paste a prior export — merges, deduped by game id; also absorbs the old V1 aggregate blob as a "legacy" record), Reset.
-- **Persistence reality:** survives closing the tab/browser on the same device+URL. Does NOT survive: a new Netlify Drop URL (new build = new origin = empty), a different device/browser, clearing Safari data, or iOS ~7-day storage eviction (mitigated by Add to Home Screen). **Durable workflow:** Copy/Export before re-dropping a build; Import after, to carry the record across.
+- **Persistence reality:** survives closing the tab/browser on the same device+URL. Since build 17 the URL is stable, so **deploys no longer wipe it**. Still does NOT survive a different device/browser, clearing Safari data, or iOS ~7-day storage eviction (mitigated by Add to Home Screen) — which is what the Supabase sync below is for.
 - **Archived exports live in `docs/playtest-data/`** (added 2026-07-21) — the durable copy, since `localStorage` is per-device and per-URL. See that folder's README for how to add one and for the current read-out. First export (2026-07-20, 3 games / 1 completed) shows **0 hard stalls, 0 deck recycles, and 3-for-3 successful Jailbreaks** — so the entire failed-Jailbreak/Curse path and the recycle pile are still untested in real play. Worth deliberately failing a Jailbreak to exercise it.
-- **Candidate fix for the per-device split: sync records to Supabase** (one insert-only table, best-effort, `localStorage` stays primary). Does **not** require the multiplayer work and would stand up the Supabase project early — written up in `docs/MULTIPLAYER_PREP.md`.
+- **Per-device split — BUILT in build 17.** Finished games mirror to an insert-only Supabase table (`playtest_games`); `localStorage` stays primary and the post is best-effort, so the game is unchanged offline. Fires on game end, boot, reconnect, and Tracker → **Sync now**. Turn it on by filling `Cloud.URL` / `Cloud.KEY` in `app/index.html` — empty means sync is simply off. See `docs/DEPLOY_SETUP.md`.
 - Implementation: `Telemetry` object near the top of the main `<script>` in `app/index.html`. Hooks: `Telemetry.startGame(names, rounds)` / `Telemetry.endGame(players)` at game start/end; `Telemetry.bump(key)` / `Telemetry.mark(type, detail)` at each event site (bumps accumulate into the current game record).
 
 ## Known open items
@@ -104,6 +110,8 @@ See `MASTER_PROJECT_BRIEF.md` for the full rule text and the King-supply/shuffle
 15. `Rotate the starting player; record per-round results` — **rules change, approved by Nick 2026-07-21.** `startRound()` hardcoded `state.currentPlayer = 0`, so **Player 1 started every round of every game**. A round is a race — it ends the instant someone clears their HOLD pile, and the loser keeps theirs as points — so the starter gets an extra turn. Now `state.currentPlayer = (state.round - 1) % state.players.length`, and the round-start log line names who goes first. Made on the structural argument, not the data: P1 had won 4 of 5 recorded games, which a fair coin reproduces 18.8% of the time. **Also added per-round telemetry** so the question is measurable: each game record gains a `roundLog` array (`round`, `starter`, `winner`, `started`/`ended`, per-player `roundScore`/`total`) via `Telemetry.startRound()` / `Telemetry.endRound()`. Game-level scores gave 1 data point per game; those 5 games contained 15 rounds. The Tracker gains a **"Rounds won by whoever started"** row — the direct test, where ~50% means the seat is fair — plus a per-game round strip (`R1 ▶1 ✓2 14m`, gold when the starter won) showing round durations, which the "endless round" investigation also needs. Round duration is now recorded, so a dragging round is visible in data rather than only in memory. Verified by extracting `Telemetry` and running it under Node with a `localStorage` stub: rotation alternates correctly, rounds close with scores, a closed round cannot be overwritten by a repeat `endRound`, and pre-build-15 records without a `roundLog` are tolerated. Pre-build-15 games are excluded from the new stat.
 
 16. `Per-turn telemetry (Tier 1)` — no rules changed. The "endless round" could not be diagnosed from counters: they record volume, not shape. Each game record now carries a **`turnLog`**, one compact record per turn: round, turn-in-round, seat, start/end, cards played to runs and their source (hand/goal/port/brig), manual draws, **every seat's HOLD size**, empty-run count, Kings in the Brig, and how the turn ended. Hooks: `Telemetry.startTurn()` in `startRound()`/`nextTurn()`, `noteRunPlay()` in `playSelectedToRun()`/`commitKing()`, `noteDraw()` in `drawHandCards()`, `endTurn()` in `nextTurn()`/`endRound()`/force-end, with `turnSnapshot()` supplying the board facts. Tracker gains **turns per round**, **DEAD turns** (no run play — red above 40%), **longest stall streak** (consecutive turns where no HOLD pile shrank — red at 12+), and **play time with idle removed** (each turn capped at 3 min, so a game left on a table cannot inflate it — this addresses the wall-clock contamination Nick reported). Also adds **`Copy turns (CSV)` / `Download turns CSV`**: the JSON turn log is ~195 bytes/turn (~23KB a game, awkward to paste), the CSV is ~64 (~8KB) and opens in a spreadsheet. `MAX_TURNS` (600) caps the log; overflow sets `turnsTruncated`. Verified under Node with a `localStorage` stub and a faked clock, simulating a healthy round and a stalled one: turn numbering, per-round grouping, a flat-vs-stepping HOLD curve, stall streak of 20, a 40-minute pause excluded from play time, closed turns immutable, and pre-build-16 records tolerated. Tiers 2–4 (card census, jailbreak detail, and a round-end thumbs up/down for the disengagement signal counters cannot reach) are deliberately deferred — see `docs/TELEMETRY_PLAN.md`.
+
+17. `Stand the project up on Netlify and Supabase` — **no rules changed.** Two deployment problems, one cause. **(a) Netlify.** Shipping meant zipping `app/`, downloading it, and dragging it onto Netlify Drop, which mints a **new random URL every time**. A new URL is a new origin, and `localStorage` is per-origin — so every deploy silently wiped the playtest Tracker, and the entire "Copy/Export before re-dropping, Import after" ritual in this doc existed only to survive that. Added `netlify.toml` (`publish = "app"`, no build command — `app/` is already the finished static site, and all its asset paths are relative) so the repo can be connected to a Netlify site and deploy on every push to `main`. `index.html` is served `must-revalidate` so a deploy takes effect on the next load; `assets/*` is `immutable` for a year so the art and audio are not re-fetched each launch. `build-drop-zip.sh` is kept as a fallback for handing someone a build directly. **The one-time "Import an existing project" connect is a UI step only Nick can do** — steps in `docs/DEPLOY_SETUP.md`, including the choice between linking the existing Netlify site (keeps the URL people already have) and creating a new one. **(b) Supabase.** Built the insert-only Tracker sync that `MULTIPLAYER_PREP.md` proposed as the right low-stakes first use of Supabase: `supabase/migrations/0001_playtest_games.sql` creates one table, `public.playtest_games`, RLS enabled with exactly one policy — **anon may INSERT, nothing else** (no SELECT/UPDATE/DELETE, so the publishable key shipped in client code is powerless; reads happen in the dashboard, which bypasses RLS). `game_id` is unique and the client posts `Prefer: resolution=ignore-duplicates`, which is what makes retries and re-imports harmless. Client side, a new **`Cloud`** object mirrors each finished game; `localStorage` stays primary and the post is **never awaited on a gameplay path**, so the game is byte-for-byte unchanged with no network. Fires on game end, on boot (flushing a backlog), on `online`, and from a new Tracker **Sync now** button; the Tracker panel gained a status line (`N synced, M waiting`, last attempt result). Capped at 10 records per pass so a long backlog drains gradually instead of firing one huge request. Records carry a build stamp and a **random per-browser `device_id` + a device label** (iPad / iPhone / Android / desktop, and whether it is installed to the home screen) — that labelling is the actual point, since it is what lets the phone's and the iPad's records be told apart once they pool in one table. **Sync is off until `Cloud.URL` / `Cloud.KEY` are filled in** — empty is a supported state that behaves exactly like build 16. Added `tests/cloud-sync.test.mjs`, the repo's first automated test: it extracts `Cloud`/`Telemetry` straight out of `app/index.html` by marker (so it cannot drift from a copy) and runs 30 assertions under stubbed `localStorage`/`navigator`/`fetch`, covering the paths that actually matter — unconfigured, healthy, re-sync is a no-op, network throws, HTTP 401, recovery, `navigator.onLine === false`, the 10-per-pass cap, and that `endGame()` with a dead network neither throws nor loses the local record. Run with `node tests/cloud-sync.test.mjs`.
 
 Note on process: earlier, a King-opener issue in the v11 file was fixed but then superseded when v26 became canonical — a reminder to always confirm which build is authoritative before editing.
 

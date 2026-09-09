@@ -1,0 +1,32 @@
+# Netlify configuration for Salty Schooner.
+#
+# WHY THIS EXISTS: builds used to ship via Netlify Drop (zip up app/, drag it onto
+# app.netlify.com/drop, get a NEW random URL every time). That gave the game a new
+# origin on every deploy, which wiped the playtest Tracker's localStorage each time.
+# Connecting this repo to a Netlify site instead gives one stable URL forever and
+# deploys on every push to main.
+#
+# There is no build step: app/ is already the finished static site.
+
+[build]
+  publish = "app"
+  command = ""
+
+# index.html must never be served stale, or players keep an old build after a deploy.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Assets are content-stable (a changed asset ships under a new build), so cache hard.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
